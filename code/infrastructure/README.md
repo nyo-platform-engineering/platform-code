@@ -67,8 +67,9 @@ The system workloads installed by k3s are patched during bootstrap to remove
 CPU/memory sizing. Gateway API CRDs remain part of cluster bootstrap.
 
 GitLab CE runs at `gitlab.localhost` through the existing Gateway. Run
-`task gitlab` to prepare dependency credentials and upload `code/apps` into
-the read-only toolbox mount. See [GitLab setup](argo-apps/platform/03-cd/gitlab/README.md).
+`task gitlab` to prepare dependency credentials, upload `code/apps` into
+the read-only toolbox mount, and import app directories as GitLab projects.
+See [GitLab setup](argo-apps/platform/03-cd/gitlab/README.md).
 CI runners and pipelines are deferred.
 
 This follows Argo CD's [app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/).

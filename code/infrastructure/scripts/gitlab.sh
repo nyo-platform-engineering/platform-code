@@ -57,22 +57,29 @@ EOF
   trap - EXIT
   echo 'App sources uploaded; toolbox mounts them read-only at /workspace/apps.'
 }
+projects() {
+  kube rollout status deployment/gitlab-toolbox -n gitlab --timeout=300s
+  kube rollout status deployment/gitlab-webservice-default -n gitlab --timeout=300s
+  kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-import.rb
+}
 case "${1:-up}" in
   prepare) prepare ;;
   up)
     prepare
-    kube apply -f argo-apps/platform/02-cd/gitlab-services/app.yaml
-    kube apply -f argo-apps/platform/03-cd/gitlab/app.yaml
+    kube apply --server-side -f argo-apps/platform/02-cd/gitlab-services/app.yaml
+    kube apply --server-side -f argo-apps/platform/03-cd/gitlab/app.yaml
     echo 'Waiting for the GitLab app-code PVC...'
     for ((attempt=0; attempt<120; attempt++)); do
       kube get pvc gitlab-app-code -n gitlab >/dev/null 2>&1 && break
       sleep 5
     done
     code
+    projects
     echo 'Use task links and task gitlab ACTION=status to inspect GitLab startup.'
     ;;
   code) code ;;
+  projects) projects ;;
   status) kube get pods,pvc -n gitlab; kube get applications gitlab gitlab-services -n argocd ;;
   logs) kube logs -n gitlab -l app=webservice -c webservice --tail=100 --follow ;;
-  *) echo 'Supported actions: up, prepare, code, status, logs; passwords: task password APP=gitlab' >&2; exit 1 ;;
+  *) echo 'Supported actions: up, prepare, code, projects, status, logs; passwords: task password APP=gitlab' >&2; exit 1 ;;
 esac

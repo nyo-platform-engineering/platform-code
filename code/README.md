@@ -48,7 +48,7 @@ From `code/infrastructure`:
 task up          # bootstrap the local cluster and print service links
 task go-demo     # build, save, import, and restart the demo image
 task status      # inspect pods, apps, resource usage, and sizing
-task gitlab      # prepare GitLab and upload apps/ into its mounted volume
+task gitlab      # upload apps/ and import them as local GitLab projects
 ```
 
 The application task lives in `apps/Taskfile.yml` and is also included by the

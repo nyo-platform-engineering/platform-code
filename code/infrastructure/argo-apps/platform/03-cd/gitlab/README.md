@@ -8,7 +8,7 @@ are separate because GitLab chart 10 no longer bundles them.
 From `code/infrastructure`, run:
 
 ```bash
-task gitlab                     # prepare credentials and upload apps/ into a PVC
+task gitlab                     # upload apps/ and import them as GitLab projects
 task gitlab ACTION=status       # inspect GitLab startup
 task password APP=gitlab        # initial root password (default APP is argocd)
 ```
@@ -28,9 +28,14 @@ after changing sources; the upload overlays files and does not remove old ones.
 Set `APP_CODE_DIR` in `settings.local.yml`, your shell, or Task arguments to
 upload another checkout. Relative paths resolve from `code/infrastructure`.
 
-Mounted files are available to toolbox commands; they do not automatically
-become GitLab projects or CI workspaces. Create a project and push the source
-when configuring CI later. Runners, pipelines, registry, GitLab's Prometheus,
+After uploading, `task gitlab` imports each app directory into a private project
+under `root`, with an initial `main` commit. Go demo appears at
+`http://gitlab.localhost/root/go-demo` when signed in as `root`.
+An existing project with commits is preserved; subsequent uploads update the
+mounted files but do not overwrite GitLab history. Use normal Git pushes for
+later repository changes. `ACTION=projects` retries just the import.
+The importer creates a temporary API token inside toolbox and revokes it on exit.
+The import commit skips CI. Runners, pipelines, registry, GitLab's Prometheus,
 KAS, and additional ingress controllers are disabled. HTTP Git access uses the
 platform's existing Traefik Gateway; SSH is not exposed yet.
 
