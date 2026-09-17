@@ -12,6 +12,10 @@ namespace is `dev`. Application source code and Dockerfiles remain in
 the reusable chart at `code/infrastructure/charts/deployment`.
 
 `go-demo/app.yaml` deploys the Go service through that chart, using
-`go-demo/values.yaml` for its image, security settings, probes, and HTTPRoute.
-Build and import `local/go-demo:dev1` into k3d before syncing it. Add further
+`go-demo/values.yaml` for its base image, security settings, probes, and HTTPRoute.
+It also reads `deploy/values.yaml` from the local GitLab `root/go-demo` project;
+CI updates that file with the registry image digest. Run `task gitlab` from
+`code/infrastructure` to import the project and configure access. For local
+image builds, `task go-demo` imports the image and updates the GitLab override.
+Add further
 Applications to `kustomization.yaml` as workloads are created.

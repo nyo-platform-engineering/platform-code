@@ -135,9 +135,10 @@ a container runtime. From `code/infrastructure` on either OS:
 task setup       # winget on Windows; Homebrew on macOS
 # On Windows, reopen Git Bash after new tool installations.
 task up          # checks tools, bootstraps the cluster, and prints service links
-task go-demo     # build/import a container for this cluster's architecture
+task gitlab      # import app projects, configure CI, and start the demo pipeline
 task status
 task password
+# Optional: task go-demo builds/imports a local image instead of publishing through CI.
 ```
 
 ### Personal settings and extensions

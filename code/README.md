@@ -32,6 +32,8 @@ code/
 For example, Go demo source lives in `apps/go-demo/`, while its image reference,
 probes, and HTTPRoute settings live in `infrastructure/argo-apps/dev/go-demo/`.
 Argo CD reads the committed deployment configuration from Git.
+After GitLab CI is enabled, the image override lives in `deploy/values.yaml`
+in the local GitLab app project; Argo CD reads it alongside the base settings.
 
 ## Local workflow
 
@@ -46,9 +48,9 @@ From `code/infrastructure`:
 
 ```bash
 task up          # bootstrap the local cluster and print service links
-task go-demo     # build, save, import, and restart the demo image
+task gitlab      # import app projects, configure CI, and start the pipeline
 task status      # inspect pods, apps, resource usage, and sizing
-task gitlab      # upload apps/ and import them as local GitLab projects
+task go-demo     # optional local build/import instead of publishing through CI
 ```
 
 The application task lives in `apps/Taskfile.yml` and is also included by the
@@ -56,7 +58,7 @@ infrastructure Taskfile. Local k3d image imports keep the demo simple without
 requiring an image registry. See [infrastructure setup](infrastructure/README.md)
 and [Go demo details](apps/go-demo/README.md).
 See [local GitLab](infrastructure/argo-apps/platform/03-cd/gitlab/README.md) for access, persistent
-storage, mount settings, and Go demo's GitLab CI test/build pipeline.
+storage, mount settings, and Go demo's lint/test/build/deploy pipeline.
 
 ## Repository model as the platform grows
 
