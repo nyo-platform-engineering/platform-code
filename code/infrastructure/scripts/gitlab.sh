@@ -21,6 +21,9 @@ prepare() {
   if ! kube get secret gitlab-object-storage-backup -n gitlab >/dev/null 2>&1; then
     kube create secret generic gitlab-object-storage-backup -n gitlab --from-literal="config=$(printf '[default]\naccess_key = gitlab\nsecret_key = %s\nhost_base = gitlab-minio:9000\nhost_bucket = gitlab-minio:9000\nuse_https = False\n' "$object_key")"
   fi
+  if ! kube get secret gitlab-registry-storage -n gitlab >/dev/null 2>&1; then
+    kube create secret generic gitlab-registry-storage -n gitlab --from-literal="config=$(printf 's3:\n  accesskey: gitlab\n  secretkey: %s\n  bucket: registry\n  region: us-east-1\n  regionendpoint: http://gitlab-minio:9000\n  secure: false\n  v4auth: true\n  pathstyle: true\nredirect:\n  disable: true\n' "$object_key")"
+  fi
 }
 code() {
   local source="${APP_CODE_DIR:-../apps}"
@@ -62,6 +65,20 @@ projects() {
   kube rollout status deployment/gitlab-webservice-default -n gitlab --timeout=300s
   kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-import.rb
 }
+runner() {
+  local configured output auth
+  configured="$(kube get secret gitlab-gitlab-runner-secret -n gitlab -o go-template='{{if index .data "runner-token"}}yes{{end}}' 2>/dev/null || true)"
+  if [[ "$configured" != yes ]]; then
+    kube rollout status deployment/gitlab-toolbox -n gitlab --timeout=300s
+    output="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-runner.rb)"
+    auth="$(printf '%s\n' "$output" | sed -n 's/^RUNNER_TOKEN://p')"
+    [[ "$auth" == glrt-* ]] || { echo 'Could not obtain a runner authentication token.' >&2; return 1; }
+    kube create secret generic gitlab-gitlab-runner-secret -n gitlab \
+      --from-literal=runner-token="$auth" --from-literal=runner-registration-token='' \
+      --dry-run=client -o yaml | kube apply --server-side --force-conflicts -f -
+  fi
+  echo 'Kubernetes runner authentication configured.'
+}
 case "${1:-up}" in
   prepare) prepare ;;
   up)
@@ -75,11 +92,13 @@ case "${1:-up}" in
     done
     code
     projects
+    runner
     echo 'Use task links and task gitlab ACTION=status to inspect GitLab startup.'
     ;;
   code) code ;;
   projects) projects ;;
+  runner) runner ;;
   status) kube get pods,pvc -n gitlab; kube get applications gitlab gitlab-services -n argocd ;;
   logs) kube logs -n gitlab -l app=webservice -c webservice --tail=100 --follow ;;
-  *) echo 'Supported actions: up, prepare, code, projects, status, logs; passwords: task password APP=gitlab' >&2; exit 1 ;;
+  *) echo 'Supported actions: up, prepare, code, projects, runner, status, logs; passwords: task password APP=gitlab' >&2; exit 1 ;;
 esac

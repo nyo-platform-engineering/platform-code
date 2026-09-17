@@ -1,0 +1,22 @@
+default:
+  image: golang:1.27.1-alpine
+  tags: [kubernetes]
+
+stages: [test, build]
+
+test:
+  stage: test
+  script:
+    - go test ./...
+    - go vet ./...
+
+build:
+  stage: build
+  variables:
+    CGO_ENABLED: '0'
+  script:
+    - mkdir -p dist
+    - go build -trimpath -ldflags="-s -w" -o dist/go-demo .
+  artifacts:
+    paths: [dist/go-demo]
+    expire_in: 1 day

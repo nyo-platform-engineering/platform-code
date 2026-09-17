@@ -13,3 +13,4 @@ services:
     size: 5Gi
 minioClientImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
 appCodeSize: 1Gi
+buckets: [git-lfs, gitlab-artifacts, gitlab-uploads, gitlab-packages, gitlab-backups, tmp, registry]

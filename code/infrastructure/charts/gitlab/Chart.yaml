@@ -1,0 +1,9 @@
+apiVersion: v2
+name: local-gitlab
+description: Local integration around the official GitLab Helm chart
+type: application
+version: 0.1.0
+dependencies:
+  - name: gitlab
+    version: 10.3.2
+    repository: https://charts.gitlab.io

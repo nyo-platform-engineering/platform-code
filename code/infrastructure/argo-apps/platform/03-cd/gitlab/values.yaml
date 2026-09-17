@@ -1,12 +1,16 @@
 global:
   edition: ce
   kas:
-    enabled: false
+    enabled: true
   hosts:
     domain: localhost
     https: false
     gitlab:
       name: gitlab.localhost
+    registry:
+      name: registry.localhost
+    kas:
+      name: kas.localhost
   gatewayApi:
     enabled: false
     installEnvoy: false
@@ -37,34 +41,40 @@ global:
         key: connection
   minio:
     enabled: false
-installCertmanager: false
-nginx-ingress:
-  enabled: false
-nginx-ingress-geo:
-  enabled: false
-prometheus:
-  install: false
-gitlab-runner:
-  install: false
-registry:
-  enabled: false
-upgradeCheck:
-  resources:
-    requests:
-      cpu: null
-shared-secrets:
-  resources:
-    requests:
-      cpu: null
 gitlab:
-  gitlab-exporter:
+  installCertmanager: false
+  nginx-ingress:
     enabled: false
-  webservice:
-    helmTests:
-      enabled: false
-    minReplicas: 1
-    maxReplicas: 1
-    workerProcesses: 1
+  nginx-ingress-geo:
+    enabled: false
+  prometheus:
+    install: false
+  gitlab-runner:
+    install: true
+    gitlabUrl: http://gitlab-webservice-default.gitlab.svc.cluster.local:8181
+    concurrent: 1
+    checkInterval: 5
+    unregisterRunners: false
+    runners:
+      locked: null
+      config: |
+        [[runners]]
+          clone_url = "http://gitlab-webservice-default.gitlab.svc.cluster.local:8181"
+          [runners.kubernetes]
+            namespace = "gitlab"
+            image = "alpine:3.23"
+            privileged = false
+  registry:
+    enabled: true
+    hpa:
+      minReplicas: 1
+      maxReplicas: 1
+      cpu:
+        targetType: AverageValue
+        targetAverageValue: 50m
+    storage:
+      secret: gitlab-registry-storage
+      key: config
     resources:
       requests:
         cpu: null
@@ -72,68 +82,109 @@ gitlab:
     init:
       resources:
         requests: null
-    workhorse:
+  upgradeCheck:
+    resources:
+      requests:
+        cpu: null
+  shared-secrets:
+    resources:
+      requests:
+        cpu: null
+  gitlab:
+    gitlab-exporter:
+      enabled: true
       resources:
         requests:
           cpu: null
           memory: null
-  sidekiq:
-    minReplicas: 1
-    maxReplicas: 1
-    concurrency: 5
-    resources:
-      requests:
-        cpu: null
-        memory: null
-    init:
+      init:
+        resources:
+          requests: null
+    kas:
+      minReplicas: 1
+      maxReplicas: 1
       resources:
-        requests: null
-  gitlab-shell:
-    minReplicas: 1
-    maxReplicas: 1
-    resources:
-      requests:
-        cpu: null
-        memory: null
-    init:
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+    webservice:
+      helmTests:
+        enabled: false
+      minReplicas: 1
+      maxReplicas: 1
+      workerProcesses: 1
       resources:
-        requests: null
-  gitaly:
-    persistence:
-      size: 5Gi
-    resources:
-      requests:
-        cpu: null
-        memory: null
-    init:
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+      workhorse:
+        resources:
+          requests:
+            cpu: null
+            memory: null
+    sidekiq:
+      minReplicas: 1
+      maxReplicas: 1
+      concurrency: 5
       resources:
-        requests: null
-  migrations:
-    resources:
-      requests:
-        cpu: null
-        memory: null
-    init:
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+    gitlab-shell:
+      minReplicas: 1
+      maxReplicas: 1
       resources:
-        requests: null
-  toolbox:
-    resources:
-      requests:
-        cpu: null
-        memory: null
-    init:
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+    gitaly:
+      persistence:
+        size: 5Gi
       resources:
-        requests: null
-    backups:
-      objectStorage:
-        config:
-          secret: gitlab-object-storage-backup
-          key: config
-    extraVolumes: |
-      - name: app-code
-        persistentVolumeClaim:
-          claimName: gitlab-app-code
-    extraVolumeMounts: |
-      - name: app-code
-        mountPath: /workspace/apps
-        readOnly: true
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+    migrations:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+    toolbox:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+      init:
+        resources:
+          requests: null
+      backups:
+        objectStorage:
+          config:
+            secret: gitlab-object-storage-backup
+            key: config
+      extraVolumes: |
+        - name: app-code
+          persistentVolumeClaim:
+            claimName: gitlab-app-code
+      extraVolumeMounts: |
+        - name: app-code
+          mountPath: /workspace/apps
+          readOnly: true

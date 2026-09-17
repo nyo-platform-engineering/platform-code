@@ -39,6 +39,20 @@ begin
     end
 
     unless project['empty_repo']
+      pipeline_file = File.join(directory, '.gitlab-ci.yml')
+      if File.file?(pipeline_file)
+        status, existing = api.call(Net::HTTP::Get, "/projects/#{project.fetch('id')}/repository/files/.gitlab-ci.yml?ref=main")
+        content = File.binread(pipeline_file)
+        if status == '404' || Base64.decode64(existing.fetch('content')).b != content.b
+          api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {
+            branch: 'main', commit_message: 'Configure GitLab CI', actions: [{
+              action: status == '404' ? 'create' : 'update', file_path: '.gitlab-ci.yml',
+              content: Base64.strict_encode64(content), encoding: 'base64'
+            }]
+          })
+          puts "Configured CI in root/#{name}."
+        end
+      end
       puts "Project already contains commits; preserved root/#{name}."
       next
     end
@@ -54,7 +68,7 @@ begin
     next if actions.empty?
 
     api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {
-      branch: 'main', commit_message: 'Import local app source [skip ci]', actions: actions
+      branch: 'main', commit_message: 'Import local app source', actions: actions
     })
     puts "Imported #{actions.length} files into root/#{name}."
   end

@@ -126,7 +126,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gitlab-create-buckets
+  name: gitlab-create-buckets-{{ .Values.buckets | toJson | sha256sum | trunc 7 }}
 spec:
   backoffLimit: 6
   activeDeadlineSeconds: 600
@@ -152,7 +152,7 @@ spec:
             - -ec
             - |
               until mc alias set local http://gitlab-minio:9000 "$ACCESS_KEY" "$SECRET_KEY"; do sleep 5; done
-              for bucket in git-lfs gitlab-artifacts gitlab-uploads gitlab-packages gitlab-backups tmp; do
+              for bucket in {{ join " " .Values.buckets }}; do
                 mc mb --ignore-existing "local/$bucket"
               done
 ---
@@ -178,4 +178,52 @@ spec:
           kind: Service
           name: gitlab-webservice-default
           port: 8181
+          weight: 1
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitlab-registry
+spec:
+  hostnames: [registry.localhost]
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: local
+      namespace: traefik
+      sectionName: web
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: gitlab-registry
+          port: 5000
+          weight: 1
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitlab-kas
+spec:
+  hostnames: [kas.localhost]
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: local
+      namespace: traefik
+      sectionName: web
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: gitlab-kas
+          port: 8150
           weight: 1

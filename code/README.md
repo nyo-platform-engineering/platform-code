@@ -56,7 +56,7 @@ infrastructure Taskfile. Local k3d image imports keep the demo simple without
 requiring an image registry. See [infrastructure setup](infrastructure/README.md)
 and [Go demo details](apps/go-demo/README.md).
 See [local GitLab](infrastructure/argo-apps/platform/03-cd/gitlab/README.md) for access, persistent
-storage, and mount settings. GitLab CI and runners will be configured separately.
+storage, mount settings, and Go demo's GitLab CI test/build pipeline.
 
 ## Repository model as the platform grows
 

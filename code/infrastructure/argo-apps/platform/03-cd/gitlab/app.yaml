@@ -10,9 +10,9 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: https://charts.gitlab.io
-      chart: gitlab
-      targetRevision: 10.3.2
+    - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+      path: code/infrastructure/charts/gitlab
+      targetRevision: main
       helm:
         releaseName: gitlab
         valueFiles:

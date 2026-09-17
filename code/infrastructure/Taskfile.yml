@@ -88,7 +88,9 @@ tasks:
           'Radar' 'http://radar.localhost{{.URL_PORT}}' \
           'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
           'Go demo' 'http://go.localhost{{.URL_PORT}}' \
-          'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task password APP=gitlab)'
+          'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task password APP=gitlab)' \
+          'Registry' 'http://registry.localhost{{.URL_PORT}}' \
+          'GitLab KAS' 'ws://kas.localhost{{.URL_PORT}}'
   password:
     desc: Show initial admin password (default Argo CD; APP=gitlab for GitLab)
     vars:

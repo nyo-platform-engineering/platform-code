@@ -1,0 +1,2 @@
+# Upstream settings are supplied beside the Argo CD Application.
+gitlab: {}

@@ -70,7 +70,8 @@ GitLab CE runs at `gitlab.localhost` through the existing Gateway. Run
 `task gitlab` to prepare dependency credentials, upload `code/apps` into
 the read-only toolbox mount, and import app directories as GitLab projects.
 See [GitLab setup](argo-apps/platform/03-cd/gitlab/README.md).
-CI runners and pipelines are deferred.
+The upstream runner, registry, KAS, and exporter are enabled. Go demo includes
+a test/build pipeline; `task gitlab` provisions its runner and pipeline config.
 
 This follows Argo CD's [app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/).
 
