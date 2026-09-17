@@ -65,7 +65,7 @@ config:
             scrape_interval: 60s
             scrape_timeout: 10s
             static_configs:
-              - targets: [argocd-metrics.argocd.svc.cluster.local:8082]
+              - targets: [argocd-application-controller-metrics.argocd.svc.cluster.local:8082]
             metric_relabel_configs:
               - source_labels: [__name__]
                 regex: 'argocd_app_info|argocd_app_sync_total'
