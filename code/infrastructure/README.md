@@ -1,9 +1,9 @@
 # Local infrastructure
 
-Git Bash + Rancher Desktop (Moby) + single-node k3d + Argo CD.
-Rancher Desktop manages WSL2 in the background; no Ubuntu installation or
-WSL terminal is needed. Keep Docker Desktop closed, select **dockerd (Moby)**
-in Rancher Desktop, disable its built-in Kubernetes, and start the engine.
+Windows or macOS + a Linux Docker engine + single-node k3d + Argo CD.
+Bootstrap uses Bash 3.2-compatible commands, including the Bash bundled with
+macOS and Windows Git Bash. Cluster workloads run inside the runtime's Linux VM.
+Use the same Docker context for cluster creation and application image builds.
 
 ## Layout
 
@@ -67,11 +67,17 @@ This follows Argo CD's [app-of-apps pattern](https://argo-cd.readthedocs.io/en/s
 
 ## Tools and first run
 
-Use normal Windows installations of Git Bash, Task, k3d, Helm, Docker CLI,
-and kubectl on PATH. Docker CLI and kubectl are bundled with the desktop
-runtimes. No Python, virtualenv, project-local binaries, or project cache is
-required. Helm 3 and Helm 4 both work. Helm still uses its normal user-level
-cache when downloading charts.
+Install Task, k3d, Helm, Docker CLI, and kubectl on PATH. Windows also needs
+Git Bash. No Python, virtualenv, or project-local binaries are required.
+Helm 3 and Helm 4 both work and use their normal user-level chart cache.
+
+### Windows
+
+Run tasks from Git Bash. With Rancher Desktop, select **dockerd (Moby)**,
+disable its built-in Kubernetes, and start the engine. Rancher Desktop manages
+WSL2 in the background; no Ubuntu installation or WSL terminal is needed.
+Docker Desktop's Linux engine can also be used. Select one runtime's Docker
+context rather than switching engines between commands.
 
 If Task is missing, install it from PowerShell or Git Bash:
 
@@ -79,12 +85,44 @@ If Task is missing, install it from PowerShell or Git Bash:
 winget install --id Task.Task --exact
 ```
 
-Reopen Git Bash after installation. From `code/infrastructure`:
+Reopen Git Bash after installation. `task setup` installs k3d and Helm through
+winget; the desktop runtime supplies Docker CLI and kubectl.
+
+### macOS (Intel or Apple Silicon)
+
+With [Homebrew](https://brew.sh/) installed, install Task:
 
 ```bash
-task setup       # optional: install k3d and Helm using winget
-# Reopen Git Bash after new tool installations.
+brew install go-task
+```
+
+Use a running Linux Docker engine from Docker Desktop, Rancher Desktop in
+**dockerd (Moby)** mode, or Colima's Docker runtime. Disable any built-in
+Kubernetes cluster when using a desktop runtime; this stack creates its own k3d
+cluster. For Colima, install and start the engine separately:
+
+```bash
+brew install colima docker
+colima start --runtime docker
+```
+
+`task setup` installs k3d, Helm, and kubectl through Homebrew. Use your normal
+Terminal with Bash or zsh; Task invokes Bash for bootstrap. No GNU coreutils or
+replacement Bash is required. On Apple Silicon, the demo task builds for the
+cluster node's architecture rather than assuming amd64; rebuild the image on
+that machine instead of reusing an archive from an Intel machine.
+
+### Shared workflow
+
+Check `docker context ls` and `docker info` if the engine is unreachable.
+The scripts use your selected Docker connection and do not start or install
+a container runtime. From `code/infrastructure` on either OS:
+
+```bash
+task setup       # winget on Windows; Homebrew on macOS
+# On Windows, reopen Git Bash after new tool installations.
 task up          # checks tools, bootstraps the cluster, and prints service links
+task go-demo     # build/import a container for this cluster's architecture
 task status
 task password
 ```
@@ -97,7 +135,7 @@ https://github.com/nyo-platform-engineering/platform-code.git
 revision: main
 ```
 
-Argo CD reads Git, not your Windows working directory. Update `argo-apps/root.yaml` and
+Argo CD reads Git, not your local working directory. Update `argo-apps/root.yaml` and
 the Git sources in `argo-apps/platform/**/*.yaml` if the repository or revision
 changes (including each Helm Application's `ref: values` source). For a
 private repository, configure repository credentials in Argo
@@ -125,7 +163,8 @@ HTTP port, use `task links HTTP_PORT=8080` with the same port used for `task up`
 | http://go.localhost | Go demo JSON greeting |
 
 Published ports bind to 127.0.0.1. If your browser does not resolve
-`*.localhost`, add these names against `127.0.0.1` in the Windows hosts file.
+`*.localhost`, add these names against `127.0.0.1` in `/etc/hosts` on macOS or
+`C:\Windows\System32\drivers\etc\hosts` on Windows.
 The supplied routes use HTTP; 443 is reserved for future TLS routes.
 The Kubernetes API binds to 127.0.0.1:6550.
 
@@ -134,6 +173,11 @@ Override conflicting ports in Task:
 ```bash
 task up HTTP_PORT=8080 HTTPS_PORT=8443 API_PORT=6551
 ```
+
+The same overrides also avoid privileged host ports on macOS runtimes that
+require extra permissions for ports 80/443. Use the same HTTP port with
+`task links HTTP_PORT=8080`; changing an existing cluster's published ports
+requires `task restart` with those overrides and deletes its data.
 
 Then browse `http://grafana.localhost:8080`, etc. Cluster defaults and the k3s
 and Gateway API versions live in `Taskfile.yml`. Child chart versions and
@@ -184,8 +228,9 @@ with filesystem storage. No MinIO or Kafka is deployed. `task down` and
 `task restart` delete cluster data.
 
 No requests/limits avoids reservations and CPU throttling; actual RAM usage
-still depends on the workload. Rancher's WSL2 backend has its own memory
-ceiling, independent of Kubernetes resource settings.
+still depends on the workload. The container runtime's Linux VM has its own
+memory allocation, independent of Kubernetes resource settings. Give the VM
+enough RAM for the full stack, including when using Colima on macOS.
 
 ## Application layer (`../apps`)
 
@@ -328,6 +373,13 @@ kyverno test tests/kyverno
 
 The policy tests check compliant manifests, violations, init-container tags,
 and the Traefik LoadBalancer exception. Use Kyverno CLI v1.19.1.
+
+## Portability checks
+
+Run `bash tests/bootstrap.sh` to check preflight success and failure messages
+without modifying a cluster. The script also runs under Bash 3.2. Container
+image manifests were checked for both linux/amd64 and linux/arm64; full rollout
+validation on a physical Mac is still needed.
 
 ## Operations
 

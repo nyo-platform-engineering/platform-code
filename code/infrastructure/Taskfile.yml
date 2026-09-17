@@ -28,10 +28,15 @@ tasks:
     cmds:
       - task --list
   setup:
-    desc: Install k3d and Helm on Windows PATH using winget
+    desc: Install CLI tools with winget (Windows) or Homebrew (macOS)
+    platforms: [windows, darwin]
     cmds:
-      - winget install --id k3d.k3d --exact --accept-package-agreements --accept-source-agreements
-      - winget install --id Helm.Helm --exact --accept-package-agreements --accept-source-agreements
+      - cmd: winget install --id k3d.k3d --exact --accept-package-agreements --accept-source-agreements
+        platforms: [windows]
+      - cmd: winget install --id Helm.Helm --exact --accept-package-agreements --accept-source-agreements
+        platforms: [windows]
+      - cmd: brew install k3d helm kubernetes-cli
+        platforms: [darwin]
   up:
     desc: Create k3d, bootstrap Argo CD, and register the platform application
     cmds:

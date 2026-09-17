@@ -20,8 +20,8 @@ Browse `http://localhost:8080`. Set `PORT` to override the default 8080.
 
 ## Container and local cluster
 
-A registry is optional for local k3d development. Rancher Desktop's Docker
-images are not automatically available inside k3d nodes; import them first.
+A registry is optional for local k3d development. Images in the host Docker
+engine are not automatically available inside k3d nodes; import them first.
 With the cluster and Argo CD deployment registered, run from `code/apps` or
 `code/infrastructure`:
 
@@ -30,9 +30,12 @@ task go-demo
 ```
 
 The single task in `code/apps/Taskfile.yml` builds the image (including Go
-tests), saves `go-demo/go-demo-dev1.tar`, imports it into k3d, restarts the
+tests) for the cluster node's architecture, saves `go-demo/go-demo-dev1.tar`,
+imports it into k3d, restarts the
 deployment, and waits for readiness. Set `CLUSTER_NAME` to target another
-local cluster. Generated archives are ignored by Git and excluded from the
+local cluster. Run `task up` first so the task can read the node architecture.
+This works with amd64 nodes on Intel machines and arm64 nodes on Apple Silicon.
+Generated archives are ignored by Git and excluded from the
 Docker build context.
 
 The default image is `local/go-demo:dev1`, matching the Argo CD values. For a

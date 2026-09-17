@@ -9,8 +9,10 @@ tasks:
     vars:
       IMAGE: 'local/go-demo:{{.IMAGE_TAG}}'
       ARCHIVE: 'go-demo-{{.IMAGE_TAG}}.tar'
+      NODE_ARCH:
+        sh: 'kubectl --context "k3d-{{.CLUSTER_NAME}}" get nodes -o jsonpath="{.items[0].status.nodeInfo.architecture}"'
     cmds:
-      - docker build --tag "{{.IMAGE}}" .
+      - docker build --platform "linux/{{.NODE_ARCH}}" --tag "{{.IMAGE}}" .
       - docker image save --output "{{.ARCHIVE}}" "{{.IMAGE}}"
       - k3d image import "{{.IMAGE}}" --cluster "{{.CLUSTER_NAME}}"
       - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout restart deployment/go-demo --namespace dev

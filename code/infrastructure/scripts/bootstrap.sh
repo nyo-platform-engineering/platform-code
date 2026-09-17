@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Git Bash + Rancher Desktop/Moby. Helm and kubectl are native Windows tools.
+# Bash 3.2+ on macOS, Linux, or Windows Git Bash, with a Linux Docker engine.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export MSYS_NO_PATHCONV=1
@@ -9,11 +9,15 @@ context="k3d-$name"
 kube() { kubectl --context "$context" "$@"; }
 doctor() {
   for tool in docker kubectl helm k3d; do
-    command -v "$tool" || { echo "Missing $tool; install it on Windows PATH." >&2; exit 1; }
+    command -v "$tool" >/dev/null || { echo "Missing $tool on PATH; see README.md for your OS setup." >&2; exit 1; }
   done
   local engine
-  engine="$(docker info --format '{{.OSType}}')"
-  [[ "$engine" == linux ]] || { echo 'Start Rancher Desktop and select dockerd (Moby).' >&2; exit 1; }
+  engine="$(docker info --format '{{.OSType}}')" || {
+    echo 'Cannot reach Docker. Start your container runtime and check docker context ls / DOCKER_HOST.' >&2
+    return 1
+  }
+  [[ "$engine" == linux ]] || { echo 'A Linux Docker engine is required; Rancher Desktop must use dockerd (Moby).' >&2; exit 1; }
+  echo "Docker engine: $(docker info --format '{{.OSType}}/{{.Architecture}}')"
 }
 resources() {
   local sizing
@@ -79,7 +83,7 @@ up() {
 case "${1:-help}" in
   doctor) doctor ;;
   up) up ;;
-  password) kube get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 --decode; echo ;;
+  password) kube get secret argocd-initial-admin-secret -n argocd -o go-template='{{.data.password | base64decode}}{{"\n"}}' ;;
   resources) resources ;;
   help) echo 'task --list | task up | task status | task links | task password | task logs | task down' ;;
   *) echo "Unknown command: $1" >&2; exit 1 ;;

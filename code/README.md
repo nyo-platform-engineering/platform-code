@@ -35,6 +35,10 @@ Argo CD reads the committed deployment configuration from Git.
 
 ## Local workflow
 
+Windows uses Git Bash; macOS uses your normal Terminal and a running Linux
+Docker engine. `task setup` selects winget or Homebrew for CLI installation.
+See the [OS setup instructions](infrastructure/README.md#tools-and-first-run).
+
 From `code/infrastructure`:
 
 ```bash
