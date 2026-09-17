@@ -17,7 +17,7 @@ argo-apps/
     01-cd/argocd/            app.yaml and values.yaml
     02-monitoring/radar/     app.yaml and values.yaml
     02-observability/        loki/ and tempo/ (app.yaml + values.yaml), 02-mimir.yaml
-    03-observability/        grafana/ and alloy/ (app.yaml + values.yaml)
+    03-observability/        grafana/ and otel-collector/ (app.yaml + values.yaml)
     04-network/gateway/      app.yaml and manifests/gateway.yaml
     05-environments/         05-dev-apps.yaml
   dev/                       development Applications, deployment values, Kustomization
@@ -30,7 +30,7 @@ examples/                    application and backend route examples
 Argo CD owns the stack. The Bash script creates the cluster, installs Gateway
 API CRDs, bootstraps Argo CD if missing, and registers the root Application.
 It does not install or upgrade the other services. Argo CD sync waves deploy
-Traefik, Argo CD itself, Loki/Tempo/Mimir/Radar, Grafana/Alloy, and finally
+Traefik, Argo CD itself, Loki/Tempo/Mimir/Radar, Grafana/OpenTelemetry Collector, and finally
 the Gateway, followed by the development Application layer. The two-digit
 prefix on each platform wave folder equals its `argocd.argoproj.io/sync-wave`
 annotation. Apps in the same wave share a prefix. Argo CD uses the annotation
@@ -138,7 +138,8 @@ Git sources live in each `argo-apps/platform` Application. Loki, Tempo, and Graf
 with `values.yaml` beside each component's `app.yaml` under `argo-apps/platform`.
 Their pinned chart
 versions retain the existing Loki 3.6.3, Tempo 2.9.0, and Grafana 12.3.2 images.
-Alloy continues to use Grafana's upstream chart. Mimir's image version lives
+OpenTelemetry Collector uses its upstream Helm chart and Contrib distribution.
+Mimir's image version lives
 in `charts/mimir/values.yaml`.
 
 The custom Mimir chart is the one workload-chart exception: the upstream
@@ -164,7 +165,7 @@ migration before enabling it again. A fresh cluster needs no migration.
 
 One k3s server, zero agents, no node-container memory cap. The pinned Helm
 values explicitly remove CPU and memory defaults, including Radar's resource
-settings and Alloy's config-reloader requests. The monitoring chart values
+settings and the OpenTelemetry Collector's resources. The monitoring chart values
 and custom Mimir chart have no CPU/memory sizing.
 Applications in `../apps` should omit CPU/memory sizing too.
 
@@ -218,22 +219,51 @@ Application at `<wave-folder>/<component>/values.yaml`.
 Bootstrap reads the Argo CD chart version from
 `argo-apps/platform/01-cd/argocd/app.yaml`.
 
-Applications send OTLP to Alloy:
+Applications send OTLP to OpenTelemetry Collector:
 
 ```text
-OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.monitoring.svc.cluster.local:4318
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.monitoring.svc.cluster.local:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_METRIC_EXPORT_INTERVAL=60000
 ```
 
 For gRPC, use port 4317. Host applications can use a local tunnel:
 
 ```bash
-kubectl --context k3d-dev -n monitoring port-forward svc/alloy 4317:4317 4318:4318
+kubectl --context k3d-dev -n monitoring port-forward svc/otel-collector 4317:4317 4318:4318
 ```
 
-Alloy collects Kubernetes pod logs, scrapes LGTM backend metrics, and forwards
-application OTLP logs/metrics/traces. Grafana provisions Loki/Mimir/Tempo
+The Collector collects Kubernetes pod logs with the chart's file-log preset,
+scrapes LGTM backend metrics once per minute, and forwards application OTLP
+logs/metrics/traces. Grafana provisions Loki/Mimir/Tempo
 data sources. This is backend monitoring, not a full kube-prometheus stack.
+
+Metrics are deliberately minimal. Backend scrapes retain only `up`,
+`process_cpu_seconds_total`, `process_resident_memory_bytes`, and `go_goroutines`:
+four series per backend instead of thousands. Prometheus metric relabeling drops
+other samples before conversion. A shared OpenTelemetry `filter/minimal`
+processor also drops other metrics from both scrapes and incoming OTLP.
+Applications retain `http.server.request.duration`, `http.server.active_requests`,
+and the older `http.server.duration` metric when they emit them. Duration
+histograms include request counts and buckets; the allowlist does not limit
+label cardinality. `OTEL_METRIC_EXPORT_INTERVAL` sets a 60-second SDK export
+interval for applications that support it.
+
+Edit the scrape allowlist and `filter/minimal` in
+`argo-apps/platform/03-observability/otel-collector/values.yaml` to expand this
+set. Logs and traces bypass the metric filter. The Collector excludes its own
+pod logs and forwards other pod and OTLP logs to Loki's native OTLP endpoint.
+Pod metadata uses OpenTelemetry names such as `k8s.namespace.name`; Loki
+normalizes these to labels such as `k8s_namespace_name`.
+
+When applying this update to an existing cluster, Argo CD replaces the `alloy`
+Application with `otel-collector`. Update application OTLP endpoints to the
+new service name. The old collector is pruned; telemetry can briefly pause
+during the switch. Backends and their PVCs remain managed by their existing
+Applications. Historical metrics remain until the configured retention expires.
+This single-node setup runs one Collector pod. Adding nodes would duplicate
+the static backend scrapes across the DaemonSet; use a separate scraping
+Deployment or a target allocator before scaling out.
 
 ## Operations
 

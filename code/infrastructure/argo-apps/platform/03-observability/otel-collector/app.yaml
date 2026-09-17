@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: alloy
+  name: otel-collector
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: '3'
@@ -10,13 +10,13 @@ metadata:
 spec:
   project: default
   sources:
-  - repoURL: https://grafana.github.io/helm-charts
-    chart: alloy
-    targetRevision: 1.12.1
+  - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.173.1
     helm:
-      releaseName: alloy
+      releaseName: otel-collector
       valueFiles:
-      - $values/code/infrastructure/argo-apps/platform/03-observability/alloy/values.yaml
+      - $values/code/infrastructure/argo-apps/platform/03-observability/otel-collector/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values

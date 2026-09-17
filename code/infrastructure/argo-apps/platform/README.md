@@ -12,13 +12,13 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | `01-cd` | Continuous delivery and GitOps reconciliation | Argo CD (1) |
 | `02-monitoring` | Kubernetes resource and topology inspection | Radar (2) |
 | `02-observability` | Telemetry storage backends | Loki/Tempo/Mimir (2) |
-| `03-observability` | Telemetry collection and visualization | Grafana/Alloy (3) |
+| `03-observability` | Telemetry collection and visualization | Grafana/OpenTelemetry Collector (3) |
 | `04-network` | Gateway API listeners | Gateway (4) |
 | `05-environments` | Registration of environment-specific Applications | Development apps (5) |
 
 Monitoring and observability overlap. Here, Radar helps inspect the cluster;
 the observability group handles logs (Loki), traces (Tempo), metrics (Mimir),
-collection and forwarding (Alloy), and dashboards (Grafana).
+collection and forwarding (OpenTelemetry Collector), and dashboards (Grafana).
 
 Traefik starts before Argo CD's managed Application because Argo CD's ingress
 needs Traefik to become healthy. Argo CD itself is already running from bootstrap.

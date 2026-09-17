@@ -83,9 +83,9 @@ tasks:
     cmds:
       - "bash scripts/bootstrap.sh resources"
   logs:otel:
-    desc: Follow Alloy collector logs
+    desc: Follow OpenTelemetry Collector logs
     cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=alloy --all-containers=true --tail=50 -f"
+      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=opentelemetry-collector --all-containers=true --tail=50 -f"
   logs:grafana:
     desc: Follow Grafana logs
     cmds:

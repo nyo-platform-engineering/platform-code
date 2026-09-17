@@ -6,7 +6,7 @@ Argo CD references it from `argo-apps/platform/02-observability/02-mimir.yaml`.
 
 Grafana's upstream `mimir-distributed` chart targets microservices. This chart
 keeps the local filesystem-only setup without MinIO or Kafka. Loki, Tempo,
-Grafana, and Alloy are installed using upstream charts instead.
+Grafana, and OpenTelemetry Collector are installed using upstream charts instead.
 
 The process runs from `/data`, its writable PVC mount, so the default activity
 log can be created by the non-root user.
