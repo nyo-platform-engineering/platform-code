@@ -1,0 +1,13 @@
+fullnameOverride: kube-state-metrics
+replicas: 1
+resources: {}
+collectors: [pods]
+metricAllowlist:
+  - kube_pod_status_ready
+  - kube_pod_container_status_restarts_total
+prometheusScrape: false
+selfMonitor:
+  enabled: false
+prometheus:
+  monitor:
+    enabled: false

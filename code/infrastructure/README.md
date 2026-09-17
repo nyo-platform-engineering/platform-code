@@ -15,7 +15,7 @@ argo-apps/
   platform/                  platform Applications grouped by wave and function
     00-network/traefik/      app.yaml and values.yaml
     01-cd/argocd/            app.yaml and values.yaml
-    02-monitoring/radar/     app.yaml and values.yaml
+    02-monitoring/           radar/ and kube-state-metrics/ (app.yaml + values.yaml)
     02-observability/        loki/ and tempo/ (app.yaml + values.yaml), 02-mimir.yaml
     03-observability/        grafana/ and otel-collector/ (app.yaml + values.yaml)
     04-network/gateway/      app.yaml and manifests/gateway.yaml
@@ -30,7 +30,8 @@ examples/                    application and backend route examples
 Argo CD owns the stack. The Bash script creates the cluster, installs Gateway
 API CRDs, bootstraps Argo CD if missing, and registers the root Application.
 It does not install or upgrade the other services. Argo CD sync waves deploy
-Traefik, Argo CD itself, Loki/Tempo/Mimir/Radar, Grafana/OpenTelemetry Collector, and finally
+Traefik, Argo CD itself, Loki/Tempo/Mimir/Radar/Kube-state-metrics,
+Grafana/OpenTelemetry Collector, and finally
 the Gateway, followed by the development Application layer. The two-digit
 prefix on each platform wave folder equals its `argocd.argoproj.io/sync-wave`
 annotation. Apps in the same wave share a prefix. Argo CD uses the annotation
@@ -262,8 +263,43 @@ new service name. The old collector is pruned; telemetry can briefly pause
 during the switch. Backends and their PVCs remain managed by their existing
 Applications. Historical metrics remain until the configured retention expires.
 This single-node setup runs one Collector pod. Adding nodes would duplicate
-the static backend scrapes across the DaemonSet; use a separate scraping
+the static backend and kube-state-metrics scrapes across the DaemonSet; use a separate scraping
 Deployment or a target allocator before scaling out.
+
+### Minimal Kubernetes metrics
+
+Kube-state-metrics runs with only the pod collector and two metric families
+enabled. Its app and values live under `argo-apps/platform/02-monitoring/kube-state-metrics`.
+The Collector scrapes it and the local kubelet's `/metrics/cadvisor` every
+60 seconds. Scrape allowlists and the shared OTel filter retain only:
+
+| Source | Metric | Purpose |
+| --- | --- | --- |
+| Kube-state-metrics | `kube_pod_status_ready{condition="true"}` | One readiness gauge per pod |
+| Kube-state-metrics | `kube_pod_container_status_restarts_total` | Restarts per container |
+| cAdvisor | `container_cpu_usage_seconds_total` | Total CPU time per container |
+| cAdvisor | `container_memory_working_set_bytes` | Working-set memory per container |
+
+Both jobs also keep `up` for scrape health. cAdvisor excludes empty containers,
+pod sandboxes, and per-core CPU metrics. Image and runtime name labels are
+dropped; container IDs are retained to distinguish containers during restarts.
+Kube-state-metrics emits only the allowlisted families; the Collector keeps
+only its `true` readiness condition and removes pod UID labels. There are no
+node, disk, network, resource request/limit, or kube-state-metrics self metrics.
+Series counts scale with pods and containers, rather than a fixed global cap.
+
+cAdvisor uses the Collector's service-account token, validates kubelet TLS
+with the cluster CA, and has only `get` permission on `nodes/metrics`.
+Each Collector scrapes its own node using the downward-API node IP.
+
+Example Grafana queries:
+
+```promql
+sum by (namespace, pod) (rate(container_cpu_usage_seconds_total[5m]))
+sum by (namespace, pod) (container_memory_working_set_bytes)
+kube_pod_status_ready{condition="true"} == 0
+increase(kube_pod_container_status_restarts_total[15m])
+```
 
 ## Operations
 

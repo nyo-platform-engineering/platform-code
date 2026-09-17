@@ -10,7 +10,7 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | --- | --- | --- |
 | `00-network` | Ingress controller | Traefik (0) |
 | `01-cd` | Continuous delivery and GitOps reconciliation | Argo CD (1) |
-| `02-monitoring` | Kubernetes resource and topology inspection | Radar (2) |
+| `02-monitoring` | Kubernetes resource and topology inspection | Radar/Kube-state-metrics (2) |
 | `02-observability` | Telemetry storage backends | Loki/Tempo/Mimir (2) |
 | `03-observability` | Telemetry collection and visualization | Grafana/OpenTelemetry Collector (3) |
 | `04-network` | Gateway API listeners | Gateway (4) |

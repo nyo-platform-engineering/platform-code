@@ -6,6 +6,12 @@ image:
 command:
   name: otelcol-contrib
 resources: {}
+clusterRole:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: [nodes/metrics]
+      verbs: [get]
 service:
   enabled: true
 presets:
@@ -49,6 +55,51 @@ config:
             static_configs:
               - targets: [mimir:9009]
             metric_relabel_configs: *minimal_backend_metrics
+          - job_name: kube-state-metrics
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [kube-state-metrics:8080]
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'kube_pod_status_ready|kube_pod_container_status_restarts_total'
+                action: keep
+              # Keep one readiness series per pod; restart counters have no condition.
+              - source_labels: [condition]
+                regex: 'true|'
+                action: keep
+              - regex: uid
+                action: labeldrop
+          - job_name: cadvisor
+            scheme: https
+            metrics_path: /metrics/cadvisor
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            authorization:
+              credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            tls_config:
+              ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            static_configs:
+              - targets: ["${env:OTEL_K8S_NODE_IP}:10250"]
+                labels:
+                  node: "${env:OTEL_K8S_NODE_NAME}"
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'container_cpu_usage_seconds_total|container_memory_working_set_bytes'
+                action: keep
+              - source_labels: [container]
+                regex: '|POD'
+                action: drop
+              - source_labels: [namespace, pod]
+                regex: '.+;.+'
+                action: keep
+              # Retain total CPU only, avoiding one series per CPU core.
+              - source_labels: [cpu]
+                regex: 'total|'
+                action: keep
+              # Keep id to distinguish containers during restarts.
+              - regex: 'image|name'
+                action: labeldrop
   processors:
     memory_limiter: null
     filter/minimal:
@@ -56,7 +107,7 @@ config:
       metric_conditions:
         # Matching conditions DROP metrics; negate the small allowlist.
         # Prometheus counters may lose their _total suffix during conversion.
-        - 'not IsMatch(metric.name, "^(up|process_cpu_seconds(_total)?|process_resident_memory_bytes|go_goroutines|http[.]server[.](request[.]duration|duration|active_requests))$")'
+        - 'not IsMatch(metric.name, "^(up|process_cpu_seconds(_total)?|process_resident_memory_bytes|go_goroutines|kube_pod_status_ready|kube_pod_container_status_restarts(_total)?|container_cpu_usage_seconds(_total)?|container_memory_working_set_bytes|http[.]server[.](request[.]duration|duration|active_requests))$")'
     batch:
       timeout: 5s
       send_batch_size: 256
