@@ -96,15 +96,17 @@ With [Homebrew](https://brew.sh/) installed, install Task:
 brew install go-task
 ```
 
-Use a running Linux Docker engine from Docker Desktop, Rancher Desktop in
-**dockerd (Moby)** mode, or Colima's Docker runtime. Disable any built-in
-Kubernetes cluster when using a desktop runtime; this stack creates its own k3d
-cluster. For Colima, install and start the engine separately:
+Colima is the Mac example here. Install its Docker runtime and CLI separately:
 
 ```bash
 brew install colima docker
 colima start --runtime docker
 ```
+
+The stack also works with other Linux Docker engines, such as Docker Desktop
+or Rancher Desktop in **dockerd (Moby)** mode. Runtime installation, startup,
+VM settings, and profiles remain yours to manage. This stack creates its own
+k3d cluster; any Kubernetes cluster bundled with the runtime is unnecessary.
 
 `task setup` installs k3d, Helm, and kubectl through Homebrew. Use your normal
 Terminal with Bash or zsh; Task invokes Bash for bootstrap. No GNU coreutils or
@@ -126,6 +128,47 @@ task go-demo     # build/import a container for this cluster's architecture
 task status
 task password
 ```
+
+### Personal settings and extensions
+
+Use Task 3.44 or newer for YAML-map support. Copy the local-settings example once, then adjust it for your machine:
+
+```bash
+cp settings.local.example.yml settings.local.yml
+```
+
+For Colima, uncomment `DOCKER_CONTEXT: colima` in `settings.local.yml` (or use the
+context name for your Colima profile from `docker context ls`). Leave it unset
+to use your selected Docker context or an exported `DOCKER_HOST`. The file also
+sets your cluster name and host ports, so `task up`, `task links`, and the
+included `task go-demo` use consistent settings without repeating arguments.
+The example uses ports 8080/8443; the shared defaults remain 80/443.
+
+Settings resolve from Task command-line overrides, then exported environment/local
+settings, then shared defaults. For example, `task links HTTP_PORT=9090`
+overrides the local HTTP port for that invocation. `settings.local.yml` applies when
+running the infrastructure Taskfile; directly invoking `apps/Taskfile.yml`
+uses exported environment variables or command-line overrides instead.
+Image-tag changes still require matching GitOps values; a local setting does
+not rewrite Argo CD manifests. Cluster image/port changes still require recreating
+the cluster, and the existing `task restart` deletes cluster data.
+
+For custom runtime commands, an optional `Taskfile.local.yml` is included
+under the `local:` namespace. For example:
+
+```yaml
+version: '3'
+tasks:
+  runtime:
+    desc: Start my Colima Docker runtime
+    cmds:
+      - colima start --runtime docker
+```
+
+Then run `task local:runtime` before `task up`. Replace that task with whatever
+your runtime needs. Both personal YAML files are ignored by Git; the shared workflow
+does not start, stop, or otherwise configure a runtime automatically. Shared
+platform-service settings continue to live in the GitOps Helm values files.
 
 Before `task up`, **commit and push this configuration** to the repository
 Argo CD reads. Its default is:

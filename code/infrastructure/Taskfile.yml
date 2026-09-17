@@ -4,18 +4,28 @@ includes:
     taskfile: ../apps/Taskfile.yml
     dir: ../apps
     flatten: true
+  local:
+    taskfile: Taskfile.local.yml
+    optional: true
 vars:
-  CLUSTER_NAME: dev
-  HTTP_PORT: '80'
-  HTTPS_PORT: '443'
-  API_PORT: '6550'
-  K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
-  GATEWAY_API_VERSION: v1.5.1
+  LOCAL_SETTINGS_YAML:
+    sh: 'if test -f settings.local.yml; then cat settings.local.yml; else printf "{}"; fi'
+  LOCAL_SETTINGS:
+    ref: 'fromYaml .LOCAL_SETTINGS_YAML'
+  CLUSTER_NAME: '{{.CLUSTER_NAME | default .LOCAL_SETTINGS.CLUSTER_NAME | default "dev"}}'
+  HTTP_PORT: '{{.HTTP_PORT | default .LOCAL_SETTINGS.HTTP_PORT | default "80"}}'
+  HTTPS_PORT: '{{.HTTPS_PORT | default .LOCAL_SETTINGS.HTTPS_PORT | default "443"}}'
+  API_PORT: '{{.API_PORT | default .LOCAL_SETTINGS.API_PORT | default "6550"}}'
+  K3S_IMAGE: '{{.K3S_IMAGE | default .LOCAL_SETTINGS.K3S_IMAGE | default "rancher/k3s:v1.34.5-k3s1"}}'
+  GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION | default .LOCAL_SETTINGS.GATEWAY_API_VERSION | default "v1.5.1"}}'
+  IMAGE_TAG: '{{.IMAGE_TAG | default .LOCAL_SETTINGS.IMAGE_TAG | default "dev1"}}'
+  DOCKER_CONTEXT: '{{.DOCKER_CONTEXT | default .LOCAL_SETTINGS.DOCKER_CONTEXT | default ""}}'
   APP: otel-collector-cluster
   NAMESPACE: monitoring
   TAIL: '50'
   FOLLOW: 'true'
 env:
+  DOCKER_CONTEXT: '{{.DOCKER_CONTEXT}}'
   CLUSTER_NAME: '{{.CLUSTER_NAME}}'
   HTTP_PORT: '{{.HTTP_PORT}}'
   HTTPS_PORT: '{{.HTTPS_PORT}}'

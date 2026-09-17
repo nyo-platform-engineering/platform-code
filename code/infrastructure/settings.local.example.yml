@@ -1,0 +1,14 @@
+# Copy to settings.local.yml and adjust for your machine.
+CLUSTER_NAME: dev
+HTTP_PORT: '8080'
+HTTPS_PORT: '8443'
+API_PORT: '6550'
+
+# Optional: use Colima without changing your globally selected Docker context.
+# DOCKER_CONTEXT: colima
+# Leave unset to use your current Docker context or exported DOCKER_HOST.
+
+# Optional version overrides (shared defaults stay pinned in Taskfile.yml).
+# K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
+# GATEWAY_API_VERSION: v1.5.1
+# IMAGE_TAG: dev1

@@ -1,12 +1,11 @@
 version: '3'
-vars:
-  CLUSTER_NAME: dev
-  IMAGE_TAG: dev1
 tasks:
   go-demo:
     desc: Build, save, import into k3d, and restart the Go demo
     dir: '{{.TASKFILE_DIR}}/go-demo'
     vars:
+      CLUSTER_NAME: '{{.CLUSTER_NAME | default "dev"}}'
+      IMAGE_TAG: '{{.IMAGE_TAG | default "dev1"}}'
       IMAGE: 'local/go-demo:{{.IMAGE_TAG}}'
       ARCHIVE: 'go-demo-{{.IMAGE_TAG}}.tar'
       NODE_ARCH:

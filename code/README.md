@@ -38,6 +38,9 @@ Argo CD reads the committed deployment configuration from Git.
 Windows uses Git Bash; macOS uses your normal Terminal and a running Linux
 Docker engine. `task setup` selects winget or Homebrew for CLI installation.
 See the [OS setup instructions](infrastructure/README.md#tools-and-first-run).
+Optional `infrastructure/settings.local.yml` settings and `Taskfile.local.yml` tasks
+let each developer choose Docker connections, ports, and runtime commands
+without editing shared files. Colima is the documented Mac example.
 
 From `code/infrastructure`:
 
