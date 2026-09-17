@@ -72,8 +72,7 @@ case "${1:-up}" in
     echo 'Use task links and task gitlab ACTION=status to inspect GitLab startup.'
     ;;
   code) code ;;
-  password) kube get secret gitlab-gitlab-initial-root-password -n gitlab -o go-template='{{.data.password | base64decode}}{{"\n"}}' ;;
   status) kube get pods,pvc -n gitlab; kube get applications gitlab gitlab-services -n argocd ;;
   logs) kube logs -n gitlab -l app=webservice -c webservice --tail=100 --follow ;;
-  *) echo 'Supported actions: up, prepare, code, password, status, logs' >&2; exit 1 ;;
+  *) echo 'Supported actions: up, prepare, code, status, logs; passwords: task password APP=gitlab' >&2; exit 1 ;;
 esac

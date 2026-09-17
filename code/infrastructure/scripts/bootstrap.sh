@@ -84,7 +84,14 @@ up() {
 case "${1:-help}" in
   doctor) doctor ;;
   up) up ;;
-  password) kube get secret argocd-initial-admin-secret -n argocd -o go-template='{{.data.password | base64decode}}{{"\n"}}' ;;
+  password)
+    case "${2:-argocd}" in
+      argocd) namespace=argocd; secret=argocd-initial-admin-secret ;;
+      gitlab) namespace=gitlab; secret=gitlab-gitlab-initial-root-password ;;
+      *) echo 'Supported password apps: argocd, gitlab' >&2; exit 1 ;;
+    esac
+    kube get secret "$secret" -n "$namespace" -o go-template='{{.data.password | base64decode}}{{"\n"}}'
+    ;;
   resources) resources ;;
   help) echo 'task --list | task up | task status | task links | task password | task logs | task down' ;;
   *) echo "Unknown command: $1" >&2; exit 1 ;;

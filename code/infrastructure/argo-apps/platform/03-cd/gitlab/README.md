@@ -10,7 +10,7 @@ From `code/infrastructure`, run:
 ```bash
 task gitlab                     # prepare credentials and upload apps/ into a PVC
 task gitlab ACTION=status       # inspect GitLab startup
-task gitlab ACTION=password     # initial root password
+task password APP=gitlab        # initial root password (default APP is argocd)
 ```
 
 Open `http://gitlab.localhost` (with your configured HTTP port if needed), or

@@ -21,7 +21,6 @@ vars:
   IMAGE_TAG: '{{.IMAGE_TAG | default .LOCAL_SETTINGS.IMAGE_TAG | default "dev1"}}'
   DOCKER_CONTEXT: '{{.DOCKER_CONTEXT | default .LOCAL_SETTINGS.DOCKER_CONTEXT | default ""}}'
   APP_CODE_DIR: '{{.APP_CODE_DIR | default .LOCAL_SETTINGS.APP_CODE_DIR | default "../apps"}}'
-  APP: otel-collector-cluster
   NAMESPACE: monitoring
   TAIL: '50'
   FOLLOW: 'true'
@@ -89,14 +88,17 @@ tasks:
           'Radar' 'http://radar.localhost{{.URL_PORT}}' \
           'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
           'Go demo' 'http://go.localhost{{.URL_PORT}}' \
-          'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task gitlab ACTION=password)'
+          'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task password APP=gitlab)'
   password:
-    desc: Show initial Argo CD admin password
+    desc: Show initial admin password (default Argo CD; APP=gitlab for GitLab)
+    vars:
+      APP: '{{.APP | default "argocd"}}'
     cmds:
-      - "bash scripts/bootstrap.sh password"
+      - 'bash scripts/bootstrap.sh password "{{.APP}}"'
   logs:
     desc: Follow app logs (default otel-collector-cluster; override APP and NAMESPACE)
     vars:
+      APP: '{{.APP | default "otel-collector-cluster"}}'
       LABEL_NAME: '{{if hasPrefix "otel-collector" .APP}}opentelemetry-collector{{else}}{{.APP}}{{end}}'
       SELECTOR: 'app.kubernetes.io/name={{.LABEL_NAME}}{{if hasPrefix "otel-collector" .APP}},app.kubernetes.io/instance={{.APP}}{{end}}'
     cmds:
