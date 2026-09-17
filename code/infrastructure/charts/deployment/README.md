@@ -41,6 +41,12 @@ route uses that port's number automatically. Routing requires an enabled
 Service and at least one Gateway `parentRef`. The platform supplies Gateway
 API CRDs; this chart does not install them.
 
+The route renders Gateway API defaults explicitly to avoid Argo CD drift:
+parent references default to `group: gateway.networking.k8s.io` and `kind: Gateway`
+unless specified, and the generated Service backend includes `group: ""`,
+`kind: Service`, and `weight: 1`. Explicit parent group/kind overrides,
+including an empty group for a core resource, are preserved.
+
 For workloads that do not serve HTTP, disable `service` and `httpRoute`, clear
 `containerPorts`, and configure command/args as needed. For persistent apps,
 choose a strategy compatible with their access mode (for example `Recreate`
