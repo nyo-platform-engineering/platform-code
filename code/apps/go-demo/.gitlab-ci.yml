@@ -1,14 +1,20 @@
 default:
   image: golang:1.27.1-alpine
   tags: [kubernetes]
+  interruptible: true
 
-stages: [test, build]
+stages: [lint, test, build, deploy]
+
+lint:
+  stage: lint
+  script:
+    - test -z "$(gofmt -l .)"
+    - go vet ./...
 
 test:
   stage: test
   script:
     - go test ./...
-    - go vet ./...
 
 build:
   stage: build
@@ -17,6 +23,67 @@ build:
   script:
     - mkdir -p dist
     - go build -trimpath -ldflags="-s -w" -o dist/go-demo .
+    # Package the static binary as a scratch image without Docker or privileged jobs.
+    - go install github.com/google/go-containerregistry/cmd/crane@v0.21.7
+    - export DOCKER_CONFIG="$(mktemp -d)"
+    - trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+    - printf '%s' "$CI_REGISTRY_PASSWORD" | crane auth login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin --insecure
+    - tar -C dist -cf dist/layer.tar go-demo
+    - crane append --oci-empty-base --new_layer dist/layer.tar --new_tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" --insecure
+    - crane mutate "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" --tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" --entrypoint /go-demo --user 65532:65532 --set-platform "linux/$(go env GOARCH)" --insecure > dist/image.txt
+    - printf 'IMAGE_DIGEST=%s\n' "$(cut -d@ -f2 dist/image.txt)" > dist/image.env
   artifacts:
-    paths: [dist/go-demo]
+    paths: [dist/go-demo, dist/image.txt]
+    reports:
+      dotenv: dist/image.env
     expire_in: 1 day
+
+deploy:
+  stage: deploy
+  image: alpine:3.23
+  interruptible: false
+  resource_group: go-demo-dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  environment:
+    name: dev
+    url: http://go.localhost
+  script:
+    - apk add --no-cache git curl jq
+    - git config user.name 'GitLab CI'
+    - git config user.email 'ci@local.invalid'
+    - git fetch origin "$CI_DEFAULT_BRANCH"
+    # Refuse to deploy an older source revision over a newer push.
+    - test -z "$(git diff --name-only "$CI_COMMIT_SHA" "origin/$CI_DEFAULT_BRANCH" -- . ':!deploy/values.yaml')"
+    - git checkout -B "$CI_DEFAULT_BRANCH" "origin/$CI_DEFAULT_BRANCH"
+    - mkdir -p deploy
+    - |
+      printf 'image:\n  repository: %s\n  tag: %s\n  digest: %s\nimagePullSecrets:\n  - name: go-demo-registry\n' \
+        "$CI_REGISTRY_IMAGE" "$CI_COMMIT_SHA" "$IMAGE_DIGEST" > deploy/values.yaml
+    - git add deploy/values.yaml
+    - |
+      if ! git diff --cached --quiet; then
+        git commit -m "Deploy go-demo $CI_COMMIT_SHORT_SHA [skip ci]"
+        git push origin "HEAD:$CI_DEFAULT_BRANCH"
+      fi
+    # Argo CD reads this file; CI only watches its rollout using a scoped service account.
+    - |
+      token="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+      ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      url="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/apis/apps/v1/namespaces/dev/deployments/go-demo"
+      expected="$CI_REGISTRY_IMAGE@$IMAGE_DIGEST"
+      for attempt in $(seq 1 90); do
+        state="$(curl --fail --silent --show-error --cacert "$ca" -H "Authorization: Bearer $token" "$url")"
+        if printf '%s' "$state" | jq -e --arg image "$expected" '
+          .spec.template.spec.containers[0].image == $image and
+          .status.observedGeneration >= .metadata.generation and
+          (.status.updatedReplicas // 0) == .spec.replicas and
+          (.status.availableReplicas // 0) == .spec.replicas and
+          (.status.replicas // 0) == .spec.replicas' >/dev/null; then
+          echo "Argo CD deployed $expected successfully."
+          exit 0
+        fi
+        sleep 5
+      done
+      echo 'Argo CD rollout did not complete within 450 seconds.' >&2
+      exit 1

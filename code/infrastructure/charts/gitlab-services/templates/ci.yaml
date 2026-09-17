@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: go-demo-ci
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: go-demo-ci
+  namespace: dev
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [go-demo]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: go-demo-ci
+  namespace: dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: go-demo-ci
+subjects:
+  - kind: ServiceAccount
+    name: go-demo-ci
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  gitlab.override: |
+    rewrite stop {
+      name exact gitlab.localhost traefik.traefik.svc.cluster.local
+      answer auto
+    }
+    rewrite stop {
+      name exact registry.localhost traefik.traefik.svc.cluster.local
+      answer auto
+    }

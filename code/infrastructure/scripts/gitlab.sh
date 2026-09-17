@@ -65,6 +65,17 @@ projects() {
   kube rollout status deployment/gitlab-webservice-default -n gitlab --timeout=300s
   kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-import.rb
 }
+deploy() {
+  kube create namespace dev --dry-run=client -o yaml | kube apply -f -
+  if ! kube get secret go-demo-repository -n argocd >/dev/null 2>&1 || \
+     ! kube get secret go-demo-registry -n dev >/dev/null 2>&1; then
+    local credentials
+    credentials="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-deploy.rb)"
+    # Toolbox may emit startup notices; the final line contains the manifest.
+    printf '%s\n' "$credentials" | tail -n 1 | kube apply --server-side -f -
+  fi
+  bash scripts/gitlab-registry.sh
+}
 runner() {
   local configured output auth
   configured="$(kube get secret gitlab-gitlab-runner-secret -n gitlab -o go-template='{{if index .data "runner-token"}}yes{{end}}' 2>/dev/null || true)"
@@ -108,10 +119,20 @@ case "${1:-up}" in
     runner
     ready
     projects
+    deploy
     echo 'Use task links and task gitlab ACTION=status to inspect GitLab startup.'
     ;;
   code) code ;;
   projects) projects ;;
+  local-image)
+    # Keep the registry-free task usable after switching the app to GitLab GitOps values.
+    if kube get secret go-demo-repository -n argocd >/dev/null 2>&1; then
+      kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- \
+        env "LOCAL_IMAGE_TAG=${IMAGE_TAG:-dev1}" gitlab-rails runner - < scripts/gitlab-import.rb
+      kube annotate application go-demo -n argocd argocd.argoproj.io/refresh=hard --overwrite
+      kube wait -n argocd application/go-demo --for=jsonpath='{.status.sync.status}'=Synced --timeout=180s
+    fi
+    ;;
   runner) runner ;;
   status) kube get pods,pvc -n gitlab; kube get applications gitlab gitlab-services -n argocd ;;
   logs) kube logs -n gitlab -l app=webservice -c webservice --tail=100 --follow ;;

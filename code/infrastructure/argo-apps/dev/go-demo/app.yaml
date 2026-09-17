@@ -5,14 +5,18 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  source:
-    repoURL: https://github.com/nyo-platform-engineering/platform-code.git
-    targetRevision: main
-    path: code/infrastructure/charts/deployment
-    helm:
-      releaseName: go-demo
-      valueFiles:
-        - ../../argo-apps/dev/go-demo/values.yaml
+  sources:
+    - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+      targetRevision: main
+      path: code/infrastructure/charts/deployment
+      helm:
+        releaseName: go-demo
+        valueFiles:
+          - ../../argo-apps/dev/go-demo/values.yaml
+          - $app/deploy/values.yaml
+    - repoURL: http://gitlab-webservice-default.gitlab.svc.cluster.local:8181/root/go-demo.git
+      targetRevision: main
+      ref: app
   destination:
     server: https://kubernetes.default.svc
     namespace: dev

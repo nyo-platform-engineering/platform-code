@@ -3,6 +3,20 @@
 A standard-library Go HTTP service with JSON request logs, health probes,
 and graceful shutdown. No framework or external Go packages are required.
 
+## GitLab CI
+
+Run `task gitlab` from `code/infrastructure` to import this app and enable
+**lint → test → build → deploy** in the local `root/go-demo` GitLab project.
+Lint checks formatting and `go vet`; test runs Go tests. Build publishes a
+scratch image to GitLab's registry without a Docker socket or privileged jobs.
+On `main`, deploy commits the image digest into `deploy/values.yaml`, Argo CD
+rolls it out in `dev`, and CI waits for readiness at `go.localhost`.
+Subsequent app changes use normal Git pushes to the GitLab project. Infrastructure
+and chart changes stay in GitHub. CI preserves the existing app source/history
+when `task gitlab` updates pipeline configuration. `task go-demo` still supports
+registry-free local builds and selects that local image in the GitOps values;
+the next successful main pipeline selects its registry image again.
+
 | Endpoint | Response |
 | --- | --- |
 | `GET /` | JSON greeting |

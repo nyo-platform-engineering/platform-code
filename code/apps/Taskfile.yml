@@ -14,5 +14,6 @@ tasks:
       - docker build --platform "linux/{{.NODE_ARCH}}" --tag "{{.IMAGE}}" .
       - docker image save --output "{{.ARCHIVE}}" "{{.IMAGE}}"
       - k3d image import "{{.IMAGE}}" --cluster "{{.CLUSTER_NAME}}"
+      - 'CLUSTER_NAME="{{.CLUSTER_NAME}}" IMAGE_TAG="{{.IMAGE_TAG}}" bash ../../infrastructure/scripts/gitlab.sh local-image'
       - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout restart deployment/go-demo --namespace dev
       - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout status deployment/go-demo --namespace dev --timeout=45s

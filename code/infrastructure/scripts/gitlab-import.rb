@@ -23,6 +23,7 @@ begin
     unless response.is_a?(Net::HTTPSuccess) || (method == Net::HTTP::Get && response.code == '404')
       raise "GitLab API #{response.code}: #{result['message']}"
     end
+
     [response.code, result]
   end
 
@@ -38,20 +39,38 @@ begin
       })
     end
 
+    if name == 'go-demo'
+      api.call(Net::HTTP::Put, "/projects/#{project.fetch('id')}", { ci_push_repository_for_job_token_allowed: true })
+      if ENV['LOCAL_IMAGE_TAG']
+        content = "image:\n  repository: local/go-demo\n  tag: #{ENV.fetch('LOCAL_IMAGE_TAG')}\n  digest: ''\nimagePullSecrets:\n  - name: go-demo-registry\n"
+        api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {
+          branch: 'main', commit_message: 'Use local Go demo image [skip ci]',
+          actions: [{ action: 'update', file_path: 'deploy/values.yaml', content: content }]
+        })
+        puts 'Selected the locally imported Go demo image.'
+        next
+      end
+    end
+
     unless project['empty_repo']
-      pipeline_file = File.join(directory, '.gitlab-ci.yml')
-      if File.file?(pipeline_file)
-        status, existing = api.call(Net::HTTP::Get, "/projects/#{project.fetch('id')}/repository/files/.gitlab-ci.yml?ref=main")
-        content = File.binread(pipeline_file)
+      changes = []
+      ['.gitlab-ci.yml', 'deploy/values.yaml'].each do |relative|
+        local_file = File.join(directory, relative)
+        next unless File.file?(local_file)
+        status, existing = api.call(Net::HTTP::Get, "/projects/#{project.fetch('id')}/repository/files/#{URI.encode_www_form_component(relative)}?ref=main")
+        # Preserve the image selected by CI on subsequent imports.
+        next if relative == 'deploy/values.yaml' && status != '404'
+        content = File.binread(local_file)
         if status == '404' || Base64.decode64(existing.fetch('content')).b != content.b
-          api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {
-            branch: 'main', commit_message: 'Configure GitLab CI', actions: [{
-              action: status == '404' ? 'create' : 'update', file_path: '.gitlab-ci.yml',
-              content: Base64.strict_encode64(content), encoding: 'base64'
-            }]
-          })
-          puts "Configured CI in root/#{name}."
+          changes << { action: status == '404' ? 'create' : 'update', file_path: relative,
+                       content: Base64.strict_encode64(content), encoding: 'base64' }
         end
+      end
+      unless changes.empty?
+        api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {
+          branch: 'main', commit_message: 'Configure GitLab CI', actions: changes
+        })
+        puts "Configured CI in root/#{name}."
       end
       puts "Project already contains commits; preserved root/#{name}."
       next
