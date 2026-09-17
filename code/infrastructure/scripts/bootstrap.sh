@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Git Bash + Rancher Desktop/Moby. Helm and kubectl are native Windows tools.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export MSYS_NO_PATHCONV=1
+name="${CLUSTER_NAME:-dev}"
+context="k3d-$name"
+[[ "$name" =~ ^[a-z][a-z0-9-]{0,40}$ ]] || { echo 'Invalid CLUSTER_NAME' >&2; exit 1; }
+kube() { kubectl --context "$context" "$@"; }
+doctor() {
+  for tool in docker kubectl helm k3d; do
+    command -v "$tool" || { echo "Missing $tool; install it on Windows PATH." >&2; exit 1; }
+  done
+  local engine
+  engine="$(docker info --format '{{.OSType}}')"
+  [[ "$engine" == linux ]] || { echo 'Start Rancher Desktop and select dockerd (Moby).' >&2; exit 1; }
+}
+resources() {
+  local sizing
+  sizing="$(kube get pods -A -o go-template='{{range .items}}{{$pod := .}}{{range .spec.containers}}{{if or .resources.requests.cpu .resources.requests.memory .resources.limits.cpu .resources.limits.memory}}{{$pod.metadata.namespace}}/{{$pod.metadata.name}} {{.name}}: {{.resources}}{{"\n"}}{{end}}{{end}}{{range .spec.initContainers}}{{if or .resources.requests.cpu .resources.requests.memory .resources.limits.cpu .resources.limits.memory}}{{$pod.metadata.namespace}}/{{$pod.metadata.name}} {{.name}}: {{.resources}}{{"\n"}}{{end}}{{end}}{{end}}')"
+  [[ -z "$sizing" ]] || { printf 'CPU/memory sizing remains:\n%s\n' "$sizing" >&2; return 1; }
+  echo 'No CPU/memory requests or limits on cluster containers.'
+}
+clear_system_resources() {
+  local workload kind container workloads containers
+  workloads="$(kube get deployment,daemonset,statefulset -n kube-system -o name)"
+  while IFS= read -r workload; do
+    workload="${workload%$'\r'}"
+    [[ -n "$workload" ]] || continue
+    for kind in containers initContainers; do
+      containers="$(kube get "$workload" -n kube-system -o "jsonpath={range .spec.template.spec.$kind[*]}{.name}{'\n'}{end}")"
+      while IFS= read -r container; do
+        container="${container%$'\r'}"
+        [[ -n "$container" ]] || continue
+        kube patch "$workload" -n kube-system --type=strategic -p \
+          "{\"spec\":{\"template\":{\"spec\":{\"$kind\":[{\"name\":\"$container\",\"resources\":{\"requests\":{\"cpu\":null,\"memory\":null},\"limits\":{\"cpu\":null,\"memory\":null}}}]}}}}"
+      done <<< "$containers"
+    done
+    kube rollout status "$workload" -n kube-system --timeout=180s
+  done <<< "$workloads"
+}
+up() {
+  doctor
+  if k3d cluster list --no-headers | awk '{print $1}' | grep -Fxq "$name"; then
+    k3d cluster start "$name"
+  else
+    k3d cluster create "$name" --servers 1 --agents 0 \
+      --image "${K3S_IMAGE:-rancher/k3s:v1.34.5-k3s1}" \
+      --api-port "127.0.0.1:${API_PORT:-6550}" \
+      -p "127.0.0.1:${HTTP_PORT:-80}:80@loadbalancer" \
+      -p "127.0.0.1:${HTTPS_PORT:-443}:443@loadbalancer" \
+      --k3s-arg '--disable=traefik@server:0' --wait --timeout 180s
+  fi
+  k3d kubeconfig merge "$name" --kubeconfig-merge-default --kubeconfig-switch-context
+  kube wait --for=condition=Ready nodes --all --timeout=180s
+  kube apply --server-side -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION:-v1.4.1}/standard-install.yaml"
+  for crd in gatewayclasses gateways httproutes; do
+    kube wait --for=condition=Established "crd/$crd.gateway.networking.k8s.io" --timeout=60s
+  done
+  kube create namespace argocd --dry-run=client -o yaml | kube apply -f -
+  # Only bootstrap a new installation. Argo CD owns subsequent configuration changes.
+  if ! kube get deployment argocd-server -n argocd >/dev/null 2>&1; then
+    helm repo add argo https://argoproj.github.io/argo-helm --force-update
+    helm repo update argo
+    version="$(sed -n '/chart: argo-cd/{n;s/.*targetRevision: *//p;}' argo-apps/platform/00-cd/00-argocd.yaml | tr -d '\r\047\042')"
+    [[ -n "$version" ]] || { echo 'Cannot read Argo CD chart version.' >&2; exit 1; }
+    helm template argocd argo/argo-cd --namespace argocd --version "$version" \
+      --include-crds --values values/argocd.yaml | kube apply --server-side -f -
+  fi
+  kube rollout status deployment/argocd-server -n argocd --timeout=300s
+  kube rollout status deployment/argocd-repo-server -n argocd --timeout=300s
+  kube rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+  kube create namespace dev --dry-run=client -o yaml | kube apply -f -
+  clear_system_resources
+  kube apply -f argo-apps/root.yaml
+  echo 'Argo CD now reconciles argo-apps/platform and argo-apps/dev from Git. Commit/push these files to main first.'
+  echo 'Use task apps to monitor deployment; task resources to check live sizing.'
+}
+case "${1:-help}" in
+  doctor) doctor ;;
+  up) up ;;
+  password) kube get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 --decode; echo ;;
+  resources) resources ;;
+  help) echo 'task --list | task doctor | task up | task apps | task password | task down' ;;
+  *) echo "Unknown command: $1" >&2; exit 1 ;;
+esac

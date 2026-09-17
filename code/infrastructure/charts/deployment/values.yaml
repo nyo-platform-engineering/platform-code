@@ -1,0 +1,64 @@
+nameOverride: ""
+fullnameOverride: ""
+replicaCount: 1
+labels: {}
+annotations: {}
+podLabels: {}
+podAnnotations: {}
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+command: []
+args: []
+containerPorts:
+  - name: http
+    containerPort: 8080
+    protocol: TCP
+env: []
+envFrom: []
+resources: {}
+podSecurityContext: {}
+securityContext: {}
+terminationGracePeriodSeconds: 30
+strategy: {}
+readinessProbe: {}
+livenessProbe: {}
+startupProbe: {}
+serviceAccountName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+initContainers: []
+sidecars: []
+volumes: []
+volumeMounts: []
+service:
+  enabled: true
+  type: ClusterIP
+  annotations: {}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  hostnames: []
+  servicePortName: http
+  matches:
+    - path:
+        type: PathPrefix
+        value: /
+  filters: []
+persistence:
+  enabled: false
+  existingClaim: ""
+  storageClassName: local-path
+  accessModes: [ReadWriteOnce]
+  size: 1Gi
+  mountPath: /data

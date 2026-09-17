@@ -1,0 +1,40 @@
+fullnameOverride: grafana
+image:
+  tag: 12.3.2
+adminUser: admin
+adminPassword: admin
+resources: {}
+initChownData:
+  resources: {}
+service:
+  port: 3000
+  targetPort: 3000
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 1Gi
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hosts:
+    - grafana.localhost
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Mimir
+        uid: mimir
+        type: prometheus
+        access: proxy
+        url: http://mimir:9009/prometheus
+        isDefault: true
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo:3200

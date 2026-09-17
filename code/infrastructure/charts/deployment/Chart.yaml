@@ -1,0 +1,5 @@
+apiVersion: v2
+name: deployment
+description: Reusable application Deployment with optional Service, HTTPRoute and storage
+type: application
+version: 0.1.0

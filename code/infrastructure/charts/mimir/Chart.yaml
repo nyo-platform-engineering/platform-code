@@ -1,0 +1,5 @@
+apiVersion: v2
+name: local-mimir
+description: Single-process filesystem-backed Mimir for local development
+type: application
+version: 0.1.0

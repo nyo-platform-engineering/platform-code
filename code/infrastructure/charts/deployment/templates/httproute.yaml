@@ -1,0 +1,46 @@
+{{- if .Values.httpRoute.enabled }}
+{{- if not .Values.service.enabled }}
+{{- fail "httpRoute requires service.enabled=true" }}
+{{- end }}
+{{- if not .Values.httpRoute.parentRefs }}
+{{- fail "httpRoute.parentRefs is required when enabled" }}
+{{- end }}
+{{- $port := 0 }}
+{{- range .Values.service.ports }}
+{{- if eq .name $.Values.httpRoute.servicePortName }}
+{{- $port = .port }}
+{{- end }}
+{{- end }}
+{{- if not $port }}
+{{- fail "httpRoute.servicePortName must match a service.ports name" }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "deployment.fullname" . }}
+  labels:
+    {{- include "deployment.labels" . | nindent 4 }}
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+  {{- with .Values.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - {{- with .Values.httpRoute.matches }}
+      matches:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.httpRoute.filters }}
+      filters:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      backendRefs:
+        - name: {{ include "deployment.fullname" . }}
+          port: {{ $port }}
+{{- end }}

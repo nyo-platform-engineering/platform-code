@@ -1,0 +1,28 @@
+fullnameOverride: tempo
+replicas: 1
+tempo:
+  tag: 2.9.0
+  resources: {}
+  memBallastSizeMbs: 0
+  retention: 72h
+  ingester:
+    max_block_duration: 5m
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/blocks
+      wal:
+        path: /var/tempo/wal
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 5Gi
+  enableStatefulSetAutoDeletePVC: false

@@ -1,0 +1,27 @@
+# Copy into argo-apps/dev and register in its kustomization.yaml.
+# Replace name/repoURL/path/targetRevision before syncing.
+# Argo CD reads Git repositories, not the Windows working directory.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: local-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/REPLACE/REPLACE.git
+    targetRevision: main
+    path: code/infrastructure/charts/deployment
+    helm:
+      releaseName: REPLACE
+      valueFiles:
+        - ../../argo-apps/dev/REPLACE/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

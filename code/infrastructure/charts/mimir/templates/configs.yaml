@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+data:
+  config.yaml: |
+    multitenancy_enabled: false
+    server:
+      http_listen_port: 9009
+    common:
+      storage:
+        backend: filesystem
+        filesystem:
+          dir: /data/common
+    blocks_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/blocks
+      tsdb:
+        dir: /data/tsdb
+      bucket_store:
+        sync_dir: /data/sync
+    ingester:
+      ring:
+        replication_factor: 1
+        kvstore:
+          store: inmemory
+    distributor:
+      ring:
+        kvstore:
+          store: inmemory
+    store_gateway:
+      sharding_ring:
+        replication_factor: 1
+        kvstore:
+          store: inmemory
+    compactor:
+      data_dir: /data/compactor
+      sharding_ring:
+        kvstore:
+          store: inmemory
+    ruler:
+      rule_path: /data/rules
+      ring:
+        kvstore:
+          store: inmemory
+    ruler_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/ruler
+    alertmanager:
+      data_dir: /data/alertmanager
+      sharding_ring:
+        replication_factor: 1
+        kvstore:
+          store: inmemory
+    alertmanager_storage:
+      backend: filesystem
+      filesystem:
+        dir: /data/alerts
+    limits:
+      compactor_blocks_retention_period: 72h

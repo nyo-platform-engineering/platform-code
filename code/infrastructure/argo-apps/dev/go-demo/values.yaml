@@ -1,0 +1,28 @@
+image:
+  repository: local/go-demo
+  tag: dev1
+terminationGracePeriodSeconds: 15
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: local
+      namespace: traefik
+      sectionName: web
+  hostnames: [go.localhost]

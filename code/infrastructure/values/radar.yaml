@@ -1,0 +1,16 @@
+fullnameOverride: radar
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: radar.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+resources:
+  requests:
+    cpu: null
+    memory: null
+  limits:
+    cpu: null
+    memory: null
