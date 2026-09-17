@@ -74,13 +74,13 @@ up() {
   clear_system_resources
   kube apply -f argo-apps/root.yaml
   echo 'Argo CD now reconciles argo-apps/platform and argo-apps/dev from Git. Commit/push these files to main first.'
-  echo 'Use task apps to monitor deployment; task resources to check live sizing.'
+  echo 'Use task status to monitor deployment and check live sizing.'
 }
 case "${1:-help}" in
   doctor) doctor ;;
   up) up ;;
   password) kube get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 --decode; echo ;;
   resources) resources ;;
-  help) echo 'task --list | task doctor | task up | task apps | task links | task password | task down' ;;
+  help) echo 'task --list | task up | task status | task links | task password | task logs | task down' ;;
   *) echo "Unknown command: $1" >&2; exit 1 ;;
 esac

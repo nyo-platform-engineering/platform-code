@@ -11,6 +11,10 @@ vars:
   API_PORT: '6550'
   K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
   GATEWAY_API_VERSION: v1.5.1
+  APP: otel-collector
+  NAMESPACE: monitoring
+  TAIL: '50'
+  FOLLOW: 'true'
 env:
   CLUSTER_NAME: '{{.CLUSTER_NAME}}'
   HTTP_PORT: '{{.HTTP_PORT}}'
@@ -22,20 +26,17 @@ silent: true
 tasks:
   default:
     cmds:
-      - "bash scripts/bootstrap.sh help"
+      - task --list
   setup:
     desc: Install k3d and Helm on Windows PATH using winget
     cmds:
       - winget install --id k3d.k3d --exact --accept-package-agreements --accept-source-agreements
       - winget install --id Helm.Helm --exact --accept-package-agreements --accept-source-agreements
-  doctor:
-    desc: Check tools and Rancher Desktop's Linux Docker engine
-    cmds:
-      - "bash scripts/bootstrap.sh doctor"
   up:
     desc: Create k3d, bootstrap Argo CD, and register the platform application
     cmds:
       - "bash scripts/bootstrap.sh up"
+      - task: links
   down:
     desc: Delete cluster and its data
     cmds:
@@ -46,18 +47,13 @@ tasks:
       - task: down
       - task: up
   status:
-    desc: Show cluster pods and Argo CD applications
+    desc: Show pods, Argo CD apps, resource usage, and sizing checks
     cmds:
       - kubectl --context k3d-{{.CLUSTER_NAME}} get pods -A
-      - task: apps
-  pods:
-    desc: Show all pods
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} get pods -A"
-  apps:
-    desc: Show Argo CD sync and health status
-    cmds:
       - "kubectl --context k3d-{{.CLUSTER_NAME}} get applications -n argocd"
+      - kubectl --context k3d-{{.CLUSTER_NAME}} top nodes
+      - kubectl --context k3d-{{.CLUSTER_NAME}} top pods -A --sort-by=memory
+      - "bash scripts/bootstrap.sh resources"
   links:
     desc: Show local service URLs and login details
     vars:
@@ -70,44 +66,13 @@ tasks:
           'Radar' 'http://radar.localhost{{.URL_PORT}}' \
           'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
           'Go demo' 'http://go.localhost{{.URL_PORT}}'
-  top:
-    desc: Show resource usage
-    cmds:
-      - kubectl --context k3d-{{.CLUSTER_NAME}} top nodes
-      - kubectl --context k3d-{{.CLUSTER_NAME}} top pods -A --sort-by=memory
   password:
     desc: Show initial Argo CD admin password
     cmds:
       - "bash scripts/bootstrap.sh password"
-  sync:
-    desc: Hard refresh the root Argo CD application
+  logs:
+    desc: Follow app logs (default otel-collector; override APP and NAMESPACE)
+    vars:
+      LABEL_NAME: '{{if eq .APP "otel-collector"}}opentelemetry-collector{{else}}{{.APP}}{{end}}'
     cmds:
-      - kubectl --context k3d-{{.CLUSTER_NAME}} annotate application platform -n argocd argocd.argoproj.io/refresh=hard --overwrite
-  resources:
-    desc: Check live pods for CPU/memory requests and limits
-    cmds:
-      - "bash scripts/bootstrap.sh resources"
-  logs:otel:
-    desc: Follow OpenTelemetry Collector logs
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=opentelemetry-collector --all-containers=true --tail=50 -f"
-  logs:grafana:
-    desc: Follow Grafana logs
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=grafana --tail=50 -f"
-  logs:loki:
-    desc: Follow Loki logs
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=loki --tail=50 -f"
-  logs:tempo:
-    desc: Follow Tempo logs
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=tempo --tail=50 -f"
-  logs:mimir:
-    desc: Follow Mimir logs
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} logs -n monitoring -l app.kubernetes.io/name=mimir --tail=50 -f"
-  debug:argocd:
-    desc: Describe Argo CD applications
-    cmds:
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} describe applications -n argocd"
+      - 'kubectl --context "k3d-{{.CLUSTER_NAME}}" logs -n "{{.NAMESPACE}}" -l "app.kubernetes.io/name={{.LABEL_NAME}}" --all-containers=true --tail={{.TAIL}} --follow={{.FOLLOW}}'

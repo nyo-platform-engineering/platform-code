@@ -82,9 +82,8 @@ Reopen Git Bash after installation. From `code/infrastructure`:
 ```bash
 task setup       # optional: install k3d and Helm using winget
 # Reopen Git Bash after new tool installations.
-task doctor
-task up
-task apps
+task up          # checks tools, bootstraps the cluster, and prints service links
+task status
 task password
 ```
 
@@ -102,8 +101,8 @@ changes (including each Helm Application's `ref: values` source). For a
 private repository, configure repository credentials in Argo
 CD; never commit access tokens. If the files are not pushed or Git credentials
 are missing, bootstrap still starts Argo CD, but its applications cannot sync.
-`task up` finishes after registering the root; use `task apps` to monitor the
-asynchronous deployment. Once all apps are healthy, run `task resources`.
+`task up` finishes after registering the root and printing service links; use
+`task status` to monitor asynchronous deployment and check live resource sizing.
 
 Rerunning `task up` starts/reuses the cluster and registers the root again;
 Argo CD handles subsequent configuration updates from Git. Changes to the
@@ -172,7 +171,7 @@ settings and the OpenTelemetry Collector's resources. The monitoring chart value
 and custom Mimir chart have no CPU/memory sizing.
 Applications in `../apps` should omit CPU/memory sizing too.
 
-`task resources` checks live containers and init containers. k3s reconciliation
+`task status` checks live containers and init containers. k3s reconciliation
 can restore system defaults after upgrades/restarts; rerun `task up` to clear
 them. Changing chart versions can introduce new defaults, so check resources
 after upgrades.
@@ -307,11 +306,16 @@ increase(kube_pod_container_status_restarts_total[15m])
 ```bash
 task --list
 task status
-task apps
-task logs:otel
-task logs:mimir
-task debug:argocd
-task sync           # hard refresh root; automatic sync is enabled
-task resources
+task links
+task password
+task logs                 # OpenTelemetry Collector
+task logs APP=mimir       # also grafana, loki, tempo, etc.
+task logs APP=go-demo NAMESPACE=dev
+task go-demo              # build, save, import, and restart the demo
 task down           # delete cluster and data
 ```
+
+`task` lists the available commands. `task status` combines pods, Argo CD
+application status, CPU/memory usage, and resource-sizing checks. Argo CD refreshes and syncs
+automatically. `task logs` follows all containers for the selected app; use
+`FOLLOW=false` for a snapshot or `TAIL=100` to change the number of lines.
