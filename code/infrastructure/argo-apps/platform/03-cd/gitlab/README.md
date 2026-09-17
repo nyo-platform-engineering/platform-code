@@ -1,12 +1,20 @@
 # Local GitLab
 
+Use the local GitLab instance to browse imported app projects and try CI from
+lint through deployment. It includes a Kubernetes runner and image registry.
+For the full stack's first run, start with the [repository guide](../../../../../../README.md).
+
+## How GitLab is installed
+
 GitLab CE is deployed by Argo CD using a thin local chart in `charts/gitlab`
 that depends on the official GitLab Helm chart, pinned with `Chart.lock`. Values
 live here, beside its Application. `02-cd/gitlab-services` supplies local,
 single-instance PostgreSQL, Redis, MinIO, and persistent volumes; these services
 are separate because GitLab chart 10 no longer bundles them.
 
-From `code/infrastructure`, run:
+## Start it and sign in
+
+After `task up`, run from `code/infrastructure`:
 
 ```bash
 task gitlab                     # upload apps/ and import them as GitLab projects
@@ -19,6 +27,8 @@ run `task links`. Sign in as `root`. First deployment pulls several images and
 runs database migrations, so the page may take several minutes to become ready.
 Credentials are generated locally in Kubernetes Secrets and never committed.
 `task up` also prepares the dependency credentials on a new cluster.
+
+## Import app code
 
 The toolbox mounts the app-code PVC **read-only** at `/workspace/apps`.
 `task gitlab` copies the existing `code/apps` source into that volume using a
@@ -38,6 +48,8 @@ from local app code if it changes, triggering CI. It seeds `deploy/values.yaml`
 if missing and preserves the image CI selects thereafter. Use normal Git pushes for
 other repository changes. `ACTION=projects` retries just the import.
 The importer creates a temporary API token inside toolbox and revokes it on exit.
+## Follow the CI pipeline
+
 The upstream Kubernetes runner, registry, KAS, and exporter are enabled.
 `task gitlab` provisions the runner's authentication token into a Kubernetes
 Secret. Jobs run without privileged containers, with one concurrent job.
@@ -58,9 +70,13 @@ its own project; these commits do not start another pipeline. Older source
 revisions cannot overwrite a newer source push, and deployments are serialized.
 The deploy job waits for the actual Deployment rollout. Its service account
 can only read the `go-demo` Deployment in `dev`; it cannot modify workloads.
+## Credentials and deployment permissions
+
 Repository and private-image credentials are project-scoped, read-only deploy
 tokens, generated into Kubernetes Secrets. They have no expiry for this local
 demo; revoke them in GitLab and delete both generated Secrets to reprovision.
+
+## Registry and supporting components
 
 The registry uses the existing MinIO instance and appears at
 `http://registry.localhost`; KAS is available at `ws://kas.localhost`.
@@ -77,5 +93,26 @@ the platform already supplies monitoring and Traefik. Exporter metrics are
 available internally; no broad GitLab metric scrape is added.
 HTTP Git access uses the existing Gateway; SSH is not exposed yet.
 
+## Inspect startup and retry a step
+
+Run these from `code/infrastructure`:
+
+| Command | When to use it |
+| --- | --- |
+| `task gitlab ACTION=status` | Check pods, persistent volumes, and GitLab Application health. |
+| `task gitlab ACTION=logs` | Follow webservice logs while diagnosing startup. |
+| `task gitlab ACTION=code` | Upload local app files into the toolbox volume. |
+| `task gitlab ACTION=projects` | Retry project import or CI configuration after an upload. |
+| `task gitlab` | Run the full setup again, including registry node configuration. |
+
+The full setup waits for GitLab's Argo CD reconciliation before importing
+projects. If you don't see Go demo in GitLab, check that project import finished,
+then retry it. If CI is pending, inspect runner readiness and the job's
+`kubernetes` tag. If a deployment fails, inspect the Go demo child Application.
+
+## Keep or delete your data
+
 Dependency data, Git repositories, and app source persist in Kubernetes volumes.
 Stopping k3d preserves them; deleting/recreating the cluster deletes local data.
+
+[Go demo guide](../../../../../apps/go-demo/README.md) ? [Infrastructure guide](../../../../README.md)

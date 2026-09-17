@@ -125,3 +125,14 @@ unhealthy. If Docker is unreachable, start your runtime and check
 This is a local learning environment with single-instance services and local
 storage. For component configuration and operating details, continue with the
 [infrastructure guide](code/infrastructure/README.md).
+
+## Find the next guide
+
+| You want to... | Read |
+| --- | --- |
+| Adjust the runtime, ports, or observability | [Infrastructure](code/infrastructure/README.md) |
+| Run or change the example app | [Go demo](code/apps/go-demo/README.md) |
+| Understand GitLab imports, CI, and registry access | [Local GitLab](code/infrastructure/argo-apps/platform/03-cd/gitlab/README.md) |
+| Find shared platform components | [Platform apps](code/infrastructure/argo-apps/platform/README.md) |
+| Register another development app | [Development apps](code/infrastructure/argo-apps/dev/README.md) |
+| Configure an app's workload chart | [Deployment chart](code/infrastructure/charts/deployment/README.md) |

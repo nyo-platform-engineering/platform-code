@@ -1,5 +1,14 @@
 # Platform Applications
 
+This folder registers the shared services that applications use: networking,
+Git hosting and delivery, telemetry, and cluster policies. Argo CD reads the
+Application definitions here and deploys their charts or manifests.
+
+For setup, use the [infrastructure guide](../../README.md). For the first-run
+walkthrough, start at the [repository guide](../../../../README.md).
+
+## Find a component
+
 Applications are grouped by sync wave and function. Every Application in a
 wave folder has the same wave as its folder prefix and annotation.
 Upstream Helm apps use a nested component folder with `app.yaml` and
@@ -11,7 +20,7 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | `00-network` | Ingress controller | Traefik (0) |
 | `01-cd` | Continuous delivery and GitOps reconciliation | Argo CD (1) |
 | `02-cd` | Local GitLab dependencies | PostgreSQL/Redis/object storage (2) |
-| `03-cd` | Source hosting for future CI experiments | GitLab CE (3) |
+| `03-cd` | Git hosting, CI runner, registry, and supporting GitLab components | GitLab CE (3) |
 | `02-monitoring` | Kubernetes resource and topology inspection | Radar/Kube-state-metrics (2) |
 | `02-observability` | Telemetry storage backends | Loki/Tempo/Mimir (2) |
 | `02-policy` | Policy engine | Kyverno (2) |
@@ -19,6 +28,8 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | `03-observability` | Telemetry collection and visualization | Grafana/OTel cluster collector/OTel daemon collector (3) |
 | `04-network` | Gateway API listeners | Gateway (4) |
 | `05-environments` | Registration of environment-specific Applications | Development apps (5) |
+
+## Understand telemetry collection
 
 Monitoring and observability overlap. Here, Radar helps inspect the cluster;
 the observability group handles logs (Loki), traces (Tempo), metrics (Mimir),
@@ -29,6 +40,8 @@ kube-state-metrics, and Argo CD scrapes, plus application OTLP ingestion.
 The daemon collector handles per-node cAdvisor and pod logs. Each scrape runs
 every 60 seconds with a small metric allowlist; shared jobs never run on the
 DaemonSet. Both collectors' logs are excluded from pod-log ingestion.
+
+## Understand cluster policies
 
 Kyverno runs admission and reports controllers only. Five cluster-scoped
 ValidatingPolicies start in Audit mode: versioned images, Traefik-only
@@ -41,6 +54,8 @@ blocking or mutating workloads. Inspect policy reports and change each policy's
 Policies retry while Kyverno CRDs become available because app-of-apps waves
 order definitions without waiting for child workload readiness.
 
+## Understand startup order and health
+
 Traefik is registered before Argo CD's managed Application to start ingress
 early. Argo CD itself is already running from bootstrap. Parent app-of-apps
 Applications use Argo CD's default health behavior: they do not inherit child
@@ -51,6 +66,8 @@ wave 4. Observability registers storage backends at wave 2, then collection
 and dashboards at wave 3. Folder names show synchronization order;
 `argocd.argoproj.io/sync-wave` remains the setting that controls it.
 
+## Change a component
+
 Gateway's Application and resource live together under `04-network/gateway`:
 `app.yaml` references its `manifests` directory. The platform root excludes
 `**/manifests/**` and `**/values.yaml`, so child Applications manage raw resources
@@ -59,3 +76,11 @@ and Helm values are never treated as Kubernetes manifests.
 Upstream Helm values stay beside each component's `app.yaml`, custom workload
 charts and their defaults in `../../charts`, and development Application definitions and deployment values
 in `../dev`.
+
+Edit a component's `values.yaml` for its settings, or `app.yaml` for its chart
+version and sources. For GitLab's wrapper, the dependency version is pinned
+in [the local chart](../../charts/gitlab/README.md). Commit and push changes,
+then inspect the affected child Application with `task status` or Argo CD.
+
+Start with the [GitLab guide](03-cd/gitlab/README.md) for projects and CI,
+or the [observability guide](../../README.md#observability) for filters and queries.

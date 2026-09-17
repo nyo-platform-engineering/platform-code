@@ -1,5 +1,8 @@
 # Application and platform code
 
+This page helps you decide where code and configuration belong. For commands
+to run the stack, start with the [repository guide](../README.md).
+
 This directory keeps application code and infrastructure together to simplify
 the local demo. The monorepo makes it easy to build a service, deploy it through
 Argo CD, and explore the platform from one checkout. At scale, application
@@ -68,7 +71,12 @@ shared services, policies, charts, and environment deployment configuration.
 Separating source repositories does not require moving each service's deployment
 values out of the platform repository.
 
-The delivery flow would become:
+The local demo already uses separate Git sources: GitHub holds platform
+configuration and local GitLab holds the imported app project and CI image
+override. At scale, teams can keep that split or centralize environment image
+references in the platform repository.
+
+A delivery flow with centralized environment values would be:
 
 1. Application CI tests the service and publishes its container to a registry.
 2. A deployment change updates the environment's image reference in the platform
@@ -84,3 +92,5 @@ This repository demonstrates the boundaries in one place. A production rollout
 would also revisit the local defaults: single replicas, filesystem-backed
 telemetry storage, and the audit policy against CPU/memory sizing. Repository
 separation alone does not make the cluster highly available or production-ready.
+
+Continue with [infrastructure setup](infrastructure/README.md) or [Go demo](apps/go-demo/README.md).

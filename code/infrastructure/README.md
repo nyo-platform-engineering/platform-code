@@ -1,6 +1,15 @@
 # Local infrastructure
 
-Windows or macOS + a Linux Docker engine + single-node k3d + Argo CD.
+This guide explains how to run and adjust the shared platform on your laptop.
+It creates a single-node k3d cluster and lets Argo CD manage the services.
+Application code lives separately in `code/apps`.
+
+For a short first-run walkthrough, use the [repository guide](../../README.md).
+Use this page when choosing a runtime, changing settings, adding workloads,
+or investigating telemetry and policies.
+
+Jump to [setup](#tools-and-first-run), [local settings](#personal-settings-and-extensions),
+[observability](#observability), or [everyday operations](#operations).
 Bootstrap uses Bash 3.2-compatible commands, including the Bash bundled with
 macOS and Windows Git Bash. Cluster workloads run inside the runtime's Linux VM.
 Use the same Docker context for cluster creation and application image builds.
@@ -279,7 +288,8 @@ after upgrades.
 
 PVC storage requests remain: LGTM requests 16Gi across four local-path PVCs.
 Loki, Tempo, and Mimir have 72-hour retention and run as single processes
-with filesystem storage. No MinIO or Kafka is deployed. `task down` and
+with filesystem storage. The telemetry backends do not use MinIO or Kafka; GitLab uses its own MinIO
+service for object storage. `task down` and
 `task restart` delete cluster data.
 
 No requests/limits avoids reservations and CPU throttling; actual RAM usage
@@ -295,7 +305,10 @@ server and Dockerfile. Its Argo CD Application lives in
 `argo-apps/dev/go-demo/values.yaml`. Both use the reusable Helm chart at
 `charts/deployment`; application source directories contain no Kubernetes
 manifests. See [its README](../apps/go-demo/README.md) for local execution and
-image import. Build and import `local/go-demo:dev1` before Argo CD syncs it:
+image import. Run `task gitlab` to configure its CI flow. Argo CD reads the
+base deployment settings from GitHub and the image override from
+`deploy/values.yaml` in the local GitLab app project. CI publishes and selects
+an image automatically. For a local build instead:
 
 ```bash
 task go-demo             # build, save, import into k3d, and restart the deployment
@@ -321,6 +334,12 @@ under `argo-apps/platform`. Upstream Helm chart versions are pinned in
 Application at `<wave-folder>/<component>/values.yaml`.
 Bootstrap reads the Argo CD chart version from
 `argo-apps/platform/01-cd/argocd/app.yaml`.
+
+## Observability
+
+Use Grafana from `task links` to explore metrics, logs, and traces. The
+collectors keep metric collection small; the sections below explain what is
+retained and where to change it.
 
 Applications send OTLP to OpenTelemetry Collector:
 
@@ -369,11 +388,6 @@ Node-metric filters and log collection live beside it in
 Loki receives pod and application logs through its native OTLP endpoint.
 Pod metadata uses names such as `k8s.namespace.name`, normalized by Loki to
 labels such as `k8s_namespace_name`.
-
-This replaces the previous `otel-collector` Application and Service. Update
-application OTLP endpoints to `otel-collector-cluster`; Argo CD prunes the old
-collector. Collection can pause briefly during the transition. Historical
-metrics remain until retention expires; backends and their PVCs are unchanged.
 
 ### Minimal Kubernetes metrics
 
@@ -447,10 +461,16 @@ task logs                 # cluster collector
 task logs APP=mimir       # also grafana, loki, tempo, etc.
 task logs APP=go-demo NAMESPACE=dev
 task go-demo              # build, save, import, and restart the demo
-task down           # delete cluster and data
+k3d cluster stop dev      # pause the default cluster and keep its data
+task up                   # start it again
+task down                 # delete cluster and data
 ```
 
 `task` lists the available commands. `task status` combines pods, Argo CD
 application status, CPU/memory usage, and resource-sizing checks. Argo CD refreshes and syncs
 automatically. `task logs` defaults to the cluster collector; use `APP=otel-collector-daemon` for node collection. It follows all containers for the selected app; use
 `FOLLOW=false` for a snapshot or `TAIL=100` to change the number of lines.
+
+Use your configured name instead of `dev` in direct k3d/kubectl commands.
+If a child app is unhealthy, inspect that child even when the parent is Healthy.
+For GitLab-specific retries, use the [GitLab guide](argo-apps/platform/03-cd/gitlab/README.md).
