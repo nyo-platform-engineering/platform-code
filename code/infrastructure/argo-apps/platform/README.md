@@ -20,8 +20,11 @@ Monitoring and observability overlap. Here, Radar helps inspect the cluster;
 the observability group handles logs (Loki), traces (Tempo), metrics (Mimir),
 collection and forwarding (OpenTelemetry Collector), and dashboards (Grafana).
 
-Traefik starts before Argo CD's managed Application because Argo CD's ingress
-needs Traefik to become healthy. Argo CD itself is already running from bootstrap.
+Traefik is registered before Argo CD's managed Application to start ingress
+early. Argo CD itself is already running from bootstrap. Parent app-of-apps
+Applications use Argo CD's default health behavior: they do not inherit child
+Application health. Children still report their own workload failures. Sync
+waves order Application definitions without waiting for child workload health.
 Networking spans two folders: Traefik is registered at wave 0 and Gateway at
 wave 4. Observability registers storage backends at wave 2, then collection
 and dashboards at wave 3. Folder names show synchronization order;

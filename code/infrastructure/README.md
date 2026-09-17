@@ -51,9 +51,11 @@ app-specific deployment values belong in `argo-apps`. Source code and
 Dockerfiles belong in `code/apps`.
 `argo-apps/dev` contains only development Application definitions; its
 Kustomization registers the Go demo from `code/apps/go-demo`. Sync waves order the
-Application definitions. The configured Application health check makes each
-wave wait for its child workloads to become healthy. Traefik runs first so
-Argo CD's ingress can become healthy before the remaining waves start.
+Application definitions. Child Application health is not propagated to the
+parent: `platform` and `dev-apps` can stay Healthy while a child is Degraded
+or Progressing. Each child still reports its own workload health and sync
+status. Sync waves order the definitions without waiting for child workloads
+to become healthy. Traefik is registered first to start local ingress early.
 Gateway API v1.5.1 supplies the standard TLSRoute CRD required by the pinned
 Traefik version; bootstrap waits for that CRD before registering the platform.
 The system workloads installed by k3s are patched during bootstrap to remove
