@@ -79,6 +79,20 @@ runner() {
   fi
   echo 'Kubernetes runner authentication configured.'
 }
+ready() {
+  kube annotate application gitlab -n argocd argocd.argoproj.io/refresh=hard --overwrite
+  echo 'Waiting for Argo CD to reconcile GitLab and finish its rollout...'
+  local state
+  for ((attempt=0; attempt<120; attempt++)); do
+    state="$(kube get application gitlab -n argocd -o go-template='{{if index .metadata.annotations "argocd.argoproj.io/refresh"}}Refreshing{{else}}{{.status.sync.status}}/{{.status.health.status}}{{end}}')"
+    if [[ "$state" == Synced/Healthy ]]; then
+      return 0
+    fi
+    sleep 5
+  done
+  echo "GitLab not ready: $state; inspect task gitlab ACTION=status." >&2
+  return 1
+}
 case "${1:-up}" in
   prepare) prepare ;;
   up)
@@ -91,8 +105,9 @@ case "${1:-up}" in
       sleep 5
     done
     code
-    projects
     runner
+    ready
+    projects
     echo 'Use task links and task gitlab ACTION=status to inspect GitLab startup.'
     ;;
   code) code ;;
