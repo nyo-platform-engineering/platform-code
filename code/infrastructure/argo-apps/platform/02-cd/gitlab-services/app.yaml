@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitlab-services
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+    targetRevision: main
+    path: code/infrastructure/charts/gitlab-services
+    helm:
+      releaseName: gitlab-services
+      valueFiles:
+        - ../../argo-apps/platform/02-cd/gitlab-services/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitlab
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

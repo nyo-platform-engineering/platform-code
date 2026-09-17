@@ -1,0 +1,15 @@
+services:
+  postgresql:
+    image: postgres:17.6-alpine
+    port: 5432
+    size: 5Gi
+  redis:
+    image: redis:7.4.5-alpine
+    port: 6379
+    size: 1Gi
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    port: 9000
+    size: 5Gi
+minioClientImage: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+appCodeSize: 1Gi

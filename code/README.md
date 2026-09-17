@@ -48,12 +48,15 @@ From `code/infrastructure`:
 task up          # bootstrap the local cluster and print service links
 task go-demo     # build, save, import, and restart the demo image
 task status      # inspect pods, apps, resource usage, and sizing
+task gitlab      # prepare GitLab and upload apps/ into its mounted volume
 ```
 
 The application task lives in `apps/Taskfile.yml` and is also included by the
 infrastructure Taskfile. Local k3d image imports keep the demo simple without
 requiring an image registry. See [infrastructure setup](infrastructure/README.md)
 and [Go demo details](apps/go-demo/README.md).
+See [local GitLab](infrastructure/argo-apps/platform/03-cd/gitlab/README.md) for access, persistent
+storage, and mount settings. GitLab CI and runners will be configured separately.
 
 ## Repository model as the platform grows
 

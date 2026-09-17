@@ -1,0 +1,179 @@
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitlab-{{ $name }}
+spec:
+  selector:
+    app: gitlab-{{ $name }}
+  ports:
+    - port: {{ $service.port }}
+      targetPort: {{ $service.port }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gitlab-{{ $name }}
+spec:
+  serviceName: gitlab-{{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-{{ $name }}
+  template:
+    metadata:
+      labels:
+        app: gitlab-{{ $name }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: {{ $service.image }}
+          ports:
+            - containerPort: {{ $service.port }}
+          {{- if eq $name "postgresql" }}
+          args: [-c, shared_preload_libraries=pg_stat_statements]
+          env:
+            - name: POSTGRES_USER
+              value: gitlab
+            - name: POSTGRES_DB
+              value: gitlabhq_production
+            - name: PGDATA
+              value: /data/pgdata
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-local-auth
+                  key: password
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, gitlab, -d, gitlabhq_production]
+          {{- else if eq $name "redis" }}
+          command: [sh, -c, 'exec redis-server --dir /data --appendonly yes --requirepass "$REDISCLI_AUTH"']
+          env:
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-local-auth
+                  key: password
+          readinessProbe:
+            exec:
+              command: [redis-cli, ping]
+          {{- else }}
+          args: [server, /data]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-local-auth
+                  key: accesskey
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-local-auth
+                  key: secretkey
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- if eq $name "postgresql" }}
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+            {{- end }}
+      {{- if eq $name "postgresql" }}
+      volumes:
+        - name: init
+          configMap:
+            name: gitlab-postgresql-init
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ $service.size }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-postgresql-init
+data:
+  extensions.sql: |
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    CREATE EXTENSION IF NOT EXISTS amcheck;
+    CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-app-code
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.appCodeSize }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-create-buckets
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: buckets
+          image: {{ .Values.minioClientImage }}
+          env:
+            - name: ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-local-auth
+                  key: accesskey
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-local-auth
+                  key: secretkey
+          command:
+            - sh
+            - -ec
+            - |
+              until mc alias set local http://gitlab-minio:9000 "$ACCESS_KEY" "$SECRET_KEY"; do sleep 5; done
+              for bucket in git-lfs gitlab-artifacts gitlab-uploads gitlab-packages gitlab-backups tmp; do
+                mc mb --ignore-existing "local/$bucket"
+              done
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gitlab
+spec:
+  hostnames: [gitlab.localhost]
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: local
+      namespace: traefik
+      sectionName: web
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ''
+          kind: Service
+          name: gitlab-webservice-default
+          port: 8181
+          weight: 1

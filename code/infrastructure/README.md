@@ -15,6 +15,8 @@ argo-apps/
   platform/                  platform Applications grouped by wave and function
     00-network/traefik/      app.yaml and values.yaml
     01-cd/argocd/            app.yaml and values.yaml
+    02-cd/gitlab-services/   local GitLab database, cache, and object storage
+    03-cd/gitlab/            official GitLab Helm chart and values
     02-monitoring/           radar/ and kube-state-metrics/ (app.yaml + values.yaml)
     02-observability/        loki/ and tempo/ (app.yaml + values.yaml), 02-mimir.yaml
     02-policy/               kyverno/ (app.yaml + values.yaml)
@@ -26,6 +28,7 @@ argo-apps/
 charts/
   deployment/                reusable application Deployment/Service/HTTPRoute/PVC chart
   mimir/                     custom single-process Mimir chart
+  gitlab-services/            single-instance local GitLab dependencies
 examples/                    application and backend route examples
 ```
 
@@ -62,6 +65,11 @@ Gateway API v1.5.1 supplies the standard TLSRoute CRD required by the pinned
 Traefik version; bootstrap waits for that CRD before registering the platform.
 The system workloads installed by k3s are patched during bootstrap to remove
 CPU/memory sizing. Gateway API CRDs remain part of cluster bootstrap.
+
+GitLab CE runs at `gitlab.localhost` through the existing Gateway. Run
+`task gitlab` to prepare dependency credentials and upload `code/apps` into
+the read-only toolbox mount. See [GitLab setup](argo-apps/platform/03-cd/gitlab/README.md).
+CI runners and pipelines are deferred.
 
 This follows Argo CD's [app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/).
 

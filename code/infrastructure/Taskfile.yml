@@ -20,6 +20,7 @@ vars:
   GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION | default .LOCAL_SETTINGS.GATEWAY_API_VERSION | default "v1.5.1"}}'
   IMAGE_TAG: '{{.IMAGE_TAG | default .LOCAL_SETTINGS.IMAGE_TAG | default "dev1"}}'
   DOCKER_CONTEXT: '{{.DOCKER_CONTEXT | default .LOCAL_SETTINGS.DOCKER_CONTEXT | default ""}}'
+  APP_CODE_DIR: '{{.APP_CODE_DIR | default .LOCAL_SETTINGS.APP_CODE_DIR | default "../apps"}}'
   APP: otel-collector-cluster
   NAMESPACE: monitoring
   TAIL: '50'
@@ -32,6 +33,7 @@ env:
   API_PORT: '{{.API_PORT}}'
   K3S_IMAGE: '{{.K3S_IMAGE}}'
   GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION}}'
+  APP_CODE_DIR: '{{.APP_CODE_DIR}}'
 silent: true
 tasks:
   default:
@@ -52,6 +54,12 @@ tasks:
     cmds:
       - "bash scripts/bootstrap.sh up"
       - task: links
+  gitlab:
+    desc: Prepare GitLab and populate its app-code volume (override ACTION for operations)
+    vars:
+      ACTION: '{{.ACTION | default "up"}}'
+    cmds:
+      - 'bash scripts/gitlab.sh "{{.ACTION}}"'
   down:
     desc: Delete cluster and its data
     cmds:
@@ -80,7 +88,8 @@ tasks:
           'Grafana' 'http://grafana.localhost{{.URL_PORT}} (admin / admin)' \
           'Radar' 'http://radar.localhost{{.URL_PORT}}' \
           'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
-          'Go demo' 'http://go.localhost{{.URL_PORT}}'
+          'Go demo' 'http://go.localhost{{.URL_PORT}}' \
+          'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task gitlab ACTION=password)'
   password:
     desc: Show initial Argo CD admin password
     cmds:

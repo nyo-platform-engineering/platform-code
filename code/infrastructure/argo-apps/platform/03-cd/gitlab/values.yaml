@@ -1,0 +1,151 @@
+global:
+  edition: ce
+  kas:
+    enabled: false
+  hosts:
+    domain: localhost
+    https: false
+    gitlab:
+      name: gitlab.localhost
+  gatewayApi:
+    enabled: false
+    installEnvoy: false
+    configureCertmanager: false
+  ingress:
+    enabled: false
+    configureCertmanager: false
+    tls:
+      enabled: false
+  psql:
+    host: gitlab-postgresql
+    username: gitlab
+    database: gitlabhq_production
+    password:
+      secret: gitlab-local-auth
+      key: password
+  redis:
+    host: gitlab-redis
+    auth:
+      enabled: true
+      secret: gitlab-local-auth
+      key: password
+  appConfig:
+    object_store:
+      enabled: true
+      connection:
+        secret: gitlab-object-storage
+        key: connection
+  minio:
+    enabled: false
+installCertmanager: false
+nginx-ingress:
+  enabled: false
+nginx-ingress-geo:
+  enabled: false
+prometheus:
+  install: false
+gitlab-runner:
+  install: false
+registry:
+  enabled: false
+upgradeCheck:
+  resources:
+    requests:
+      cpu: null
+shared-secrets:
+  resources:
+    requests:
+      cpu: null
+gitlab:
+  gitlab-exporter:
+    enabled: false
+  webservice:
+    helmTests:
+      enabled: false
+    minReplicas: 1
+    maxReplicas: 1
+    workerProcesses: 1
+    resources:
+      requests:
+        cpu: null
+        memory: null
+    init:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+    workhorse:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+  sidekiq:
+    minReplicas: 1
+    maxReplicas: 1
+    concurrency: 5
+    resources:
+      requests:
+        cpu: null
+        memory: null
+    init:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+  gitlab-shell:
+    minReplicas: 1
+    maxReplicas: 1
+    resources:
+      requests:
+        cpu: null
+        memory: null
+    init:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+  gitaly:
+    persistence:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: null
+        memory: null
+    init:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+  migrations:
+    resources:
+      requests:
+        cpu: null
+        memory: null
+    init:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+  toolbox:
+    resources:
+      requests:
+        cpu: null
+        memory: null
+    init:
+      resources:
+        requests:
+          cpu: null
+          memory: null
+    backups:
+      objectStorage:
+        config:
+          secret: gitlab-object-storage-backup
+          key: config
+    extraVolumes: |
+      - name: app-code
+        persistentVolumeClaim:
+          claimName: gitlab-app-code
+    extraVolumeMounts: |
+      - name: app-code
+        mountPath: /workspace/apps
+        readOnly: true

@@ -75,6 +75,7 @@ up() {
   kube rollout status deployment/argocd-repo-server -n argocd --timeout=300s
   kube rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
   kube create namespace dev --dry-run=client -o yaml | kube apply -f -
+  bash scripts/gitlab.sh prepare
   clear_system_resources
   kube apply -f argo-apps/root.yaml
   echo 'Argo CD now reconciles argo-apps/platform and argo-apps/dev from Git. Commit/push these files to main first.'

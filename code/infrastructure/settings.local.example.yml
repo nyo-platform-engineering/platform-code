@@ -12,3 +12,7 @@ API_PORT: '6550'
 # K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
 # GATEWAY_API_VERSION: v1.5.1
 # IMAGE_TAG: dev1
+
+# Optional directory uploaded into GitLab's app-code volume by task gitlab.
+# APP_CODE_DIR: /Users/you/projects/your-apps
+# Relative paths resolve from code/infrastructure.
