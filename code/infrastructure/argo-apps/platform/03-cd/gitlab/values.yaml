@@ -71,9 +71,7 @@ gitlab:
         memory: null
     init:
       resources:
-        requests:
-          cpu: null
-          memory: null
+        requests: null
     workhorse:
       resources:
         requests:
@@ -89,9 +87,7 @@ gitlab:
         memory: null
     init:
       resources:
-        requests:
-          cpu: null
-          memory: null
+        requests: null
   gitlab-shell:
     minReplicas: 1
     maxReplicas: 1
@@ -101,9 +97,7 @@ gitlab:
         memory: null
     init:
       resources:
-        requests:
-          cpu: null
-          memory: null
+        requests: null
   gitaly:
     persistence:
       size: 5Gi
@@ -113,9 +107,7 @@ gitlab:
         memory: null
     init:
       resources:
-        requests:
-          cpu: null
-          memory: null
+        requests: null
   migrations:
     resources:
       requests:
@@ -123,9 +115,7 @@ gitlab:
         memory: null
     init:
       resources:
-        requests:
-          cpu: null
-          memory: null
+        requests: null
   toolbox:
     resources:
       requests:
@@ -133,9 +123,7 @@ gitlab:
         memory: null
     init:
       resources:
-        requests:
-          cpu: null
-          memory: null
+        requests: null
     backups:
       objectStorage:
         config:
