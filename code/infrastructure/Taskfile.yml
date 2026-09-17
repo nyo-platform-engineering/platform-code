@@ -5,7 +5,7 @@ vars:
   HTTPS_PORT: '443'
   API_PORT: '6550'
   K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
-  GATEWAY_API_VERSION: v1.4.1
+  GATEWAY_API_VERSION: v1.5.1
 env:
   CLUSTER_NAME: '{{.CLUSTER_NAME}}'
   HTTP_PORT: '{{.HTTP_PORT}}'
@@ -53,6 +53,18 @@ tasks:
     desc: Show Argo CD sync and health status
     cmds:
       - "kubectl --context k3d-{{.CLUSTER_NAME}} get applications -n argocd"
+  links:
+    desc: Show local service URLs and login details
+    vars:
+      URL_PORT: '{{if ne .HTTP_PORT "80"}}:{{.HTTP_PORT}}{{end}}'
+    cmds:
+      - |
+        printf '%-12s %s\n' \
+          'Argo CD' 'http://argocd.localhost{{.URL_PORT}} (admin / task password)' \
+          'Grafana' 'http://grafana.localhost{{.URL_PORT}} (admin / admin)' \
+          'Radar' 'http://radar.localhost{{.URL_PORT}}' \
+          'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
+          'Go demo' 'http://go.localhost{{.URL_PORT}}'
   top:
     desc: Show resource usage
     cmds:

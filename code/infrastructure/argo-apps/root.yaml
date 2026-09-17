@@ -11,7 +11,7 @@ spec:
     path: code/infrastructure/argo-apps/platform
     directory:
       recurse: true
-      exclude: '**/manifests/**'
+      exclude: '{**/manifests/**,**/values.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

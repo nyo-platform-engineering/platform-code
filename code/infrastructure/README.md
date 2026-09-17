@@ -13,15 +13,14 @@ scripts/bootstrap.sh         create k3d and bootstrap Argo CD
 argo-apps/
   root.yaml                  root platform Argo CD Application
   platform/                  platform Applications grouped by wave and function
-    00-cd/                   00-argocd.yaml
-    01-network/              01-traefik.yaml
-    02-monitoring/           02-radar.yaml
-    02-observability/        02-{loki,tempo,mimir}.yaml
-    03-observability/        03-{grafana,alloy}.yaml
+    00-network/traefik/      app.yaml and values.yaml
+    01-cd/argocd/            app.yaml and values.yaml
+    02-monitoring/radar/     app.yaml and values.yaml
+    02-observability/        loki/ and tempo/ (app.yaml + values.yaml), 02-mimir.yaml
+    03-observability/        grafana/ and alloy/ (app.yaml + values.yaml)
     04-network/gateway/      app.yaml and manifests/gateway.yaml
     05-environments/         05-dev-apps.yaml
   dev/                       development Applications, deployment values, Kustomization
-values/                      values for upstream service charts
 charts/
   deployment/                reusable application Deployment/Service/HTTPRoute/PVC chart
   mimir/                     custom single-process Mimir chart
@@ -31,17 +30,17 @@ examples/                    application and backend route examples
 Argo CD owns the stack. The Bash script creates the cluster, installs Gateway
 API CRDs, bootstraps Argo CD if missing, and registers the root Application.
 It does not install or upgrade the other services. Argo CD sync waves deploy
-Argo CD itself, Traefik, Loki/Tempo/Mimir/Radar, Grafana/Alloy, and finally
+Traefik, Argo CD itself, Loki/Tempo/Mimir/Radar, Grafana/Alloy, and finally
 the Gateway, followed by the development Application layer. The two-digit
 prefix on each platform wave folder equals its `argocd.argoproj.io/sync-wave`
 annotation. Apps in the same wave share a prefix. Argo CD uses the annotation
-for ordering; filenames make that order visible in the repository.
+for ordering; wave-folder names make that order visible in the repository.
 Wave-folder prefixes match each Application's sync wave. Networking
-is split into `01-network` (Traefik) and `04-network` (Gateway); observability
+is split into `00-network` (Traefik) and `04-network` (Gateway); observability
 into `02-observability` (storage) and `03-observability` (collection and dashboards).
 See [the platform groups](argo-apps/platform/README.md) for
 each group's role. The root uses recursive directory discovery and excludes
-component `manifests` directories, which their child Applications manage.
+component `manifests` directories and `values.yaml` files, which their child Applications use.
 
 `argo-apps/platform` contains plain Application manifests. Upstream charts load
 their values from this Git repository through Argo CD's
@@ -51,8 +50,11 @@ app-specific deployment values belong in `argo-apps`. Source code and
 Dockerfiles belong in `code/apps`.
 `argo-apps/dev` contains only development Application definitions; its
 Kustomization registers the Go demo from `code/apps/go-demo`. Sync waves order the
-Application definitions; they do not by themselves wait for every child
-Application's workloads to become healthy.
+Application definitions. The configured Application health check makes each
+wave wait for its child workloads to become healthy. Traefik runs first so
+Argo CD's ingress can become healthy before the remaining waves start.
+Gateway API v1.5.1 supplies the standard TLSRoute CRD required by the pinned
+Traefik version; bootstrap waits for that CRD before registering the platform.
 The system workloads installed by k3s are patched during bootstrap to remove
 CPU/memory sizing. Gateway API CRDs remain part of cluster bootstrap.
 
@@ -107,6 +109,9 @@ Every kubectl command explicitly targets `k3d-<CLUSTER_NAME>`.
 
 ## Endpoints
 
+Run `task links` to print service URLs and login details. If you changed the
+HTTP port, use `task links HTTP_PORT=8080` with the same port used for `task up`.
+
 | URL | Login |
 | --- | --- |
 | http://argocd.localhost | admin / `task password` |
@@ -130,7 +135,8 @@ Then browse `http://grafana.localhost:8080`, etc. Cluster defaults and the k3s
 and Gateway API versions live in `Taskfile.yml`. Child chart versions and
 Git sources live in each `argo-apps/platform` Application. Loki, Tempo, and Grafana use the
 [upstream community Helm charts](https://github.com/grafana-community/helm-charts),
-with values in `values/{loki,tempo,grafana}.yaml`. Their pinned chart
+with `values.yaml` beside each component's `app.yaml` under `argo-apps/platform`.
+Their pinned chart
 versions retain the existing Loki 3.6.3, Tempo 2.9.0, and Grafana 12.3.2 images.
 Alloy continues to use Grafana's upstream chart. Mimir's image version lives
 in `charts/mimir/values.yaml`.
@@ -207,9 +213,10 @@ in the application source directory.
 
 Platform Application definitions go in the appropriate wave/function folder
 under `argo-apps/platform`. Upstream Helm chart versions are pinned in
-`spec.sources[0].targetRevision`, and their values files live in `values`.
+`spec.sources[0].targetRevision`, and their values files live beside each
+Application at `<wave-folder>/<component>/values.yaml`.
 Bootstrap reads the Argo CD chart version from
-`argo-apps/platform/00-cd/00-argocd.yaml`.
+`argo-apps/platform/01-cd/argocd/app.yaml`.
 
 Applications send OTLP to Alloy:
 

@@ -1,28 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: loki
+  name: traefik
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: '2'
+    argocd.argoproj.io/sync-wave: '0'
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:
-  - repoURL: https://grafana-community.github.io/helm-charts
-    chart: loki
-    targetRevision: 6.50.0
+  - repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: 41.6.0
     helm:
-      releaseName: loki
+      releaseName: traefik
       valueFiles:
-      - $values/code/infrastructure/values/loki.yaml
+      - $values/code/infrastructure/argo-apps/platform/00-network/traefik/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: monitoring
+    namespace: traefik
   syncPolicy:
     automated:
       prune: true

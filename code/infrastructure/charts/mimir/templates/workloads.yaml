@@ -48,6 +48,7 @@ spec:
       containers:
         - name: mimir
           image: {{ .Values.image }}
+          workingDir: /data
           args: [-config.file=/etc/local/config.yaml, -target=all]
           ports:
             - name: http

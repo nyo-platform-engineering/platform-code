@@ -1,28 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: argocd
+  name: loki
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: '0'
+    argocd.argoproj.io/sync-wave: '2'
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:
-  - repoURL: https://argoproj.github.io/argo-helm
-    chart: argo-cd
-    targetRevision: 10.9.1
+  - repoURL: https://grafana-community.github.io/helm-charts
+    chart: loki
+    targetRevision: 6.50.0
     helm:
-      releaseName: argocd
+      releaseName: loki
       valueFiles:
-      - $values/code/infrastructure/values/argocd.yaml
+      - $values/code/infrastructure/argo-apps/platform/02-observability/loki/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: monitoring
   syncPolicy:
     automated:
       prune: true

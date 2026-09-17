@@ -8,6 +8,9 @@ Grafana's upstream `mimir-distributed` chart targets microservices. This chart
 keeps the local filesystem-only setup without MinIO or Kafka. Loki, Tempo,
 Grafana, and Alloy are installed using upstream charts instead.
 
+The process runs from `/data`, its writable PVC mount, so the default activity
+log can be created by the non-root user.
+
 Change the image and storage size in `values.yaml`. The configuration lives
 in `templates/configs.yaml`; changing it updates the Deployment's checksum
 annotation and restarts the process. No CPU/memory requests or limits are set.

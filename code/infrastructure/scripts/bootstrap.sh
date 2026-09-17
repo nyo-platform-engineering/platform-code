@@ -53,8 +53,8 @@ up() {
   fi
   k3d kubeconfig merge "$name" --kubeconfig-merge-default --kubeconfig-switch-context
   kube wait --for=condition=Ready nodes --all --timeout=180s
-  kube apply --server-side -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION:-v1.4.1}/standard-install.yaml"
-  for crd in gatewayclasses gateways httproutes; do
+  kube apply --server-side -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION:-v1.5.1}/standard-install.yaml"
+  for crd in gatewayclasses gateways httproutes tlsroutes; do
     kube wait --for=condition=Established "crd/$crd.gateway.networking.k8s.io" --timeout=60s
   done
   kube create namespace argocd --dry-run=client -o yaml | kube apply -f -
@@ -62,10 +62,10 @@ up() {
   if ! kube get deployment argocd-server -n argocd >/dev/null 2>&1; then
     helm repo add argo https://argoproj.github.io/argo-helm --force-update
     helm repo update argo
-    version="$(sed -n '/chart: argo-cd/{n;s/.*targetRevision: *//p;}' argo-apps/platform/00-cd/00-argocd.yaml | tr -d '\r\047\042')"
+    version="$(sed -n '/chart: argo-cd/{n;s/.*targetRevision: *//p;}' argo-apps/platform/01-cd/argocd/app.yaml | tr -d '\r\047\042')"
     [[ -n "$version" ]] || { echo 'Cannot read Argo CD chart version.' >&2; exit 1; }
     helm template argocd argo/argo-cd --namespace argocd --version "$version" \
-      --include-crds --values values/argocd.yaml | kube apply --server-side -f -
+      --include-crds --values argo-apps/platform/01-cd/argocd/values.yaml | kube apply --server-side -f -
   fi
   kube rollout status deployment/argocd-server -n argocd --timeout=300s
   kube rollout status deployment/argocd-repo-server -n argocd --timeout=300s
@@ -81,6 +81,6 @@ case "${1:-help}" in
   up) up ;;
   password) kube get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 --decode; echo ;;
   resources) resources ;;
-  help) echo 'task --list | task doctor | task up | task apps | task password | task down' ;;
+  help) echo 'task --list | task doctor | task up | task apps | task links | task password | task down' ;;
   *) echo "Unknown command: $1" >&2; exit 1 ;;
 esac

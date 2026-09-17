@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: tempo
+  name: radar
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: '2'
@@ -10,19 +10,19 @@ metadata:
 spec:
   project: default
   sources:
-  - repoURL: https://grafana-community.github.io/helm-charts
-    chart: tempo
-    targetRevision: 1.25.0
+  - repoURL: https://skyhook-io.github.io/helm-charts
+    chart: radar
+    targetRevision: 1.14.0
     helm:
-      releaseName: tempo
+      releaseName: radar
       valueFiles:
-      - $values/code/infrastructure/values/tempo.yaml
+      - $values/code/infrastructure/argo-apps/platform/02-monitoring/radar/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: monitoring
+    namespace: radar
   syncPolicy:
     automated:
       prune: true

@@ -1,28 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: grafana
+  name: argocd
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: '3'
+    argocd.argoproj.io/sync-wave: '1'
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:
-  - repoURL: https://grafana-community.github.io/helm-charts
-    chart: grafana
-    targetRevision: 11.1.1
+  - repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-cd
+    targetRevision: 10.9.1
     helm:
-      releaseName: grafana
+      releaseName: argocd
       valueFiles:
-      - $values/code/infrastructure/values/grafana.yaml
+      - $values/code/infrastructure/argo-apps/platform/01-cd/argocd/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: monitoring
+    namespace: argocd
   syncPolicy:
     automated:
       prune: true
