@@ -29,6 +29,9 @@ spec:
       jqPathExpressions:
         # The API server defaults omitted conversion settings to strategy: None.
         - '.spec.conversion | select(.strategy == "None")'
+        # API responses omit empty metadata maps rendered by the API subchart.
+        - '.metadata.labels | select(. == {})'
+        - '.metadata.annotations | select(. == {})'
   syncPolicy:
     automated:
       prune: true
