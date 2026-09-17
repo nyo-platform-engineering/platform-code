@@ -91,17 +91,17 @@ runner() {
   echo 'Kubernetes runner authentication configured.'
 }
 ready() {
-  kube annotate application gitlab -n argocd argocd.argoproj.io/refresh=hard --overwrite
-  echo 'Waiting for Argo CD to reconcile GitLab and finish its rollout...'
-  local state
+  local app="${1:-gitlab}" state
+  kube annotate application "$app" -n argocd argocd.argoproj.io/refresh=hard --overwrite
+  echo "Waiting for Argo CD to reconcile $app and finish its rollout..."
   for ((attempt=0; attempt<120; attempt++)); do
-    state="$(kube get application gitlab -n argocd -o go-template='{{if index .metadata.annotations "argocd.argoproj.io/refresh"}}Refreshing{{else}}{{.status.sync.status}}/{{.status.health.status}}{{end}}')"
+    state="$(kube get application "$app" -n argocd -o go-template='{{if index .metadata.annotations "argocd.argoproj.io/refresh"}}Refreshing{{else}}{{.status.sync.status}}/{{.status.health.status}}{{end}}')"
     if [[ "$state" == Synced/Healthy ]]; then
       return 0
     fi
     sleep 5
   done
-  echo "GitLab not ready: $state; inspect task gitlab ACTION=status." >&2
+  echo "$app not ready: $state; inspect task gitlab ACTION=status." >&2
   return 1
 }
 case "${1:-up}" in
@@ -129,8 +129,7 @@ case "${1:-up}" in
     if kube get secret go-demo-repository -n argocd >/dev/null 2>&1; then
       kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- \
         env "LOCAL_IMAGE_TAG=${IMAGE_TAG:-dev1}" gitlab-rails runner - < scripts/gitlab-import.rb
-      kube annotate application go-demo -n argocd argocd.argoproj.io/refresh=hard --overwrite
-      kube wait -n argocd application/go-demo --for=jsonpath='{.status.sync.status}'=Synced --timeout=180s
+      ready go-demo
     fi
     ;;
   runner) runner ;;
