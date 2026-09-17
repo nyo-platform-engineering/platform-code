@@ -4,4 +4,3 @@ go-demo
 *.tar
 .task
 .gitignore
-Taskfile.yml

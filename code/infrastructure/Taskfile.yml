@@ -1,8 +1,9 @@
 version: '3'
 includes:
-  go-demo:
-    taskfile: ../apps/go-demo/Taskfile.yml
-    dir: ../apps/go-demo
+  apps:
+    taskfile: ../apps/Taskfile.yml
+    dir: ../apps
+    flatten: true
 vars:
   CLUSTER_NAME: dev
   HTTP_PORT: '80'

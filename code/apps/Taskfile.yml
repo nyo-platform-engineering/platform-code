@@ -1,0 +1,17 @@
+version: '3'
+vars:
+  CLUSTER_NAME: dev
+  IMAGE_TAG: dev1
+tasks:
+  go-demo:
+    desc: Build, save, import into k3d, and restart the Go demo
+    dir: '{{.TASKFILE_DIR}}/go-demo'
+    vars:
+      IMAGE: 'local/go-demo:{{.IMAGE_TAG}}'
+      ARCHIVE: 'go-demo-{{.IMAGE_TAG}}.tar'
+    cmds:
+      - docker build --tag "{{.IMAGE}}" .
+      - docker image save --output "{{.ARCHIVE}}" "{{.IMAGE}}"
+      - k3d image import "{{.IMAGE}}" --cluster "{{.CLUSTER_NAME}}"
+      - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout restart deployment/go-demo --namespace dev
+      - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout status deployment/go-demo --namespace dev --timeout=45s

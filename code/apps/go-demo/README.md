@@ -22,23 +22,22 @@ Browse `http://localhost:8080`. Set `PORT` to override the default 8080.
 
 A registry is optional for local k3d development. Rancher Desktop's Docker
 images are not automatically available inside k3d nodes; import them first.
-With the cluster and Argo CD deployment registered, run from this directory:
+With the cluster and Argo CD deployment registered, run from `code/apps` or
+`code/infrastructure`:
 
 ```bash
-task local       # build, import into k3d, restart, and wait for readiness
-task build       # build only (the Docker build also runs Go tests)
-task import      # import an existing Docker image
-task save        # build and save go-demo-dev1.tar for offline use
+task go-demo
 ```
 
-From `code/infrastructure`, use `task go-demo:local`, `task go-demo:import`,
-or `task go-demo:save`. Set `CLUSTER_NAME` to target another local cluster.
-To import a saved archive directly, use `k3d image import go-demo-dev1.tar -c dev`.
-Generated archives are ignored by Git and excluded from the Docker build context.
+The single task in `code/apps/Taskfile.yml` builds the image (including Go
+tests), saves `go-demo/go-demo-dev1.tar`, imports it into k3d, restarts the
+deployment, and waits for readiness. Set `CLUSTER_NAME` to target another
+local cluster. Generated archives are ignored by Git and excluded from the
+Docker build context.
 
 The default image is `local/go-demo:dev1`, matching the Argo CD values. For a
 new tag, update `image.tag` in `../../infrastructure/argo-apps/dev/go-demo/values.yaml`,
-then run `task local IMAGE_TAG=dev2` and push the values change. The tasks do
+then run `task go-demo IMAGE_TAG=dev2` and push the values change. The task does
 not change the image reference managed by Argo CD. Use a registry when CI
 or other machines need to pull the image without manually importing it.
 
