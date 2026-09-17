@@ -31,15 +31,15 @@ ports:
     enabled: false
   zipkin:
     enabled: false
-config:
+alternateConfig:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
   receivers:
-    otlp: null
-    filelog:
+    file_log:
       exclude:
         - /var/log/pods/monitoring_otel-collector-cluster*/*/*.log
         - /var/log/pods/monitoring_otel-collector-daemon*/*/*.log
-    jaeger: null
-    zipkin: null
     prometheus:
       config:
         scrape_configs:
@@ -74,7 +74,6 @@ config:
               - regex: 'image|name'
                 action: labeldrop
   processors:
-    memory_limiter: null
     filter/minimal:
       error_mode: ignore
       metric_conditions:
@@ -86,24 +85,22 @@ config:
       send_batch_size: 256
       send_batch_max_size: 512
   exporters:
-    debug: null
     prometheus_remote_write/mimir:
       endpoint: http://mimir:9009/api/v1/push
       target_info:
         enabled: false
       resource_to_telemetry_conversion:
         enabled: false
-    otlp/tempo: null
-    otlphttp/loki:
+    otlp_http/loki:
       endpoint: http://loki:3100/otlp
   service:
+    extensions: [health_check]
     pipelines:
       metrics:
         receivers: [prometheus]
         processors: [filter/minimal, batch]
         exporters: [prometheus_remote_write/mimir]
-      traces: null
       logs:
-        receivers: [filelog]
+        receivers: [file_log]
         processors: [batch]
-        exporters: [otlphttp/loki]
+        exporters: [otlp_http/loki]
