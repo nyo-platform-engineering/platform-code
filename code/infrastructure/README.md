@@ -197,8 +197,8 @@ manifests. See [its README](../apps/go-demo/README.md) for local execution and
 image import. Build and import `local/go-demo:dev1` before Argo CD syncs it:
 
 ```bash
-docker build -t local/go-demo:dev1 ../apps/go-demo
-k3d image import local/go-demo:dev1 -c dev
+task go-demo:local       # build, import the image into k3d, and restart the deployment
+task go-demo:save        # optional: save a tar archive for offline use
 ```
 
 To add a workload, copy `examples/application.yaml` into
