@@ -17,7 +17,9 @@ argo-apps/
     01-cd/argocd/            app.yaml and values.yaml
     02-monitoring/           radar/ and kube-state-metrics/ (app.yaml + values.yaml)
     02-observability/        loki/ and tempo/ (app.yaml + values.yaml), 02-mimir.yaml
-    03-observability/        grafana/ and otel-collector/ (app.yaml + values.yaml)
+    02-policy/               kyverno/ (app.yaml + values.yaml)
+    03-policy/               policies/ (app.yaml + manifests/)
+    03-observability/        grafana/, otel-collector-cluster/, and otel-collector-daemon/ (app.yaml + values.yaml)
     04-network/gateway/      app.yaml and manifests/gateway.yaml
     05-environments/         05-dev-apps.yaml
   dev/                       development Applications, deployment values, Kustomization
@@ -31,7 +33,7 @@ Argo CD owns the stack. The Bash script creates the cluster, installs Gateway
 API CRDs, bootstraps Argo CD if missing, and registers the root Application.
 It does not install or upgrade the other services. Argo CD sync waves deploy
 Traefik, Argo CD itself, Loki/Tempo/Mimir/Radar/Kube-state-metrics,
-Grafana/OpenTelemetry Collector, and finally
+Grafana/OpenTelemetry Collectors, and finally
 the Gateway, followed by the development Application layer. The two-digit
 prefix on each platform wave folder equals its `argocd.argoproj.io/sync-wave`
 annotation. Apps in the same wave share a prefix. Argo CD uses the annotation
@@ -223,7 +225,7 @@ Bootstrap reads the Argo CD chart version from
 Applications send OTLP to OpenTelemetry Collector:
 
 ```text
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.monitoring.svc.cluster.local:4318
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector-cluster.monitoring.svc.cluster.local:4318
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_METRIC_EXPORT_INTERVAL=60000
 ```
@@ -231,13 +233,19 @@ OTEL_METRIC_EXPORT_INTERVAL=60000
 For gRPC, use port 4317. Host applications can use a local tunnel:
 
 ```bash
-kubectl --context k3d-dev -n monitoring port-forward svc/otel-collector 4317:4317 4318:4318
+kubectl --context k3d-dev -n monitoring port-forward svc/otel-collector-cluster 4317:4317 4318:4318
 ```
 
-The Collector collects Kubernetes pod logs with the chart's file-log preset,
-scrapes LGTM backend metrics once per minute, and forwards application OTLP
-logs/metrics/traces. Grafana provisions Loki/Mimir/Tempo
-data sources. This is backend monitoring, not a full kube-prometheus stack.
+`otel-collector-cluster` is a single-replica Deployment. It scrapes shared
+LGTM backends, kube-state-metrics, and the Argo CD application controller every
+60 seconds, and accepts application OTLP logs, metrics, and traces.
+`otel-collector-daemon` runs once per node. It reads local pod logs and scrapes
+that node's cAdvisor endpoint; it exposes no application OTLP Service.
+Both collectors export directly to Loki/Mimir; application traces go to Tempo.
+The daemon excludes both collectors' logs to avoid collecting its own output.
+Shared scrapes run only in the cluster Deployment, avoiding duplicates as nodes
+are added. Keep the cluster collector at one replica unless scrape targets are
+partitioned. Grafana provisions Loki/Mimir/Tempo data sources.
 
 Metrics are deliberately minimal. Backend scrapes retain only `up`,
 `process_cpu_seconds_total`, `process_resident_memory_bytes`, and `go_goroutines`:
@@ -250,27 +258,28 @@ histograms include request counts and buckets; the allowlist does not limit
 label cardinality. `OTEL_METRIC_EXPORT_INTERVAL` sets a 60-second SDK export
 interval for applications that support it.
 
-Edit the scrape allowlist and `filter/minimal` in
-`argo-apps/platform/03-observability/otel-collector/values.yaml` to expand this
-set. Logs and traces bypass the metric filter. The Collector excludes its own
-pod logs and forwards other pod and OTLP logs to Loki's native OTLP endpoint.
-Pod metadata uses OpenTelemetry names such as `k8s.namespace.name`; Loki
-normalizes these to labels such as `k8s_namespace_name`.
+Argo CD retains only `argocd_app_info` (application health/sync status),
+`argocd_app_sync_total` (sync outcomes), and `up` (scrape health). Controller
+metrics are enabled without ServiceMonitor or Prometheus Operator resources.
 
-When applying this update to an existing cluster, Argo CD replaces the `alloy`
-Application with `otel-collector`. Update application OTLP endpoints to the
-new service name. The old collector is pruned; telemetry can briefly pause
-during the switch. Backends and their PVCs remain managed by their existing
-Applications. Historical metrics remain until the configured retention expires.
-This single-node setup runs one Collector pod. Adding nodes would duplicate
-the static backend and kube-state-metrics scrapes across the DaemonSet; use a separate scraping
-Deployment or a target allocator before scaling out.
+Edit shared scrape allowlists and `filter/minimal` in
+`argo-apps/platform/03-observability/otel-collector-cluster/values.yaml`.
+Node-metric filters and log collection live beside it in
+`otel-collector-daemon/values.yaml`. Logs and traces bypass metric filters.
+Loki receives pod and application logs through its native OTLP endpoint.
+Pod metadata uses names such as `k8s.namespace.name`, normalized by Loki to
+labels such as `k8s_namespace_name`.
+
+This replaces the previous `otel-collector` Application and Service. Update
+application OTLP endpoints to `otel-collector-cluster`; Argo CD prunes the old
+collector. Collection can pause briefly during the transition. Historical
+metrics remain until retention expires; backends and their PVCs are unchanged.
 
 ### Minimal Kubernetes metrics
 
 Kube-state-metrics runs with only the pod collector and two metric families
 enabled. Its app and values live under `argo-apps/platform/02-monitoring/kube-state-metrics`.
-The Collector scrapes it and the local kubelet's `/metrics/cadvisor` every
+The cluster collector scrapes it; the daemon scrapes its local kubelet's `/metrics/cadvisor` every
 60 seconds. Scrape allowlists and the shared OTel filter retain only:
 
 | Source | Metric | Purpose |
@@ -290,7 +299,7 @@ Series counts scale with pods and containers, rather than a fixed global cap.
 
 cAdvisor uses the Collector's service-account token, validates kubelet TLS
 with the cluster CA, and has only `get` permission on `nodes/metrics`.
-Each Collector scrapes its own node using the downward-API node IP.
+Each daemon collector scrapes its own node using the downward-API node IP.
 
 Example Grafana queries:
 
@@ -301,6 +310,25 @@ kube_pod_status_ready{condition="true"} == 0
 increase(kube_pod_container_status_restarts_total[15m])
 ```
 
+## Cluster policies
+
+Kyverno runs five cluster-wide validation policies in Audit mode: versioned
+images, Traefik-only LoadBalancer services, non-privileged containers,
+Deployment readiness probes, and this local cluster's no-CPU/memory-sizing
+convention. See [policy configuration](argo-apps/platform/README.md).
+Audit allows writes and reports violations. Review reports before switching
+`spec.validationActions` to `[Deny]`. Pod policies cover init/ephemeral
+containers and generate controller checks; PVC storage requests are unaffected.
+
+```bash
+kubectl --context k3d-dev get validatingpolicies
+kubectl --context k3d-dev get policyreports -A
+kyverno test tests/kyverno
+```
+
+The policy tests check compliant manifests, violations, init-container tags,
+and the Traefik LoadBalancer exception. Use Kyverno CLI v1.19.1.
+
 ## Operations
 
 ```bash
@@ -308,7 +336,7 @@ task --list
 task status
 task links
 task password
-task logs                 # OpenTelemetry Collector
+task logs                 # cluster collector
 task logs APP=mimir       # also grafana, loki, tempo, etc.
 task logs APP=go-demo NAMESPACE=dev
 task go-demo              # build, save, import, and restart the demo
@@ -317,5 +345,5 @@ task down           # delete cluster and data
 
 `task` lists the available commands. `task status` combines pods, Argo CD
 application status, CPU/memory usage, and resource-sizing checks. Argo CD refreshes and syncs
-automatically. `task logs` follows all containers for the selected app; use
+automatically. `task logs` defaults to the cluster collector; use `APP=otel-collector-daemon` for node collection. It follows all containers for the selected app; use
 `FOLLOW=false` for a snapshot or `TAIL=100` to change the number of lines.

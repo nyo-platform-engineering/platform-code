@@ -1,0 +1,35 @@
+# Validation and reports only; no resource mutation or generation.
+config:
+  enableDefaultRegistryMutation: false
+crds:
+  migration:
+    podResources:
+      requests: null
+      limits: null
+admissionController:
+  replicas: 1
+  initContainer:
+    resources:
+      requests: null
+      limits: null
+  container:
+    resources:
+      requests: null
+      limits: null
+backgroundController:
+  enabled: false
+cleanupController:
+  enabled: false
+reportsController:
+  replicas: 1
+  resources:
+    requests: null
+    limits: null
+webhooksCleanup:
+  resources:
+    requests: null
+    limits: null
+test:
+  resources:
+    requests: null
+    limits: null

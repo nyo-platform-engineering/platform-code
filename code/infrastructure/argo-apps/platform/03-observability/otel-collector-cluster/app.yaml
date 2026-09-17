@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: otel-collector
+  name: otel-collector-cluster
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: '3'
@@ -14,9 +14,9 @@ spec:
     chart: opentelemetry-collector
     targetRevision: 0.173.1
     helm:
-      releaseName: otel-collector
+      releaseName: otel-collector-cluster
       valueFiles:
-      - $values/code/infrastructure/argo-apps/platform/03-observability/otel-collector/values.yaml
+      - $values/code/infrastructure/argo-apps/platform/03-observability/otel-collector-cluster/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values

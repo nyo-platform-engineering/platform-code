@@ -10,6 +10,8 @@ server:
     hostname: argocd.localhost
 controller:
   replicas: 1
+  metrics:
+    enabled: true
 repoServer:
   replicas: 1
 dex:

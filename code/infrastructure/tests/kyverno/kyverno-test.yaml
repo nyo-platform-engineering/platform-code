@@ -1,0 +1,49 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cluster-validation
+policies:
+  - ../../argo-apps/platform/03-policy/policies/manifests/policies.yaml
+resources:
+  - resources.yaml
+results:
+  - policy: require-versioned-images
+    kind: Pod
+    resources: [compliant]
+    result: pass
+  - policy: require-versioned-images
+    kind: Pod
+    resources: [violations, untagged-init]
+    result: fail
+  - policy: disallow-privileged-containers
+    kind: Pod
+    resources: [compliant]
+    result: pass
+  - policy: disallow-privileged-containers
+    kind: Pod
+    resources: [violations]
+    result: fail
+  - policy: disallow-container-resource-sizing
+    kind: Pod
+    resources: [compliant]
+    result: pass
+  - policy: disallow-container-resource-sizing
+    kind: Pod
+    resources: [violations]
+    result: fail
+  - policy: restrict-loadbalancer-services
+    kind: Service
+    resources: [traefik]
+    result: pass
+  - policy: restrict-loadbalancer-services
+    kind: Service
+    resources: [app]
+    result: fail
+  - policy: require-deployment-readiness
+    kind: Deployment
+    resources: [ready]
+    result: pass
+  - policy: require-deployment-readiness
+    kind: Deployment
+    resources: [missing-probe]
+    result: fail

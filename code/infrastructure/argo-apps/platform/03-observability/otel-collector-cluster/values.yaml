@@ -1,0 +1,114 @@
+fullnameOverride: otel-collector-cluster
+mode: deployment
+replicaCount: 1
+image:
+  repository: otel/opentelemetry-collector-contrib
+  tag: 0.160.0
+command:
+  name: otelcol-contrib
+resources: {}
+service:
+  enabled: true
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus:
+      config:
+        scrape_configs:
+          - job_name: loki
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [loki:3100]
+            metric_relabel_configs: &minimal_backend_metrics
+              - source_labels: [__name__]
+                regex: 'process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines'
+                action: keep
+          - job_name: tempo
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [tempo:3200]
+            metric_relabel_configs: *minimal_backend_metrics
+          - job_name: mimir
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [mimir:9009]
+            metric_relabel_configs: *minimal_backend_metrics
+          - job_name: kube-state-metrics
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [kube-state-metrics:8080]
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'kube_pod_status_ready|kube_pod_container_status_restarts_total'
+                action: keep
+              # Keep one readiness series per pod; restart counters have no condition.
+              - source_labels: [condition]
+                regex: 'true|'
+                action: keep
+              - regex: uid
+                action: labeldrop
+          - job_name: argocd
+            scrape_interval: 60s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [argocd-metrics.argocd.svc.cluster.local:8082]
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'argocd_app_info|argocd_app_sync_total'
+                action: keep
+              - regex: '__name__|name|namespace|health_status|sync_status|phase|job|instance'
+                action: labelkeep
+  processors:
+    memory_limiter: null
+    filter/minimal:
+      error_mode: ignore
+      metric_conditions:
+        # Matching conditions DROP metrics; negate the small allowlist.
+        # Prometheus counters may lose their _total suffix during conversion.
+        - 'not IsMatch(metric.name, "^(up|process_cpu_seconds(_total)?|process_resident_memory_bytes|go_goroutines|argocd_app_info|argocd_app_sync(_total)?|kube_pod_status_ready|kube_pod_container_status_restarts(_total)?|http[.]server[.](request[.]duration|duration|active_requests))$")'
+    batch:
+      timeout: 5s
+      send_batch_size: 256
+      send_batch_max_size: 512
+  exporters:
+    debug: null
+    prometheus_remote_write/mimir:
+      endpoint: http://mimir:9009/api/v1/push
+      target_info:
+        enabled: false
+      resource_to_telemetry_conversion:
+        enabled: false
+    otlp/tempo:
+      endpoint: tempo:4317
+      tls:
+        insecure: true
+    otlphttp/loki:
+      endpoint: http://loki:3100/otlp
+  service:
+    pipelines:
+      metrics:
+        receivers: [prometheus, otlp]
+        processors: [filter/minimal, batch]
+        exporters: [prometheus_remote_write/mimir]
+      traces:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlp/tempo]
+      logs:
+        receivers: [otlp]
+        processors: [batch]
+        exporters: [otlphttp/loki]

@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '3'
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+    targetRevision: main
+    path: code/infrastructure/argo-apps/platform/03-policy/policies/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 2m
+    syncOptions:
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

@@ -11,7 +11,7 @@ vars:
   API_PORT: '6550'
   K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
   GATEWAY_API_VERSION: v1.5.1
-  APP: otel-collector
+  APP: otel-collector-cluster
   NAMESPACE: monitoring
   TAIL: '50'
   FOLLOW: 'true'
@@ -71,8 +71,9 @@ tasks:
     cmds:
       - "bash scripts/bootstrap.sh password"
   logs:
-    desc: Follow app logs (default otel-collector; override APP and NAMESPACE)
+    desc: Follow app logs (default otel-collector-cluster; override APP and NAMESPACE)
     vars:
-      LABEL_NAME: '{{if eq .APP "otel-collector"}}opentelemetry-collector{{else}}{{.APP}}{{end}}'
+      LABEL_NAME: '{{if hasPrefix "otel-collector" .APP}}opentelemetry-collector{{else}}{{.APP}}{{end}}'
+      SELECTOR: 'app.kubernetes.io/name={{.LABEL_NAME}}{{if hasPrefix "otel-collector" .APP}},app.kubernetes.io/instance={{.APP}}{{end}}'
     cmds:
-      - 'kubectl --context "k3d-{{.CLUSTER_NAME}}" logs -n "{{.NAMESPACE}}" -l "app.kubernetes.io/name={{.LABEL_NAME}}" --all-containers=true --tail={{.TAIL}} --follow={{.FOLLOW}}'
+      - 'kubectl --context "k3d-{{.CLUSTER_NAME}}" logs -n "{{.NAMESPACE}}" -l "{{.SELECTOR}}" --all-containers=true --tail={{.TAIL}} --follow={{.FOLLOW}}'
