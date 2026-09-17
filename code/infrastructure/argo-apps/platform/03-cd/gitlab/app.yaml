@@ -23,6 +23,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: gitlab
+  ignoreDifferences:
+    # Kubernetes defaults these embedded PVC type fields; the upstream chart omits them.
+    - group: apps
+      kind: StatefulSet
+      name: gitlab-gitaly
+      namespace: gitlab
+      jqPathExpressions:
+        - '.spec.volumeClaimTemplates[] | .apiVersion | select(. == "v1")'
+        - '.spec.volumeClaimTemplates[] | .kind | select(. == "PersistentVolumeClaim")'
   syncPolicy:
     automated:
       prune: true
