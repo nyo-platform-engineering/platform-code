@@ -28,6 +28,11 @@ runs database migrations, so the page may take several minutes to become ready.
 Credentials are generated locally in Kubernetes Secrets and never committed.
 `task up` also prepares the dependency credentials on a new cluster.
 
+On first startup, the runner may retry registration while GitLab migrations
+and the webservice initialize. `task gitlab ACTION=runner` waits for the
+webservice, provisions the authentication token, restarts the runner when
+the token is added, and checks runner readiness. `task gitlab` includes this step.
+
 ## Import app code
 
 The toolbox mounts the app-code PVC **read-only** at `/workspace/apps`.

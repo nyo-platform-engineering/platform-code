@@ -78,6 +78,8 @@ deploy() {
 }
 runner() {
   local configured output auth
+  # Registration requires a ready webservice and completed database migrations.
+  kube rollout status deployment/gitlab-webservice-default -n gitlab --timeout=600s
   configured="$(kube get secret gitlab-gitlab-runner-secret -n gitlab -o go-template='{{if index .data "runner-token"}}yes{{end}}' 2>/dev/null || true)"
   if [[ "$configured" != yes ]]; then
     kube rollout status deployment/gitlab-toolbox -n gitlab --timeout=300s
@@ -87,7 +89,11 @@ runner() {
     kube create secret generic gitlab-gitlab-runner-secret -n gitlab \
       --from-literal=runner-token="$auth" --from-literal=runner-registration-token='' \
       --dry-run=client -o yaml | kube apply --server-side --force-conflicts -f -
+    # The runner reads its token on startup; a Secret update alone does not
+    # replace the legacy token already loaded by the running container.
+    kube rollout restart deployment/gitlab-gitlab-runner -n gitlab
   fi
+  kube rollout status deployment/gitlab-gitlab-runner -n gitlab --timeout=300s
   echo 'Kubernetes runner authentication configured.'
 }
 ready() {
