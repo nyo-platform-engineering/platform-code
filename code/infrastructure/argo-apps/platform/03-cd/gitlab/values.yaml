@@ -84,6 +84,9 @@ gitlab:
       resources:
         requests: null
   upgradeCheck:
+    # ArgoCD runs pre-install and pre-upgrade hooks identically, so this
+    # upgrade-only check misfires as "unsupported upgrade path" on a fresh install.
+    enabled: false
     resources:
       requests:
         cpu: null

@@ -39,8 +39,8 @@ tasks:
     cmds:
       - task --list
   setup:
-    desc: Install CLI tools with winget (Windows) or Homebrew (macOS)
-    platforms: [windows, darwin]
+    desc: Install CLI tools with winget (Windows), Homebrew (macOS), or pacman (Arch Linux)
+    platforms: [windows, darwin, linux]
     cmds:
       - cmd: winget install --id k3d.k3d --exact --accept-package-agreements --accept-source-agreements
         platforms: [windows]
@@ -48,6 +48,16 @@ tasks:
         platforms: [windows]
       - cmd: brew install k3d helm kubernetes-cli
         platforms: [darwin]
+      - cmd: |
+          if command -v pacman >/dev/null 2>&1; then
+            pacman -S helm kubectl
+          else
+            echo "No pacman found. Install helm and kubectl manually for your distro." >&2
+            exit 1
+          fi
+        platforms: [linux]
+      - cmd: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+        platforms: [linux]
   up:
     desc: Create k3d, bootstrap Argo CD, and register the platform application
     cmds:
