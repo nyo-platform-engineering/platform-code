@@ -1,0 +1,20 @@
+fullnameOverride: policy-reporter
+global:
+  labels:
+    platform.local/owner: platform-team
+podLabels:
+  platform.local/owner: platform-team
+resources: {}
+# Include controller-owned Pods/ReplicaSets as well as their parent workloads.
+sourceFilters: []
+metrics:
+  enabled: true
+  mode: custom
+  # Workload names enable drill-down; messages and report IDs stay out of metrics.
+  customLabels: [namespace, policy, rule, kind, name, status, source]
+target:
+  loki:
+    host: http://loki.monitoring.svc.cluster.local:3100
+    sources: [kyverno, KyvernoValidatingPolicy, KyvernoImageValidatingPolicy]
+    # Send new results without replaying old events on every restart.
+    skipExistingOnStartup: true

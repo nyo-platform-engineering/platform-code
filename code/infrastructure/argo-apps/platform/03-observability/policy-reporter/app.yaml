@@ -3,7 +3,7 @@ kind: Application
 metadata:
   labels:
     platform.local/owner: platform-team
-  name: grafana
+  name: policy-reporter
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: '3'
@@ -12,17 +12,16 @@ metadata:
 spec:
   project: default
   sources:
-  - repoURL: https://grafana-community.github.io/helm-charts
-    chart: grafana
-    targetRevision: 11.1.1
+  - repoURL: https://kyverno.github.io/policy-reporter
+    chart: policy-reporter
+    targetRevision: 3.10.0
     helm:
-      releaseName: grafana
+      releaseName: policy-reporter
       valueFiles:
-      - $values/code/infrastructure/argo-apps/platform/03-observability/grafana/values.yaml
+      - $values/code/infrastructure/argo-apps/platform/03-observability/policy-reporter/values.yaml
   - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
     targetRevision: main
     ref: values
-    path: code/infrastructure/argo-apps/platform/03-observability/grafana/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

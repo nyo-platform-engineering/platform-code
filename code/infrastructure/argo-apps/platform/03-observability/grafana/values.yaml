@@ -6,6 +6,21 @@ image:
 adminUser: admin
 adminPassword: admin
 resources: {}
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: policies
+        orgId: 1
+        folder: Policies
+        type: file
+        disableDeletion: false
+        editable: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards/policies
+dashboardsConfigMaps:
+  policies: grafana-policy-reports
 initChownData:
   resources: {}
 service:

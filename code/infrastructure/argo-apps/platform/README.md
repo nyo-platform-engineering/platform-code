@@ -25,7 +25,7 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | `02-observability` | Telemetry storage backends | Loki/Tempo/Mimir (2) |
 | `02-policy` | Policy engine | Kyverno (2) |
 | `03-policy` | Cluster validation policies | Cluster policies (3) |
-| `03-observability` | Telemetry collection and visualization | Grafana/OTel cluster collector/OTel daemon collector (3) |
+| `03-observability` | Telemetry collection and visualization | Grafana/OTel cluster collector/OTel daemon collector/Policy Reporter (3) |
 | `04-network` | Gateway API listeners | Gateway (4) |
 | `05-environments` | Registration of environment-specific Applications | Development apps (5) |
 
@@ -36,10 +36,17 @@ the observability group handles logs (Loki), traces (Tempo), metrics (Mimir),
 collection and forwarding (OpenTelemetry Collector), and dashboards (Grafana).
 
 The cluster collector is a single-replica Deployment for shared LGTM,
-kube-state-metrics, and Argo CD scrapes, plus application OTLP ingestion.
+kube-state-metrics, Argo CD, and policy report scrapes, plus application OTLP ingestion.
 The daemon collector handles per-node cAdvisor and pod logs. Each scrape runs
-every 60 seconds with a small metric allowlist; shared jobs never run on the
+every 60 seconds (policy reports every 30 seconds) with a small metric allowlist; shared jobs never run on the
 DaemonSet. Both collectors' logs are excluded from pod-log ingestion.
+
+Policy Reporter watches cluster-wide Kyverno reports, exports current results
+for Mimir, and sends new result events with their messages to Loki. Grafana
+provisions **Policies / Kyverno Policy Reports**, with namespace/policy filters,
+current violations, affected resources, history, and collection health. See the
+[collection guide](03-observability/policy-reporter/README.md) for coverage and
+the distinction between current reports and historical events.
 
 ## Understand cluster policies
 

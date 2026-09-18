@@ -29,6 +29,15 @@ config:
     prometheus:
       config:
         scrape_configs:
+          - job_name: policy-reporter
+            scrape_interval: 30s
+            scrape_timeout: 10s
+            static_configs:
+              - targets: [policy-reporter.monitoring.svc.cluster.local:8080]
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'policy_report_result|cluster_policy_report_result'
+                action: keep
           - job_name: loki
             scrape_interval: 60s
             scrape_timeout: 10s
@@ -83,7 +92,7 @@ config:
       metric_conditions:
         # Matching conditions DROP metrics; negate the small allowlist.
         # Prometheus counters may lose their _total suffix during conversion.
-        - 'not IsMatch(metric.name, "^(up|process_cpu_seconds(_total)?|process_resident_memory_bytes|go_goroutines|argocd_app_info|argocd_app_sync(_total)?|kube_pod_status_ready|kube_pod_container_status_restarts(_total)?|http[.]server[.](request[.]duration|duration|active_requests))$")'
+        - 'not IsMatch(metric.name, "^(up|policy_report_result|cluster_policy_report_result|process_cpu_seconds(_total)?|process_resident_memory_bytes|go_goroutines|argocd_app_info|argocd_app_sync(_total)?|kube_pod_status_ready|kube_pod_container_status_restarts(_total)?|http[.]server[.](request[.]duration|duration|active_requests))$")'
     batch:
       timeout: 5s
       send_batch_size: 256
