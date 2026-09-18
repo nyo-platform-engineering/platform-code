@@ -135,5 +135,5 @@ case "${1:-up}" in
   runner) runner ;;
   status) kube get pods,pvc -n gitlab; kube get applications gitlab gitlab-services -n argocd ;;
   logs) kube logs -n gitlab -l app=webservice -c webservice --tail=100 --follow ;;
-  *) echo 'Supported actions: up, prepare, code, projects, runner, status, logs; passwords: task password APP=gitlab' >&2; exit 1 ;;
+  *) echo 'Supported actions: up, prepare, code, projects, runner, status, logs; passwords: task password' >&2; exit 1 ;;
 esac

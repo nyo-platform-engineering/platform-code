@@ -19,7 +19,7 @@ After `task up`, run from `code/infrastructure`:
 ```bash
 task gitlab                     # upload apps/ and import them as GitLab projects
 task gitlab ACTION=status       # inspect GitLab startup
-task password APP=gitlab        # initial root password (default APP is argocd)
+task password                   # initial Argo CD admin and GitLab root passwords
 ```
 
 Open `http://gitlab.localhost` (with your configured HTTP port if needed), or

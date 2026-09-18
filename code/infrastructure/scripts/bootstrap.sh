@@ -85,10 +85,22 @@ case "${1:-help}" in
   doctor) doctor ;;
   up) up ;;
   password)
-    case "${2:-argocd}" in
+    app="${2:-all}"
+    case "$app" in
+      all)
+        status=0
+        for app in argocd gitlab; do
+          case "$app" in
+            argocd) printf '== Argo CD ==\nusername:\nadmin\npassword:\n' ;;
+            gitlab) printf '\n== GitLab ==\nusername:\nroot\npassword:\n' ;;
+          esac
+          bash scripts/bootstrap.sh password "$app" || status=1
+        done
+        exit "$status"
+        ;;
       argocd) namespace=argocd; secret=argocd-initial-admin-secret ;;
       gitlab) namespace=gitlab; secret=gitlab-gitlab-initial-root-password ;;
-      *) echo 'Supported password apps: argocd, gitlab' >&2; exit 1 ;;
+      *) echo 'Supported password apps: all, argocd, gitlab' >&2; exit 1 ;;
     esac
     kube get secret "$secret" -n "$namespace" -o go-template='{{.data.password | base64decode}}{{"\n"}}'
     ;;
