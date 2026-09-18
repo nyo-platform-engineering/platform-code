@@ -350,7 +350,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum({__name__=~\"policy_report_result|cluster_policy_report_result\",job=\"policy-reporter\",namespace=~\"$namespace\",policy=~\"$policy\",status=\"fail\"} and on(policy) {__name__=~\"policy_report_result|cluster_policy_report_result\",policy=\"require-workload-owner\"}) or (0 * max(up{job=\"policy-reporter\"} == 1))",
+          "expr": "sum({__name__=~\"policy_report_result|cluster_policy_report_result\",job=\"policy-reporter\",namespace=~\"$namespace\",policy=~\"$policy\",status=\"fail\"} and on(policy) {__name__=~\"policy_report_result|cluster_policy_report_result\",policy=~\"(vpol-)?require-workload-owner\"}) or (0 * max(up{job=\"policy-reporter\"} == 1))",
           "instant": true,
           "range": false,
           "legendFormat": "{{status}}",

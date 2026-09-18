@@ -1,0 +1,13 @@
+# Metadata-only SSA: Kyverno owns the generated spec; Argo owns reporting labels.
+# Kyverno skips background evaluation of the parent once native generation is on.
+# Native policies require this explicit opt-in even with the report feature enabled.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: vpol-require-workload-owner
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+  labels:
+    app.kubernetes.io/managed-by: kyverno
+    platform.local/owner: platform-team
+    reports.kyverno.io/enabled: 'true'

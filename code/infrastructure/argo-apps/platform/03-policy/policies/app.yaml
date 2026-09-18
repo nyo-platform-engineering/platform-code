@@ -18,6 +18,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingAdmissionPolicy
+      name: vpol-require-workload-owner
+      jsonPointers:
+        - /spec
+        - /metadata/ownerReferences
   syncPolicy:
     automated:
       prune: true

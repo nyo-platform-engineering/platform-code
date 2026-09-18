@@ -3,6 +3,12 @@
 Policy Reporter 3.10.0 watches namespaced PolicyReports and ClusterPolicyReports
 across the cluster, including controller-owned resources. It exports current
 policy/resource results at `policy-reporter.monitoring:8080/metrics`.
+Ownership is executed by the generated native `vpol-require-workload-owner`.
+Kyverno does not background-scan its parent after native generation. The
+metadata-only `ownership-reporting.yaml` opts the native policy into reporting
+with `reports.kyverno.io/enabled: 'true'`; Kyverno retains ownership of its spec.
+Argo CD applies these labels after the parent policy and retries while generation
+completes. If native policies are deleted/recreated, Argo CD reapplies the opt-in.
 The existing cluster OpenTelemetry collector scrapes these gauges every 30 seconds
 and sends them to Mimir. Metric labels retain namespace, policy, rule, kind,
 resource name, status, and source; messages and report IDs are not metric labels.

@@ -15,6 +15,6 @@ metrics:
 target:
   loki:
     host: http://loki.monitoring.svc.cluster.local:3100
-    sources: [kyverno, KyvernoValidatingPolicy, KyvernoImageValidatingPolicy]
+    sources: [kyverno, KyvernoValidatingPolicy, KyvernoImageValidatingPolicy, ValidatingAdmissionPolicy]
     # Send new results without replaying old events on every restart.
     skipExistingOnStartup: true

@@ -22,6 +22,9 @@ dashboardProviders:
 dashboardsConfigMaps:
   policies: grafana-policy-reports
 initChownData:
+  # This established PVC already belongs to Grafana (UID 472). Its private
+  # output directories cannot be traversed by the chart's restricted chown init.
+  enabled: false
   resources: {}
 service:
   port: 3000
