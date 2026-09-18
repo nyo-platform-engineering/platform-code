@@ -1,3 +1,7 @@
+podLabels:
+  platform.local/owner: platform-team
+customLabels:
+  platform.local/owner: platform-team
 fullnameOverride: kube-state-metrics
 replicas: 1
 resources: {}

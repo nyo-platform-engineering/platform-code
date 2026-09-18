@@ -1,6 +1,8 @@
 fullnameOverride: loki
 deploymentMode: SingleBinary
 loki:
+  podLabels:
+    platform.local/owner: platform-team
   image:
     tag: 3.6.3
   auth_enabled: false

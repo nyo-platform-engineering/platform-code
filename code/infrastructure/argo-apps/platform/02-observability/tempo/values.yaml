@@ -1,3 +1,8 @@
+podLabels:
+  platform.local/owner: platform-team
+global:
+  commonLabels:
+    platform.local/owner: platform-team
 fullnameOverride: tempo
 replicas: 1
 tempo:

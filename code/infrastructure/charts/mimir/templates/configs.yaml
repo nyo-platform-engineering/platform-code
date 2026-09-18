@@ -1,6 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: mimir-config
 data:
   config.yaml: |

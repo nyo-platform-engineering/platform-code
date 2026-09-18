@@ -1,4 +1,7 @@
 global:
+  common:
+    labels:
+      platform.local/owner: platform-team
   edition: ce
   kas:
     enabled: true
@@ -50,6 +53,8 @@ gitlab:
   prometheus:
     install: false
   gitlab-runner:
+    podLabels:
+      platform.local/owner: platform-team
     install: true
     gitlabUrl: http://gitlab-webservice-default.gitlab.svc.cluster.local:8181
     concurrent: 1
@@ -65,6 +70,8 @@ gitlab:
             image = "alpine:3.23"
             privileged = false
             service_account = "go-demo-ci"
+            [runners.kubernetes.pod_labels]
+              "platform.local/owner" = "platform-team"
   registry:
     enabled: true
     hpa:

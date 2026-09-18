@@ -2,6 +2,8 @@
 apiVersion: policies.kyverno.io/v1
 kind: ValidatingPolicy
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: require-versioned-images
 spec:
   validationActions: [Audit]
@@ -32,6 +34,8 @@ spec:
 apiVersion: policies.kyverno.io/v1
 kind: ValidatingPolicy
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: restrict-loadbalancer-services
 spec:
   validationActions: [Audit]
@@ -56,6 +60,8 @@ spec:
 apiVersion: policies.kyverno.io/v1
 kind: ValidatingPolicy
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: disallow-privileged-containers
 spec:
   validationActions: [Audit]
@@ -88,6 +94,8 @@ spec:
 apiVersion: policies.kyverno.io/v1
 kind: ValidatingPolicy
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: require-deployment-readiness
 spec:
   validationActions: [Audit]
@@ -111,6 +119,8 @@ spec:
 apiVersion: policies.kyverno.io/v1
 kind: ValidatingPolicy
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: disallow-container-resource-sizing
 spec:
   validationActions: [Audit]

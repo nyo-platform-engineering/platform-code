@@ -1,6 +1,8 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: local
   namespace: traefik
 spec:

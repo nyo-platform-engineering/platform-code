@@ -1,3 +1,7 @@
+podLabels:
+  platform.local/owner: platform-team
+additionalLabels:
+  platform.local/owner: platform-team
 fullnameOverride: otel-collector-cluster
 mode: deployment
 replicaCount: 1

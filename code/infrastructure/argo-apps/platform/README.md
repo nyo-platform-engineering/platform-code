@@ -47,12 +47,50 @@ Kyverno runs admission and reports controllers only. Five cluster-scoped
 ValidatingPolicies start in Audit mode: versioned images, Traefik-only
 LoadBalancer services, non-privileged containers (except kube-system),
 Deployment readiness probes, and no container CPU/memory sizing for this local
-cluster. PVC storage requests are unaffected. Policies report violations without
-blocking or mutating workloads. Inspect policy reports and change each policy's
+cluster. PVC storage requests are unaffected. These five policies report violations
+without blocking workloads. Inspect policy reports and change each policy's
 `spec.validationActions` from `[Audit]` to `[Deny]` when ready. The current
 `policies.kyverno.io/v1` API avoids deprecated ClusterPolicy resources.
 Policies retry while Kyverno CRDs become available because app-of-apps waves
 order definitions without waiting for child workload readiness.
+
+Ownership also starts in Audit mode. Every Pod and workload Pod template,
+across all namespaces, is checked for `platform.local/owner` with a non-empty
+lowercase team name (hyphens allowed). Platform values use `platform-team`;
+Go demo configures it under `labels` in its values file. The policy covers
+Deployments, DaemonSets, StatefulSets, ReplicaSets, ReplicationControllers,
+Jobs, CronJobs, and standalone Pods. It checks template labels so missing
+ownership is reported before controllers create Pods. API bookkeeping
+resources such as Events or Leases are outside this ownership check.
+
+Kyverno generates a native ValidatingAdmissionPolicy and Audit binding,
+covering system and Kyverno workloads even where its webhooks are excluded.
+Background scans skip resource filters, and native admission reporting is
+explicitly enabled. Labels are not added automatically by admission.
+
+Commit/push the chart, values, and policy changes to the GitHub source Argo CD
+reads. Argo CD applies labels to managed workloads and deploys the Audit policy;
+no `task up` rerun is required. System workloads managed by k3d rather than
+Argo CD may still lack ownership and will appear in reports. Review and address
+these system ownership gaps separately before switching to Deny.
+Existing Pods are not evicted. Completed Jobs have immutable templates, so old
+history may also appear in reports until retired.
+
+Run `task test-labels` after reconciliation for admission smoke tests. It checks
+that compliant and invalid Go demo values, standalone Pods, and CronJobs are
+admitted in Audit mode in `dev`, `kube-system`, and `kyverno`. Dry runs do not
+create persistent workload policy reports; review reports for actual workloads:
+
+```bash
+kubectl --context k3d-dev get policyreports -A
+kubectl --context k3d-dev get policyreports -A -o yaml
+```
+
+To test a reported mismatch, remove the owner from Go demo's values and push
+the change. Argo CD still deploys it, and Kyverno reports the violation. Restore
+the label afterward. Switch `ownership.yaml` to `[Deny]` only after reviewing
+and fixing reported gaps, including system-generated templates. The same
+`task test-labels` command then expects invalid workloads to be rejected.
 
 ## Understand startup order and health
 

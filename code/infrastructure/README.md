@@ -430,6 +430,11 @@ Kyverno runs five cluster-wide validation policies in Audit mode: versioned
 images, Traefik-only LoadBalancer services, non-privileged containers,
 Deployment readiness probes, and this local cluster's no-CPU/memory-sizing
 convention. See [policy configuration](argo-apps/platform/README.md).
+The additional ownership policy also starts in Audit mode across all namespaces.
+It reports missing or invalid `platform.local/owner` on Pods and workload templates.
+Chart values and CI Pods supply this label. Argo CD applies the labels and policy;
+no cluster bootstrap rerun is needed. Unlabelled system workloads remain visible
+as mismatches to address before enabling Deny.
 Audit allows writes and reports violations. Review reports before switching
 `spec.validationActions` to `[Deny]`. Pod policies cover init/ephemeral
 containers and generate controller checks; PVC storage requests are unaffected.
@@ -438,6 +443,7 @@ containers and generate controller checks; PVC storage requests are unaffected.
 kubectl --context k3d-dev get validatingpolicies
 kubectl --context k3d-dev get policyreports -A
 kyverno test tests/kyverno
+task test-labels  # admission smoke tests; expects Audit or Deny behavior
 ```
 
 The policy tests check compliant manifests, violations, init-container tags,

@@ -63,6 +63,23 @@ label/container name. The chart owns `app.kubernetes.io/name` and
 `app.kubernetes.io/instance` selector labels; additional labels should use
 other keys.
 
+Set `labels.platform.local/owner` to the responsible team's lowercase name
+(for example `platform-team`). The chart copies resource labels to the Pod
+template. `podLabels` can override non-selector labels; Kyverno validates the
+resulting Pod labels. Ownership stays out of selectors so changing teams does
+not change the Deployment's immutable selector.
+
+```yaml
+labels:
+  platform.local/owner: platform-team
+```
+
+The cluster-wide ownership policy starts in Audit mode and reports Pods and
+workload templates with missing, empty, or invalid owners. It admits those
+workloads while ownership gaps are being fixed. After deploying the policy, run
+`bash tests/ownership.sh` from `code/infrastructure` to test the Go demo values
+with server dry runs in `dev`, `kube-system`, and `kyverno`.
+
 ## Expose an HTTP app
 
 `httpRoute.servicePortName` selects a port by name from `service.ports`; the

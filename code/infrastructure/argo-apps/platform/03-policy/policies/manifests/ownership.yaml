@@ -1,0 +1,44 @@
+# One required ownership label on every Pod and workload template, in all namespaces.
+# Native admission generation also covers Kyverno's own namespace.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-workload-owner
+  labels:
+    platform.local/owner: platform-team
+spec:
+  validationActions: [Audit]
+  failurePolicy: Fail
+  evaluation:
+    background:
+      enabled: true
+  autogen:
+    validatingAdmissionPolicy:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ['']
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods, replicationcontrollers]
+      - apiGroups: [apps]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [deployments, daemonsets, statefulsets, replicasets]
+      - apiGroups: [batch]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [jobs, cronjobs]
+  variables:
+    - name: workloadLabels
+      expression: >-
+        object.kind == 'Pod' ? object.metadata.?labels.orValue({}) :
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.metadata.?labels.orValue({}) :
+        object.spec.template.metadata.?labels.orValue({})
+  validations:
+    - expression: >-
+        'platform.local/owner' in variables.workloadLabels &&
+        variables.workloadLabels['platform.local/owner'].matches('^[a-z][a-z0-9]*(-[a-z0-9]+)*$')
+      message: >-
+        Pods and workload templates must have platform.local/owner naming the responsible team
+        (for example platform-team). Use a non-empty lowercase name with optional hyphens.

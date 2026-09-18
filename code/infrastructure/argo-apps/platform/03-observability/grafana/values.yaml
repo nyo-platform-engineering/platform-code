@@ -1,3 +1,5 @@
+extraLabels:
+  platform.local/owner: platform-team
 fullnameOverride: grafana
 image:
   tag: 12.3.2

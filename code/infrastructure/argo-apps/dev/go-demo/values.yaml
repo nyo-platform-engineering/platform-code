@@ -1,3 +1,5 @@
+labels:
+  platform.local/owner: platform-team
 image:
   repository: local/go-demo
   tag: dev1

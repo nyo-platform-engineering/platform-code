@@ -3,6 +3,8 @@
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab-{{ $name }}
 spec:
   selector:
@@ -14,6 +16,8 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab-{{ $name }}
 spec:
   serviceName: gitlab-{{ $name }}
@@ -24,6 +28,7 @@ spec:
   template:
     metadata:
       labels:
+        platform.local/owner: platform-team
         app: gitlab-{{ $name }}
     spec:
       containers:
@@ -105,6 +110,8 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab-postgresql-init
 data:
   extensions.sql: |
@@ -116,6 +123,8 @@ data:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab-app-code
 spec:
   accessModes: [ReadWriteOnce]
@@ -126,11 +135,16 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gitlab-create-buckets-{{ .Values.buckets | toJson | sha256sum | trunc 7 }}
+  labels:
+    platform.local/owner: platform-team
+  name: gitlab-create-buckets-{{ printf "%s-platform-team" (.Values.buckets | toJson) | sha256sum | trunc 7 }}
 spec:
   backoffLimit: 6
   activeDeadlineSeconds: 600
   template:
+    metadata:
+      labels:
+        platform.local/owner: platform-team
     spec:
       restartPolicy: OnFailure
       containers:
@@ -159,6 +173,8 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab
 spec:
   hostnames: [gitlab.localhost]
@@ -183,6 +199,8 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab-registry
 spec:
   hostnames: [registry.localhost]
@@ -207,6 +225,8 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
+  labels:
+    platform.local/owner: platform-team
   name: gitlab-kas
 spec:
   hostnames: [kas.localhost]

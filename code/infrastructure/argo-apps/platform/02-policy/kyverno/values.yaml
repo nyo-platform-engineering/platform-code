@@ -1,12 +1,22 @@
-# Validation and reports only; no resource mutation or generation.
+customLabels:
+  platform.local/owner: platform-team
+# Validation and reports only; ownership starts in Audit mode.
 config:
   enableDefaultRegistryMutation: false
 crds:
   migration:
+    podLabels:
+      platform.local/owner: platform-team
     podResources:
       requests: null
       limits: null
 admissionController:
+  backgroundScan:
+    skipResourceFilters: true
+  validatingAdmissionPolicyReports:
+    enabled: true
+  podLabels:
+    platform.local/owner: platform-team
   replicas: 1
   initContainer:
     resources:
@@ -21,11 +31,15 @@ backgroundController:
 cleanupController:
   enabled: false
 reportsController:
+  podLabels:
+    platform.local/owner: platform-team
   replicas: 1
   resources:
     requests: null
     limits: null
 webhooksCleanup:
+  podLabels:
+    platform.local/owner: platform-team
   resources:
     requests: null
     limits: null

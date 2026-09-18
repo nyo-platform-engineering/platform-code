@@ -1,4 +1,8 @@
+commonLabels:
+  platform.local/owner: platform-team
 deployment:
+  podLabels:
+    platform.local/owner: platform-team
   replicas: 1
 providers:
   kubernetesGateway:

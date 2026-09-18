@@ -1,3 +1,5 @@
+podLabels:
+  platform.local/owner: platform-team
 fullnameOverride: radar
 ingress:
   enabled: true

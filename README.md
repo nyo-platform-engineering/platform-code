@@ -22,8 +22,8 @@ The stack uses **k3d** to run Kubernetes inside your Linux Docker engine.
 from Git, and **GitLab** hosts local app projects and runs their pipelines.
 **Grafana, Mimir, Loki, and Tempo** provide dashboards and telemetry storage.
 Two **OpenTelemetry Collectors** collect a small set of cluster metrics and
-node/container telemetry. **Kyverno** reports cluster policy violations in
-Audit mode.
+node/container telemetry. **Kyverno** reports ownership-label mismatches across
+all namespaces and other cluster policy violations in Audit mode.
 
 ## Get it running
 
@@ -73,7 +73,7 @@ also explain how to add your own runtime tasks.
 ## Try the app delivery flow
 
 1. Open GitLab using `task links`. Sign in as `root`; get the password with
-   `task password APP=gitlab`.
+   `task password`.
 2. Open the imported **root/go-demo** project and its pipelines. The initial
    import starts **lint → test → build → deploy** automatically.
 3. Build publishes a container image to GitLab's registry. On `main`, deploy
@@ -104,8 +104,8 @@ Run these from `code/infrastructure`:
 | --- | --- |
 | `task` | List available tasks. |
 | `task links` | Find service URLs and login details. |
-| `task password` | Get the Argo CD `admin` password. |
-| `task password APP=gitlab` | Get GitLab's initial `root` password. |
+| `task password` | Get initial passwords for Argo CD `admin` and GitLab `root`. |
+| `task password APP=gitlab` | Get only GitLab's initial `root` password. |
 | `task status` | Inspect pods and each Argo CD Application. |
 | `task logs APP=go-demo NAMESPACE=dev` | Follow Go demo logs. |
 | `task gitlab ACTION=status` | Inspect GitLab startup. |

@@ -36,6 +36,8 @@ kind: Pod
 metadata:
   name: $upload_pod
   namespace: gitlab
+  labels:
+    platform.local/owner: platform-team
 spec:
   restartPolicy: Never
   containers:

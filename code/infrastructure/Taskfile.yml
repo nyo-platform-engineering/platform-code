@@ -107,6 +107,10 @@ tasks:
       APP: '{{.APP | default "all"}}'
     cmds:
       - 'bash scripts/bootstrap.sh password "{{.APP}}"'
+  test-labels:
+    desc: Test Go demo ownership admission with server dry runs across namespaces
+    cmds:
+      - bash tests/ownership.sh
   logs:
     desc: Follow app logs (default otel-collector-cluster; override APP and NAMESPACE)
     vars:
