@@ -47,7 +47,10 @@ Kyverno runs admission and reports controllers only. Five cluster-scoped
 ValidatingPolicies start in Audit mode: versioned images, Traefik-only
 LoadBalancer services, non-privileged containers (except kube-system),
 Deployment readiness probes, and no container CPU/memory sizing for this local
-cluster. PVC storage requests are unaffected. These five policies report violations
+cluster. Readiness exceptions are limited to `gitlab/gitlab-toolbox`,
+`kube-system/local-path-provisioner`, and `kyverno/kyverno-reports-controller`: these
+background tools have no traffic-readiness probe support in the pinned charts.
+Other Deployments in those namespaces still require probes. PVC storage requests are unaffected. These five policies report violations
 without blocking workloads. Inspect policy reports and change each policy's
 `spec.validationActions` from `[Audit]` to `[Deny]` when ready. The current
 `policies.kyverno.io/v1` API avoids deprecated ClusterPolicy resources.

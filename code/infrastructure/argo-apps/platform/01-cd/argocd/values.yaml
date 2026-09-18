@@ -25,3 +25,8 @@ notifications:
   enabled: false
 applicationSet:
   replicas: 1
+  readinessProbe:
+    enabled: true
+redis:
+  readinessProbe:
+    enabled: true

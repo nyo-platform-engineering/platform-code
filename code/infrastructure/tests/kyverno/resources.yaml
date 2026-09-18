@@ -100,3 +100,75 @@ spec:
       containers:
         - name: app
           image: local/go-demo:dev1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: gitlab
+  name: gitlab-toolbox
+spec:
+  selector:
+    matchLabels:
+      app: missing-probe
+  template:
+    metadata:
+      labels:
+        app: missing-probe
+    spec:
+      containers:
+      - name: app
+        image: local/go-demo:dev1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: local-path-provisioner
+spec:
+  selector:
+    matchLabels:
+      app: missing-probe
+  template:
+    metadata:
+      labels:
+        app: missing-probe
+    spec:
+      containers:
+      - name: app
+        image: local/go-demo:dev1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: kyverno
+  name: kyverno-reports-controller
+spec:
+  selector:
+    matchLabels:
+      app: missing-probe
+  template:
+    metadata:
+      labels:
+        app: missing-probe
+    spec:
+      containers:
+      - name: app
+        image: local/go-demo:dev1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: kube-system
+  name: unapproved-worker
+spec:
+  selector:
+    matchLabels:
+      app: missing-probe
+  template:
+    metadata:
+      labels:
+        app: missing-probe
+    spec:
+      containers:
+      - name: app
+        image: local/go-demo:dev1

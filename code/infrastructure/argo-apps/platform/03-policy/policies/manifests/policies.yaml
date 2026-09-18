@@ -112,8 +112,14 @@ spec:
         operations: [CREATE, UPDATE]
         resources: [deployments]
   validations:
-    - expression: object.spec.template.spec.containers.all(c, has(c.readinessProbe))
-      message: Every Deployment container must define a readiness probe.
+    # These pinned-chart background tools have no traffic-readiness probe support.
+    # Keep exceptions exact: other Deployments in these namespaces still need probes.
+    - expression: >-
+        (object.metadata.namespace == 'gitlab' && object.metadata.name == 'gitlab-toolbox') ||
+        (object.metadata.namespace == 'kube-system' && object.metadata.name == 'local-path-provisioner') ||
+        (object.metadata.namespace == 'kyverno' && object.metadata.name == 'kyverno-reports-controller') ||
+        object.spec.template.spec.containers.all(c, has(c.readinessProbe))
+      message: Every Deployment container must define a readiness probe, except the three documented background tools.
 ---
 # Local-cluster convention; PVC storage requests are intentionally unaffected.
 apiVersion: policies.kyverno.io/v1

@@ -47,3 +47,11 @@ results:
     kind: Deployment
     resources: [missing-probe]
     result: fail
+  - policy: require-deployment-readiness
+    kind: Deployment
+    resources: [gitlab-toolbox, local-path-provisioner, kyverno-reports-controller]
+    result: pass
+  - policy: require-deployment-readiness
+    kind: Deployment
+    resources: [unapproved-worker]
+    result: fail
