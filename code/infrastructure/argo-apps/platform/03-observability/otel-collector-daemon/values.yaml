@@ -10,6 +10,17 @@ image:
 command:
   name: otelcol-contrib
 resources: {}
+initContainers:
+  - name: wait-for-clickhouse
+    image: busybox:1.37.0
+    command: [sh, -ec]
+    args:
+      - |
+        until nslookup clickhouse.monitoring.svc.cluster.local >/dev/null 2>&1 && nc -z clickhouse.monitoring.svc.cluster.local 9000; do
+          echo "waiting for ClickHouse DNS and native port"
+          sleep 2
+        done
+    resources: {}
 extraEnvs:
   - name: CLICKHOUSE_PASSWORD
     valueFrom:

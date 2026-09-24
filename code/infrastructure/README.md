@@ -264,8 +264,9 @@ and Gateway API versions live in `Taskfile.yml`. Child chart versions and Git
 sources live in each `argo-apps/platform` Application. Altinity's operator
 manages the local chart's single-node `ClickHouseInstallation`. The pinned
 Altinity Stable server stores logs and traces; Mimir stores metrics; Grafana
-queries Mimir. The cluster and daemon collectors use the upstream OpenTelemetry
-chart and Contrib distribution.
+queries Mimir and ClickHouse through Grafana Labs' official ClickHouse data
+source plugin. The cluster and daemon collectors use the upstream
+OpenTelemetry chart and Contrib distribution.
 
 ### Existing ClickStack installations
 
@@ -344,16 +345,17 @@ Bootstrap reads the Argo CD chart version from
 
 ## Observability
 
-Use Grafana from `task links` to explore Mimir metrics. Logs and traces are
-retained in ClickHouse without a UI for now. The collectors keep metric
-collection small; the sections below explain what is retained and where to
-change it.
+Use Grafana from `task links` to explore Mimir metrics and query ClickHouse
+logs and traces. The collectors keep metric collection small; the sections
+below explain what is retained and where to change it.
 
 ClickHouse is a separate Argo CD Application managed by Altinity's operator.
 Add idempotent custom schema SQL in
 `argo-apps/platform/03-observability/clickhouse/values.yaml`; its schema Job is
-replaced whenever that SQL changes. The OTel ClickHouse exporter owns the
-compatible `otel.otel_logs` and `otel.otel_traces` schema. The removed
+recreated as an Argo sync hook whenever that SQL changes. The OTel ClickHouse
+exporter owns the compatible `otel.otel_logs` and `otel.otel_traces` schema.
+The collectors wait for ClickHouse DNS and its native port before starting, so
+ClickHouse reconciliation cannot put them into a startup crash loop. The removed
 ClickStack schema and capture queries remain in
 `argo-apps/platform/03-observability/clickstack/SCHEMA_REFERENCE.md` for future
 UI design.
@@ -383,6 +385,8 @@ to avoid feedback.
 Shared scrapes run only in the cluster Deployment, avoiding duplicates as nodes
 are added. Keep the cluster collector at one replica unless scrape targets are
 partitioned. Grafana provisions Mimir as its default Prometheus data source.
+It also provisions Grafana Labs' `grafana-clickhouse-datasource` with the
+read-only `app` account for log and trace exploration.
 
 Metrics are deliberately minimal. Backend scrapes retain only `up`,
 `process_cpu_seconds_total`, `process_resident_memory_bytes`, and `go_goroutines`:

@@ -25,7 +25,7 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | `02-observability` | Observability storage prerequisites | Altinity ClickHouse operator/Mimir (2) |
 | `02-policy` | Policy engine | Kyverno (2) |
 | `03-policy` | Cluster validation policies | Cluster policies (3) |
-| `03-observability` | Telemetry collection, storage, and visualization | ClickHouse/Grafana/OTel cluster collector/OTel daemon collector/Policy Reporter (3) |
+| `03-observability` | Telemetry collection, storage, and visualization | ClickHouse/Policy Reporter (3), Grafana/OTel collectors (4) |
 | `04-network` | Gateway API listeners | Gateway (4) |
 | `05-environments` | Registration of environment-specific Applications | Development apps (5) |
 
@@ -34,7 +34,8 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 Monitoring and observability overlap. Here, Radar helps inspect the cluster;
 the observability group uses Altinity-managed ClickHouse for logs and traces,
 Mimir for metrics, OpenTelemetry Collector for collection and routing, and
-Grafana for metric visualization.
+Grafana for metric visualization and ClickHouse log/trace exploration through
+Grafana Labs' official ClickHouse data source plugin.
 
 The cluster collector is a single-replica Deployment for shared ClickHouse,
 kube-state-metrics, Argo CD, and policy report scrapes, plus application OTLP ingestion.
@@ -110,9 +111,11 @@ Applications use Argo CD's default health behavior: they do not inherit child
 Application health. Children still report their own workload failures. Sync
 waves order Application definitions without waiting for child workload health.
 Networking spans two folders: Traefik is registered at wave 0 and Gateway at
-wave 4. Observability registers Altinity's operator and Mimir at wave 2, then
-ClickHouse, Grafana, and the collection layer at wave 3. Folder names
-show synchronization order;
+wave 4. Observability registers Altinity's operator and Mimir at wave 2,
+ClickHouse at wave 3, then Grafana and the collection layer at wave 4. The
+collectors also wait for ClickHouse DNS and port readiness because parent
+Application waves do not wait for child workload health. Folder names show
+broad grouping;
 `argocd.argoproj.io/sync-wave` remains the setting that controls it.
 
 ## Change a component

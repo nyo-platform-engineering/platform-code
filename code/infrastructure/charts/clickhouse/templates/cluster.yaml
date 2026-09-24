@@ -40,20 +40,32 @@ spec:
     profiles:
       readonly/readonly: 1
     users:
-      app/k8s_secret_password: monitoring/clickhouse-credentials/appPassword
+      app/password:
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-credentials
+            key: appPassword
       app/networks/ip: ["0.0.0.0/0", "::/0"]
       app/profile: readonly
       app/grants/query:
         - GRANT SELECT ON otel.*
         - GRANT SELECT ON custom.*
-      otelcollector/k8s_secret_password: monitoring/clickhouse-credentials/ingestPassword
+      otelcollector/password:
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-credentials
+            key: ingestPassword
       otelcollector/networks/ip: ["0.0.0.0/0", "::/0"]
       otelcollector/profile: default
       otelcollector/grants/query:
         - GRANT ALL ON otel.*
         - GRANT CREATE DATABASE ON *.*
         - GRANT SELECT ON system.*
-      schema_admin/k8s_secret_password: monitoring/clickhouse-credentials/schemaPassword
+      schema_admin/password:
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-credentials
+            key: schemaPassword
       schema_admin/networks/ip: ["0.0.0.0/0", "::/0"]
       schema_admin/profile: default
       schema_admin/grants/query:

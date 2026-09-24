@@ -6,7 +6,7 @@ metadata:
   name: grafana
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: '3'
+    argocd.argoproj.io/sync-wave: '4'
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:

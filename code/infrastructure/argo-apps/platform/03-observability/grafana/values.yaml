@@ -6,6 +6,13 @@ image:
 adminUser: admin
 adminPassword: admin
 resources: {}
+plugins:
+  - grafana-clickhouse-datasource 4.21.3
+envValueFrom:
+  CLICKHOUSE_APP_PASSWORD:
+    secretKeyRef:
+      name: clickhouse-credentials
+      key: appPassword
 dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1
@@ -48,3 +55,25 @@ datasources:
         access: proxy
         url: http://mimir:9009/prometheus
         isDefault: true
+      - name: ClickHouse
+        uid: clickhouse
+        type: grafana-clickhouse-datasource
+        access: proxy
+        editable: true
+        jsonData:
+          host: clickhouse.monitoring.svc.cluster.local
+          port: 9000
+          protocol: native
+          username: app
+          defaultDatabase: otel
+          configMode: classic
+          logs:
+            defaultDatabase: otel
+            defaultTable: otel_logs
+            otelEnabled: true
+          traces:
+            defaultDatabase: otel
+            defaultTable: otel_traces
+            otelEnabled: true
+        secureJsonData:
+          password: $CLICKHOUSE_APP_PASSWORD
