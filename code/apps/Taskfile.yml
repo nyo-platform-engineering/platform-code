@@ -1,5 +1,18 @@
 version: '3'
 tasks:
+  telemetry-ui-test:
+    desc: Install/build the telemetry UI with pnpm and test/vet its Go API in containers
+    dir: '{{.TASKFILE_DIR}}/telemetry-ui'
+    cmds:
+      - docker build --target web-build --tag local/telemetry-ui-web-test .
+      - docker build --target go-build --tag local/telemetry-ui-go-test .
+  telemetry-ui-build:
+    desc: Build the initial Go and React telemetry UI image
+    dir: '{{.TASKFILE_DIR}}/telemetry-ui'
+    vars:
+      IMAGE_TAG: '{{.IMAGE_TAG | default "dev1"}}'
+    cmds:
+      - docker build --tag "local/telemetry-ui:{{.IMAGE_TAG}}" .
   go-demo:
     desc: Build, save, import into k3d, and restart the Go demo
     dir: '{{.TASKFILE_DIR}}/go-demo'

@@ -1,0 +1,12 @@
+:root {
+  color: var(--ui-text);
+  background: var(--ui-canvas);
+  font-family: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--ui-canvas-gradient); }
+button, select { font: inherit; }
