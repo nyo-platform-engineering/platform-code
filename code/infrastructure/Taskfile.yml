@@ -17,6 +17,7 @@ vars:
   HTTPS_PORT: '{{.HTTPS_PORT | default .LOCAL_SETTINGS.HTTPS_PORT | default "443"}}'
   API_PORT: '{{.API_PORT | default .LOCAL_SETTINGS.API_PORT | default "6550"}}'
   K3S_IMAGE: '{{.K3S_IMAGE | default .LOCAL_SETTINGS.K3S_IMAGE | default "rancher/k3s:v1.34.5-k3s1"}}'
+  KUBECTL_VERSION: '{{.KUBECTL_VERSION | default .LOCAL_SETTINGS.KUBECTL_VERSION | default "v1.34.5"}}'
   GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION | default .LOCAL_SETTINGS.GATEWAY_API_VERSION | default "v1.5.1"}}'
   IMAGE_TAG: '{{.IMAGE_TAG | default .LOCAL_SETTINGS.IMAGE_TAG | default "dev1"}}'
   DOCKER_CONTEXT: '{{.DOCKER_CONTEXT | default .LOCAL_SETTINGS.DOCKER_CONTEXT | default ""}}'
@@ -31,6 +32,7 @@ env:
   HTTPS_PORT: '{{.HTTPS_PORT}}'
   API_PORT: '{{.API_PORT}}'
   K3S_IMAGE: '{{.K3S_IMAGE}}'
+  KUBECTL_VERSION: '{{.KUBECTL_VERSION}}'
   GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION}}'
   APP_CODE_DIR: '{{.APP_CODE_DIR}}'
 silent: true
@@ -39,7 +41,7 @@ tasks:
     cmds:
       - task --list
   setup:
-    desc: Install CLI tools with winget (Windows), Homebrew (macOS), or pacman (Arch Linux)
+    desc: Install k3d, Helm, and kubectl on Windows, macOS, or Linux
     platforms: [windows, darwin, linux]
     cmds:
       - cmd: winget install --id k3d.k3d --exact --accept-package-agreements --accept-source-agreements
@@ -48,15 +50,7 @@ tasks:
         platforms: [windows]
       - cmd: brew install k3d helm kubernetes-cli
         platforms: [darwin]
-      - cmd: |
-          if command -v pacman >/dev/null 2>&1; then
-            pacman -S helm kubectl
-          else
-            echo "No pacman found. Install helm and kubectl manually for your distro." >&2
-            exit 1
-          fi
-        platforms: [linux]
-      - cmd: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+      - cmd: bash scripts/setup-linux.sh
         platforms: [linux]
   up:
     desc: Create k3d, bootstrap Argo CD, and register the platform application

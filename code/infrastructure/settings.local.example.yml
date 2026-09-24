@@ -10,6 +10,7 @@ API_PORT: '6550'
 
 # Optional version overrides (shared defaults stay pinned in Taskfile.yml).
 # K3S_IMAGE: rancher/k3s:v1.34.5-k3s1
+# KUBECTL_VERSION: v1.34.5
 # GATEWAY_API_VERSION: v1.5.1
 # IMAGE_TAG: dev1
 

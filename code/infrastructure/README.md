@@ -135,6 +135,21 @@ replacement Bash is required. On Apple Silicon, the demo task builds for the
 cluster node's architecture rather than assuming amd64; rebuild the image on
 that machine instead of reusing an archive from an Intel machine.
 
+### Ubuntu and other Linux distributions
+
+Install Task and Docker first, then run `task setup`. The setup task downloads
+checksum-verified kubectl, Helm, and k3d releases into `/usr/local/bin`, asking
+for `sudo` only when that directory is not writable. Existing tools on `PATH`
+are left unchanged. The default kubectl version matches the bundled k3s
+version; override `KUBECTL_VERSION` when changing `K3S_IMAGE`.
+
+Ubuntu prerequisites, if they are not already installed:
+
+```bash
+sudo apt-get install curl openssl tar coreutils
+task setup
+```
+
 ### Shared workflow
 
 Check `docker context ls` and `docker info` if the engine is unreachable.
@@ -142,7 +157,7 @@ The scripts use your selected Docker connection and do not start or install
 a container runtime. From `code/infrastructure` on either OS:
 
 ```bash
-task setup       # winget on Windows; Homebrew on macOS
+task setup       # winget on Windows; Homebrew on macOS; official installers on Linux
 # On Windows, reopen Git Bash after new tool installations.
 task up          # checks tools, bootstraps the cluster, and prints service links
 task gitlab      # import app projects, configure CI, and start the demo pipeline
