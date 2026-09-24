@@ -1,7 +1,7 @@
 credentials:
-  # Keep app/ingest values aligned with ClickStack's local-development secret.
-  appPassword: local-clickstack-app
-  ingestPassword: local-clickstack-otel
+  # Local-development credentials. Replace them outside a disposable cluster.
+  appPassword: local-clickhouse-app
+  ingestPassword: local-clickhouse-otel
   schemaPassword: local-clickhouse-schema
 schema:
   sql: |

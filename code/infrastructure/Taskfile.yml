@@ -88,7 +88,7 @@ tasks:
       - |
         printf '%-12s %s\n' \
           'Argo CD' 'http://argocd.localhost{{.URL_PORT}} (admin / task password)' \
-          'ClickStack' 'http://clickstack.localhost{{.URL_PORT}} (create the initial user)' \
+          'Grafana' 'http://grafana.localhost{{.URL_PORT}} (admin / admin)' \
           'Radar' 'http://radar.localhost{{.URL_PORT}}' \
           'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
           'Go demo' 'http://go.localhost{{.URL_PORT}}' \

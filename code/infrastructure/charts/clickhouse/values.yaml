@@ -1,11 +1,10 @@
-image: clickhouse/clickhouse-server:25.7-alpine
+image: altinity/clickhouse-server:26.3.33.10001.altinitystable
 storageClassName: local-path
 storage:
   clickhouse: 5Gi
-  keeper: 1Gi
 credentials:
-  appPassword: local-clickstack-app
-  ingestPassword: local-clickstack-otel
+  appPassword: local-clickhouse-app
+  ingestPassword: local-clickhouse-otel
   schemaPassword: local-clickhouse-schema
 schema:
   enabled: true

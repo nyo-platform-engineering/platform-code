@@ -51,10 +51,10 @@ spec:
           command: [/bin/sh, -ec]
           args:
             - |
-              until clickhouse-client --host clickhouse-clickhouse-headless --user schema_admin --password "$CLICKHOUSE_PASSWORD" --query "SELECT 1"; do
+              until clickhouse-client --host clickhouse --user schema_admin --password "$CLICKHOUSE_PASSWORD" --query "SELECT 1"; do
                 sleep 2
               done
-              clickhouse-client --host clickhouse-clickhouse-headless --user schema_admin --password "$CLICKHOUSE_PASSWORD" --multiquery < /schema/schema.sql
+              clickhouse-client --host clickhouse --user schema_admin --password "$CLICKHOUSE_PASSWORD" --multiquery < /schema/schema.sql
           env:
             - name: CLICKHOUSE_PASSWORD
               valueFrom:

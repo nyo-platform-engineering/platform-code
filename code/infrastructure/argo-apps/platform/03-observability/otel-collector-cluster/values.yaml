@@ -12,11 +12,11 @@ command:
   name: otelcol-contrib
 resources: {}
 extraEnvs:
-  - name: HYPERDX_API_KEY
+  - name: CLICKHOUSE_PASSWORD
     valueFrom:
       secretKeyRef:
-        name: clickstack-secret
-        key: HYPERDX_API_KEY
+        name: clickhouse-credentials
+        key: ingestPassword
 service:
   enabled: true
 ports:
@@ -44,21 +44,15 @@ config:
               - source_labels: [__name__]
                 regex: 'policy_report_result|cluster_policy_report_result'
                 action: keep
-          - job_name: clickstack-collector
-            scrape_interval: 60s
-            scrape_timeout: 10s
-            static_configs:
-              - targets: [clickstack-otel-collector:8888]
-            metric_relabel_configs: &minimal_backend_metrics
-              - source_labels: [__name__]
-                regex: 'process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines'
-                action: keep
           - job_name: clickhouse
             scrape_interval: 60s
             scrape_timeout: 10s
             static_configs:
-              - targets: [clickhouse-clickhouse-headless:9363]
-            metric_relabel_configs: *minimal_backend_metrics
+              - targets: [clickhouse:9363]
+            metric_relabel_configs:
+              - source_labels: [__name__]
+                regex: 'process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines'
+                action: keep
           - job_name: kube-state-metrics
             scrape_interval: 60s
             scrape_timeout: 10s
@@ -99,22 +93,35 @@ config:
       send_batch_max_size: 512
   exporters:
     debug: null
-    otlp_http/clickstack:
-      endpoint: http://clickstack-otel-collector:4318
-      compression: gzip
-      headers:
-        authorization: ${env:HYPERDX_API_KEY}
+    prometheusremotewrite/mimir:
+      endpoint: http://mimir:9009/api/v1/push
+    clickhouse:
+      endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4&enable_json_type=1
+      database: otel
+      username: otelcollector
+      password: ${env:CLICKHOUSE_PASSWORD}
+      async_insert: true
+      ttl: 72h
+      create_schema: true
+      logs_table_name: otel_logs
+      traces_table_name: otel_traces
+      timeout: 5s
+      retry_on_failure:
+        enabled: true
+        initial_interval: 5s
+        max_interval: 30s
+        max_elapsed_time: 300s
   service:
     pipelines:
       metrics:
         receivers: [prometheus, otlp]
         processors: [filter/minimal, batch]
-        exporters: [otlp_http/clickstack]
+        exporters: [prometheusremotewrite/mimir]
       traces:
         receivers: [otlp]
         processors: [batch]
-        exporters: [otlp_http/clickstack]
+        exporters: [clickhouse]
       logs:
         receivers: [otlp]
         processors: [batch]
-        exporters: [otlp_http/clickstack]
+        exporters: [clickhouse]

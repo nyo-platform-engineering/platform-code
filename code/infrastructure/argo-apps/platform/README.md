@@ -22,28 +22,28 @@ Argo CD reads all these folders recursively from `../root.yaml`.
 | `02-cd` | Local GitLab dependencies | PostgreSQL/Redis/object storage (2) |
 | `03-cd` | Git hosting, CI runner, registry, and supporting GitLab components | GitLab CE (3) |
 | `02-monitoring` | Kubernetes resource and topology inspection | Radar/Kube-state-metrics (2) |
-| `02-observability` | Observability operators | ClickStack operators (2) |
+| `02-observability` | Observability storage prerequisites | Altinity ClickHouse operator/Mimir (2) |
 | `02-policy` | Policy engine | Kyverno (2) |
 | `03-policy` | Cluster validation policies | Cluster policies (3) |
-| `03-observability` | Telemetry collection, storage, and visualization | ClickHouse/ClickStack/OTel cluster collector/OTel daemon collector/Policy Reporter (3) |
+| `03-observability` | Telemetry collection, storage, and visualization | ClickHouse/Grafana/OTel cluster collector/OTel daemon collector/Policy Reporter (3) |
 | `04-network` | Gateway API listeners | Gateway (4) |
 | `05-environments` | Registration of environment-specific Applications | Development apps (5) |
 
 ## Understand telemetry collection
 
 Monitoring and observability overlap. Here, Radar helps inspect the cluster;
-the observability group handles storage (independent ClickHouse), unified logs,
-traces, and metrics (ClickStack), collection and forwarding (OpenTelemetry
-Collector), and the HyperDX UI.
+the observability group uses Altinity-managed ClickHouse for logs and traces,
+Mimir for metrics, OpenTelemetry Collector for collection and routing, and
+Grafana for metric visualization.
 
-The cluster collector is a single-replica Deployment for shared ClickStack,
+The cluster collector is a single-replica Deployment for shared ClickHouse,
 kube-state-metrics, Argo CD, and policy report scrapes, plus application OTLP ingestion.
 The daemon collector handles per-node cAdvisor and pod logs. Each scrape runs
 every 60 seconds (policy reports every 30 seconds) with a small metric allowlist; shared jobs never run on the
 DaemonSet. Both collectors' logs are excluded from pod-log ingestion.
 
 Policy Reporter watches cluster-wide Kyverno reports and exports current results
-for ClickStack. Use the HyperDX metrics source to inspect current violations,
+to Mimir. Use Grafana to inspect current violations,
 affected resources, history, and collection health. See the
 [collection guide](03-observability/policy-reporter/README.md) for coverage and
 the distinction between current reports and historical events.
@@ -110,8 +110,8 @@ Applications use Argo CD's default health behavior: they do not inherit child
 Application health. Children still report their own workload failures. Sync
 waves order Application definitions without waiting for child workload health.
 Networking spans two folders: Traefik is registered at wave 0 and Gateway at
-wave 4. Observability registers ClickStack's operators at wave 2, then the
-independent ClickHouse, ClickStack, and collection layer at wave 3. Folder names
+wave 4. Observability registers Altinity's operator and Mimir at wave 2, then
+ClickHouse, Grafana, and the collection layer at wave 3. Folder names
 show synchronization order;
 `argocd.argoproj.io/sync-wave` remains the setting that controls it.
 

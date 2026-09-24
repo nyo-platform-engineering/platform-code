@@ -1,5 +1,19 @@
-apiVersion: clickhouse.com/v1alpha1
-kind: ClickHouseCluster
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clickhouse-credentials
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: clickhouse
+    platform.local/owner: platform-team
+type: Opaque
+stringData:
+  appPassword: {{ .Values.credentials.appPassword | quote }}
+  ingestPassword: {{ .Values.credentials.ingestPassword | quote }}
+  schemaPassword: {{ .Values.credentials.schemaPassword | quote }}
+---
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
 metadata:
   name: clickhouse
   labels:
@@ -7,42 +21,84 @@ metadata:
     app.kubernetes.io/instance: clickhouse
     platform.local/owner: platform-team
 spec:
-  replicas: 1
-  shards: 1
-  keeperClusterRef:
-    name: clickhouse-keeper
-  containerTemplate:
-    image:
-      repository: {{ regexReplaceAll ":[^:]+$" .Values.image "" }}
-      tag: {{ regexFind "[^:]+$" .Values.image | quote }}
-    resources:
-      requests:
-        ephemeral-storage: "0"
-  dataVolumeClaimSpec:
-    accessModes: [ReadWriteOnce]
-    storageClassName: {{ .Values.storageClassName }}
-    resources:
-      requests:
-        storage: {{ .Values.storage.clickhouse }}
-  settings:
-    extraUsersConfig:
-      users:
-        app:
-          password: {{ .Values.credentials.appPassword | quote }}
-          profile: default
-          grants:
-            - query: "GRANT SHOW ON *.*, SELECT ON system.*, SELECT ON default.*, SELECT ON custom.*"
-        otelcollector:
-          password: {{ .Values.credentials.ingestPassword | quote }}
-          profile: default
-          grants:
-            - query: "GRANT SELECT,INSERT,CREATE,SHOW ON default.*"
-        schema_admin:
-          password: {{ .Values.credentials.schemaPassword | quote }}
-          profile: default
-          grants:
-            - query: "GRANT ALL ON *.* WITH GRANT OPTION"
-    extraConfig:
+  defaults:
+    templates:
+      podTemplate: clickhouse
+      dataVolumeClaimTemplate: clickhouse-data
+      serviceTemplate: clickhouse
+  configuration:
+    settings:
       max_connections: 4096
       keep_alive_timeout: 64
       max_concurrent_queries: 100
+      prometheus/endpoint: /metrics
+      prometheus/port: 9363
+      prometheus/metrics: true
+      prometheus/asynchronous_metrics: true
+      prometheus/events: true
+      prometheus/status_info: true
+    profiles:
+      readonly/readonly: 1
+    users:
+      app/k8s_secret_password: monitoring/clickhouse-credentials/appPassword
+      app/networks/ip: ["0.0.0.0/0", "::/0"]
+      app/profile: readonly
+      app/grants/query:
+        - GRANT SELECT ON otel.*
+        - GRANT SELECT ON custom.*
+      otelcollector/k8s_secret_password: monitoring/clickhouse-credentials/ingestPassword
+      otelcollector/networks/ip: ["0.0.0.0/0", "::/0"]
+      otelcollector/profile: default
+      otelcollector/grants/query:
+        - GRANT ALL ON otel.*
+        - GRANT CREATE DATABASE ON *.*
+        - GRANT SELECT ON system.*
+      schema_admin/k8s_secret_password: monitoring/clickhouse-credentials/schemaPassword
+      schema_admin/networks/ip: ["0.0.0.0/0", "::/0"]
+      schema_admin/profile: default
+      schema_admin/grants/query:
+        - GRANT ALL ON *.* WITH GRANT OPTION
+        - GRANT SHOW ON *.*
+    clusters:
+      - name: observability
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+  templates:
+    podTemplates:
+      - name: clickhouse
+        metadata:
+          labels:
+            app.kubernetes.io/name: clickhouse
+            app.kubernetes.io/instance: clickhouse
+            platform.local/owner: platform-team
+        spec:
+          containers:
+            - name: clickhouse
+              image: {{ .Values.image }}
+              resources:
+                requests:
+                  ephemeral-storage: "0"
+    volumeClaimTemplates:
+      - name: clickhouse-data
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: {{ .Values.storageClassName }}
+          resources:
+            requests:
+              storage: {{ .Values.storage.clickhouse }}
+    serviceTemplates:
+      - name: clickhouse
+        generateName: clickhouse
+        spec:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 8123
+              targetPort: 8123
+            - name: native
+              port: 9000
+              targetPort: 9000
+            - name: metrics
+              port: 9363
+              targetPort: 9363

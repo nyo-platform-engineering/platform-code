@@ -27,17 +27,17 @@ argo-apps/
     02-cd/gitlab-services/   local GitLab database, cache, and object storage
     03-cd/gitlab/            official GitLab Helm chart and values
     02-monitoring/           radar/ and kube-state-metrics/ (app.yaml + values.yaml)
-    02-observability/        ClickStack operator Application; disabled LGTM definitions
+    02-observability/        Altinity operator and Mimir Applications; disabled alternatives
     02-policy/               kyverno/ (app.yaml + values.yaml)
     03-policy/               policies/ (app.yaml + manifests/)
-    03-observability/        clickhouse/, clickstack/, and the cluster/daemon OTel collectors
+    03-observability/        ClickHouse, Grafana, OTel collectors, and disabled ClickStack reference
     04-network/gateway/      app.yaml and manifests/gateway.yaml
     05-environments/         05-dev-apps.yaml
   dev/                       development Applications, deployment values, Kustomization
 charts/
-  clickhouse/                independent ClickHouse/Keeper resources and schema Job
+  clickhouse/                Altinity ClickHouseInstallation and custom schema Job
   deployment/                reusable application Deployment/Service/HTTPRoute/PVC chart
-  mimir/                     inactive legacy Mimir chart retained for reference
+  mimir/                     single-process local metrics backend
   gitlab-services/            single-instance local GitLab dependencies
 examples/                    application and backend route examples
 ```
@@ -45,8 +45,8 @@ examples/                    application and backend route examples
 Argo CD owns the stack. The Bash script creates the cluster, installs Gateway
 API CRDs, bootstraps Argo CD if missing, and registers the root Application.
 It does not install or upgrade the other services. Argo CD sync waves deploy
-Traefik, Argo CD itself, ClickStack operators/Radar/Kube-state-metrics,
-ClickStack/OpenTelemetry Collectors, and finally
+Traefik, Argo CD itself, Altinity/Mimir/Radar/Kube-state-metrics,
+ClickHouse/Grafana/OpenTelemetry Collectors, and finally
 the Gateway, followed by the development Application layer. The two-digit
 prefix on each platform wave folder equals its `argocd.argoproj.io/sync-wave`
 annotation. Apps in the same wave share a prefix. Argo CD uses the annotation
@@ -237,7 +237,7 @@ HTTP port, use `task links HTTP_PORT=8080` with the same port used for `task up`
 | URL | Login |
 | --- | --- |
 | http://argocd.localhost | admin / `task password` |
-| http://clickstack.localhost | Create the initial user |
+| http://grafana.localhost | `admin` / `admin` |
 | http://radar.localhost | No login configured |
 | http://traefik.localhost/dashboard/ | No login configured |
 | http://go.localhost | Go demo JSON greeting |
@@ -259,33 +259,33 @@ require extra permissions for ports 80/443. Use the same HTTP port with
 `task links HTTP_PORT=8080`; changing an existing cluster's published ports
 requires `task restart` with those overrides and deletes its data.
 
-Then browse `http://clickstack.localhost:8080`, etc. Cluster defaults and the k3s
+Then browse `http://grafana.localhost:8080`, etc. Cluster defaults and the k3s
 and Gateway API versions live in `Taskfile.yml`. Child chart versions and Git
-sources live in each `argo-apps/platform` Application. ClickStack's official
-operator chart installs the ClickHouse and MongoDB operators. The local
-`charts/clickhouse` release owns ClickHouse, Keeper, storage, users, and schema
-SQL independently. The ClickStack chart has its built-in ClickHouse disabled
-and deploys MongoDB, HyperDX, and the ClickStack OpenTelemetry gateway against
-that external service. The cluster and daemon collectors continue to use the
-upstream OpenTelemetry chart and Contrib distribution.
+sources live in each `argo-apps/platform` Application. Altinity's operator
+manages the local chart's single-node `ClickHouseInstallation`. The pinned
+Altinity Stable server stores logs and traces; Mimir stores metrics; Grafana
+queries Mimir. The cluster and daemon collectors use the upstream OpenTelemetry
+chart and Contrib distribution.
 
-### Existing LGTM installations
+### Existing ClickStack installations
 
-The Loki, Tempo, Mimir, and Grafana Application definitions now end in
-`.yaml.disabled`, so the platform root ignores them and Argo CD prunes their
-Applications. ClickStack does not migrate LGTM data. Back up anything you need
-before syncing; retained LGTM PVCs can be removed separately after verification.
+The ClickStack and ClickStack-operator Application definitions now end in
+`.yaml.disabled`, matching the disabled Loki and Tempo pattern. The platform
+root ignores them, so Argo CD prunes ClickStack, MongoDB, and its operators.
+Their values and a captured schema reference remain under the `clickstack`
+folder. Mimir and Grafana are enabled.
 
-For disposable local data, recreate the cluster using `task restart` after
-pushing the updated configuration. To retain data, back up first, disable
-automatic sync on the root, and plan the Application ownership and volume
-migration before enabling it again. A fresh cluster needs no migration.
+This change replaces `clickhouse.com` resources with Altinity's
+`clickhouse.altinity.com` CRDs. For this disposable local stack, recreate the
+cluster using `task restart` after pushing the configuration. To retain data,
+back up ClickHouse first and plan an explicit export/import migration; do not
+expect the new operator to adopt the old StatefulSet or PVC automatically.
 
 ## Local resources and data
 
 One k3s server, zero agents, no node-container memory cap. The pinned Helm
 values explicitly remove CPU and memory defaults, including Radar's resource
-settings, ClickHouse, HyperDX, and the OpenTelemetry Collectors.
+settings, ClickHouse, Grafana, Mimir, and the OpenTelemetry Collectors.
 Applications in `../apps` should omit CPU/memory sizing too.
 
 `task status` checks live containers and init containers. k3s reconciliation
@@ -293,11 +293,11 @@ can restore system defaults after upgrades/restarts; rerun `task up` to clear
 them. Changing chart versions can introduce new defaults, so check resources
 after upgrades.
 
-The independent ClickHouse application requests local-path volumes for ClickHouse
-and Keeper. ClickStack configures 72-hour telemetry retention, and MongoDB is
-operator-managed. GitLab continues to
-use its own MinIO service for object storage. `task down` and `task restart`
-delete cluster data.
+The Altinity-managed ClickHouse application requests one local-path volume.
+The OTel exporter configures 72-hour log/trace retention. Mimir uses its own
+local-path volume and 72-hour metric retention. No Keeper or MongoDB is needed
+for this single-node observability stack. GitLab continues to use its own MinIO
+service. `task down` and `task restart` delete cluster data.
 
 No requests/limits avoids reservations and CPU throttling; actual RAM usage
 still depends on the workload. The container runtime's Linux VM has its own
@@ -344,15 +344,19 @@ Bootstrap reads the Argo CD chart version from
 
 ## Observability
 
-Use ClickStack's HyperDX UI from `task links` to explore metrics, logs, and traces. The
-collectors keep metric collection small; the sections below explain what is
-retained and where to change it.
+Use Grafana from `task links` to explore Mimir metrics. Logs and traces are
+retained in ClickHouse without a UI for now. The collectors keep metric
+collection small; the sections below explain what is retained and where to
+change it.
 
-ClickHouse is a separate Argo CD Application. Add idempotent custom schema SQL in
+ClickHouse is a separate Argo CD Application managed by Altinity's operator.
+Add idempotent custom schema SQL in
 `argo-apps/platform/03-observability/clickhouse/values.yaml`; its schema Job is
-replaced whenever that SQL changes. ClickStack's bundled collector still owns
-the standard `default.otel_*` ingestion schema. To ingest into unrelated custom
-tables, configure a separate pipeline and point a HyperDX source at those tables.
+replaced whenever that SQL changes. The OTel ClickHouse exporter owns the
+compatible `otel.otel_logs` and `otel.otel_traces` schema. The removed
+ClickStack schema and capture queries remain in
+`argo-apps/platform/03-observability/clickstack/SCHEMA_REFERENCE.md` for future
+UI design.
 
 Applications send OTLP to OpenTelemetry Collector:
 
@@ -368,16 +372,17 @@ For gRPC, use port 4317. Host applications can use a local tunnel:
 kubectl --context k3d-dev -n monitoring port-forward svc/otel-collector-cluster 4317:4317 4318:4318
 ```
 
-`otel-collector-cluster` is a single-replica Deployment. It scrapes ClickStack,
-kube-state-metrics, and the Argo CD application controller every
+`otel-collector-cluster` is a single-replica Deployment. It scrapes ClickHouse,
+kube-state-metrics, Policy Reporter, and the Argo CD application controller every
 60 seconds, and accepts application OTLP logs, metrics, and traces.
 `otel-collector-daemon` runs once per node. It reads local pod logs and scrapes
 that node's cAdvisor endpoint; it exposes no application OTLP Service.
-Both collectors export all three signals over authenticated OTLP/HTTP to the
-ClickStack gateway. The daemon excludes all collector logs to avoid feedback.
+Both collectors export metrics through Prometheus remote write to Mimir and
+export logs/traces directly to ClickHouse. The daemon excludes collector logs
+to avoid feedback.
 Shared scrapes run only in the cluster Deployment, avoiding duplicates as nodes
 are added. Keep the cluster collector at one replica unless scrape targets are
-partitioned. HyperDX provisions ClickHouse-backed logs, metrics, and traces sources.
+partitioned. Grafana provisions Mimir as its default Prometheus data source.
 
 Metrics are deliberately minimal. Backend scrapes retain only `up`,
 `process_cpu_seconds_total`, `process_resident_memory_bytes`, and `go_goroutines`:
@@ -398,7 +403,7 @@ Edit shared scrape allowlists and `filter/minimal` in
 `argo-apps/platform/03-observability/otel-collector-cluster/values.yaml`.
 Node-metric filters and log collection live beside it in
 `otel-collector-daemon/values.yaml`. Logs and traces bypass metric filters.
-ClickStack receives pod and application telemetry through its OTLP/HTTP endpoint.
+Mimir receives metrics and ClickHouse receives logs and traces.
 Pod metadata remains available as OpenTelemetry Kubernetes resource attributes.
 
 ### Minimal Kubernetes metrics
@@ -427,7 +432,7 @@ cAdvisor uses the Collector's service-account token, validates kubelet TLS
 with the cluster CA, and has only `get` permission on `nodes/metrics`.
 Each daemon collector scrapes its own node using the downward-API node IP.
 
-Useful metrics to chart in HyperDX include:
+Useful metrics to chart in Grafana include:
 
 `container_cpu_usage_seconds_total`, `container_memory_working_set_bytes`,
 `kube_pod_status_ready`, and `kube_pod_container_status_restarts_total`.
@@ -472,7 +477,7 @@ task status
 task links
 task password
 task logs                 # cluster collector
-task logs APP=clickstack NAMESPACE=monitoring
+task logs APP=clickhouse NAMESPACE=monitoring
 task logs APP=go-demo NAMESPACE=dev
 task go-demo              # build, save, import, and restart the demo
 k3d cluster stop dev      # pause the default cluster and keep its data

@@ -1,14 +1,16 @@
-# Independent ClickHouse chart
+# Altinity-managed ClickHouse chart
 
-This chart owns the ClickHouse and Keeper custom resources separately from
-ClickStack. Edit `schema.sql` in the platform values file to add idempotent
-databases, tables, materialized views, and indexes. Argo CD replaces the schema
-Job when its rendered input changes.
+This chart owns a single-node Altinity `ClickHouseInstallation` for local
+observability. It deliberately omits Keeper because one shard with one replica
+does not need coordination. Edit `schema.sql` in the platform values file to
+add idempotent custom databases, tables, views, and indexes. Argo CD replaces
+the schema Job when its rendered input changes.
 
-The `app` and `otelcollector` passwords must match ClickStack's external
-connection and exporter credentials. The checked-in values are only for the
-disposable local cluster.
+The OpenTelemetry collectors read the `otelcollector` password from the
+chart-managed `clickhouse-credentials` Secret. The checked-in values are only
+for the disposable local cluster.
 
-ClickStack's bundled collector still creates and writes its standard `default.otel_*`
-tables. Custom ingestion tables require a separate collector/export pipeline;
-HyperDX can query them after adding or changing its source definitions.
+The cluster OpenTelemetry Collector's ClickHouse exporter creates the `otel`
+database and log/trace tables with 72-hour retention. Daemon collectors only
+insert, avoiding concurrent DDL. Metrics are stored in Mimir instead. The `app`
+user is read-only and reserved for a future log/trace UI.
