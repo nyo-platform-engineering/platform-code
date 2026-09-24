@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    platform.local/owner: platform-team
+  name: clickstack-operators
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://clickhouse.github.io/ClickStack-helm-charts
+    chart: clickstack-operators
+    targetRevision: 1.1.0
+    helm:
+      releaseName: clickstack-operators
+      values: |
+        mongodb-operator:
+          operator:
+            podLabels:
+              platform.local/owner: platform-team
+            resources:
+              limits:
+                cpu: null
+                memory: null
+              requests:
+                cpu: null
+                memory: null
+        clickhouse-operator:
+          manager:
+            pod:
+              labels:
+                platform.local/owner: platform-team
+            resources:
+              limits:
+                cpu: null
+                memory: null
+              requests:
+                cpu: null
+                memory: null
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true

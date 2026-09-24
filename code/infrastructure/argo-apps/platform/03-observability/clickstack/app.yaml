@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  labels:
+    platform.local/owner: platform-team
+  name: clickstack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '3'
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+  - repoURL: https://clickhouse.github.io/ClickStack-helm-charts
+    chart: clickstack
+    targetRevision: 3.2.0
+    helm:
+      releaseName: clickstack
+      valueFiles:
+      - $values/code/infrastructure/argo-apps/platform/03-observability/clickstack/values.yaml
+  - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+    targetRevision: main
+    ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+    - SkipDryRunOnMissingResource=true

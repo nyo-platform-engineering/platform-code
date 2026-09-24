@@ -1,0 +1,14 @@
+image: clickhouse/clickhouse-server:25.7-alpine
+storageClassName: local-path
+storage:
+  clickhouse: 5Gi
+  keeper: 1Gi
+credentials:
+  appPassword: local-clickstack-app
+  ingestPassword: local-clickstack-otel
+  schemaPassword: local-clickhouse-schema
+schema:
+  enabled: true
+  sql: |
+    CREATE DATABASE IF NOT EXISTS custom;
+    -- Add idempotent CREATE TABLE / CREATE VIEW statements here.

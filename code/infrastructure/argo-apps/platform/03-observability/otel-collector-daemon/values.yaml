@@ -10,6 +10,12 @@ image:
 command:
   name: otelcol-contrib
 resources: {}
+extraEnvs:
+  - name: HYPERDX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: clickstack-secret
+        key: HYPERDX_API_KEY
 clusterRole:
   create: true
   rules:
@@ -44,6 +50,7 @@ alternateConfig:
       exclude:
         - /var/log/pods/monitoring_otel-collector-cluster*/*/*.log
         - /var/log/pods/monitoring_otel-collector-daemon*/*/*.log
+        - /var/log/pods/monitoring_clickstack-otel-collector*/*/*.log
     prometheus:
       config:
         scrape_configs:
@@ -89,22 +96,19 @@ alternateConfig:
       send_batch_size: 256
       send_batch_max_size: 512
   exporters:
-    prometheus_remote_write/mimir:
-      endpoint: http://mimir:9009/api/v1/push
-      target_info:
-        enabled: false
-      resource_to_telemetry_conversion:
-        enabled: false
-    otlp_http/loki:
-      endpoint: http://loki:3100/otlp
+    otlp_http/clickstack:
+      endpoint: http://clickstack-otel-collector:4318
+      compression: gzip
+      headers:
+        authorization: ${env:HYPERDX_API_KEY}
   service:
     extensions: [health_check]
     pipelines:
       metrics:
         receivers: [prometheus]
         processors: [filter/minimal, batch]
-        exporters: [prometheus_remote_write/mimir]
+        exporters: [otlp_http/clickstack]
       logs:
         receivers: [file_log]
         processors: [batch]
-        exporters: [otlp_http/loki]
+        exporters: [otlp_http/clickstack]

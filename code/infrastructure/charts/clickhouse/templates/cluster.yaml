@@ -1,0 +1,48 @@
+apiVersion: clickhouse.com/v1alpha1
+kind: ClickHouseCluster
+metadata:
+  name: clickhouse
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: clickhouse
+    platform.local/owner: platform-team
+spec:
+  replicas: 1
+  shards: 1
+  keeperClusterRef:
+    name: clickhouse-keeper
+  containerTemplate:
+    image:
+      repository: {{ regexReplaceAll ":[^:]+$" .Values.image "" }}
+      tag: {{ regexFind "[^:]+$" .Values.image | quote }}
+    resources:
+      requests:
+        ephemeral-storage: "0"
+  dataVolumeClaimSpec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: {{ .Values.storageClassName }}
+    resources:
+      requests:
+        storage: {{ .Values.storage.clickhouse }}
+  settings:
+    extraUsersConfig:
+      users:
+        app:
+          password: {{ .Values.credentials.appPassword | quote }}
+          profile: default
+          grants:
+            - query: "GRANT SHOW ON *.*, SELECT ON system.*, SELECT ON default.*, SELECT ON custom.*"
+        otelcollector:
+          password: {{ .Values.credentials.ingestPassword | quote }}
+          profile: default
+          grants:
+            - query: "GRANT SELECT,INSERT,CREATE,SHOW ON default.*"
+        schema_admin:
+          password: {{ .Values.credentials.schemaPassword | quote }}
+          profile: default
+          grants:
+            - query: "GRANT ALL ON *.* WITH GRANT OPTION"
+    extraConfig:
+      max_connections: 4096
+      keep_alive_timeout: 64
+      max_concurrent_queries: 100

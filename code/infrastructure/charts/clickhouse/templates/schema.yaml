@@ -1,0 +1,73 @@
+{{- if .Values.schema.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clickhouse-schema
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: clickhouse
+    platform.local/owner: platform-team
+type: Opaque
+stringData:
+  password: {{ .Values.credentials.schemaPassword | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-schema
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: clickhouse
+    platform.local/owner: platform-team
+data:
+  schema.sql: |
+{{ .Values.schema.sql | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-schema
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: clickhouse
+    platform.local/owner: platform-team
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
+spec:
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse-schema
+        app.kubernetes.io/instance: clickhouse
+        platform.local/owner: platform-team
+      annotations:
+        checksum/schema: {{ .Values.schema.sql | sha256sum }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: schema
+          image: {{ .Values.image }}
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              until clickhouse-client --host clickhouse-clickhouse-headless --user schema_admin --password "$CLICKHOUSE_PASSWORD" --query "SELECT 1"; do
+                sleep 2
+              done
+              clickhouse-client --host clickhouse-clickhouse-headless --user schema_admin --password "$CLICKHOUSE_PASSWORD" --multiquery < /schema/schema.sql
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-schema
+                  key: password
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+              readOnly: true
+          resources: {}
+      volumes:
+        - name: schema
+          configMap:
+            name: clickhouse-schema
+{{- end }}

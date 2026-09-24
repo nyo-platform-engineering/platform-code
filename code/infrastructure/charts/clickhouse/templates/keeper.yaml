@@ -1,0 +1,16 @@
+apiVersion: clickhouse.com/v1alpha1
+kind: KeeperCluster
+metadata:
+  name: clickhouse-keeper
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/instance: clickhouse
+    platform.local/owner: platform-team
+spec:
+  replicas: 1
+  dataVolumeClaimSpec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: {{ .Values.storageClassName }}
+    resources:
+      requests:
+        storage: {{ .Values.storage.keeper }}

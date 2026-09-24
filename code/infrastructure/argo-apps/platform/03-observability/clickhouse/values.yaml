@@ -1,0 +1,9 @@
+credentials:
+  # Keep app/ingest values aligned with ClickStack's local-development secret.
+  appPassword: local-clickstack-app
+  ingestPassword: local-clickstack-otel
+  schemaPassword: local-clickhouse-schema
+schema:
+  sql: |
+    CREATE DATABASE IF NOT EXISTS custom;
+    -- Keep migrations idempotent. Add custom tables and views below.

@@ -11,6 +11,12 @@ image:
 command:
   name: otelcol-contrib
 resources: {}
+extraEnvs:
+  - name: HYPERDX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: clickstack-secret
+        key: HYPERDX_API_KEY
 service:
   enabled: true
 ports:
@@ -38,26 +44,20 @@ config:
               - source_labels: [__name__]
                 regex: 'policy_report_result|cluster_policy_report_result'
                 action: keep
-          - job_name: loki
+          - job_name: clickstack-collector
             scrape_interval: 60s
             scrape_timeout: 10s
             static_configs:
-              - targets: [loki:3100]
+              - targets: [clickstack-otel-collector:8888]
             metric_relabel_configs: &minimal_backend_metrics
               - source_labels: [__name__]
                 regex: 'process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines'
                 action: keep
-          - job_name: tempo
+          - job_name: clickhouse
             scrape_interval: 60s
             scrape_timeout: 10s
             static_configs:
-              - targets: [tempo:3200]
-            metric_relabel_configs: *minimal_backend_metrics
-          - job_name: mimir
-            scrape_interval: 60s
-            scrape_timeout: 10s
-            static_configs:
-              - targets: [mimir:9009]
+              - targets: [clickhouse-clickhouse-headless:9363]
             metric_relabel_configs: *minimal_backend_metrics
           - job_name: kube-state-metrics
             scrape_interval: 60s
@@ -99,29 +99,22 @@ config:
       send_batch_max_size: 512
   exporters:
     debug: null
-    prometheus_remote_write/mimir:
-      endpoint: http://mimir:9009/api/v1/push
-      target_info:
-        enabled: false
-      resource_to_telemetry_conversion:
-        enabled: false
-    otlp/tempo:
-      endpoint: tempo:4317
-      tls:
-        insecure: true
-    otlphttp/loki:
-      endpoint: http://loki:3100/otlp
+    otlp_http/clickstack:
+      endpoint: http://clickstack-otel-collector:4318
+      compression: gzip
+      headers:
+        authorization: ${env:HYPERDX_API_KEY}
   service:
     pipelines:
       metrics:
         receivers: [prometheus, otlp]
         processors: [filter/minimal, batch]
-        exporters: [prometheus_remote_write/mimir]
+        exporters: [otlp_http/clickstack]
       traces:
         receivers: [otlp]
         processors: [batch]
-        exporters: [otlp/tempo]
+        exporters: [otlp_http/clickstack]
       logs:
         receivers: [otlp]
         processors: [batch]
-        exporters: [otlphttp/loki]
+        exporters: [otlp_http/clickstack]

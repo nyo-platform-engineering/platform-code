@@ -1,0 +1,88 @@
+hyperdx:
+  config:
+    FRONTEND_URL: http://clickstack.localhost
+    USAGE_STATS_ENABLED: "false"
+    HYPERDX_OTEL_EXPORTER_TABLES_TTL: 72h
+    CLICKHOUSE_ENDPOINT: tcp://clickhouse-clickhouse-headless:9000?dial_timeout=10s
+    CLICKHOUSE_SERVER_ENDPOINT: clickhouse-clickhouse-headless:9000
+    CLICKHOUSE_PROMETHEUS_METRICS_ENDPOINT: clickhouse-clickhouse-headless:9363
+  secrets:
+    # Local-development credentials. Replace all four values outside a disposable cluster.
+    HYPERDX_API_KEY: local-clickstack-ingest-key
+    CLICKHOUSE_PASSWORD: local-clickstack-otel
+    CLICKHOUSE_APP_PASSWORD: local-clickstack-app
+    MONGODB_PASSWORD: local-clickstack-mongo
+  deployment:
+    labels:
+      platform.local/owner: platform-team
+    resources: {}
+    defaultConnections: |
+      [
+        {
+          "name": "Local ClickHouse",
+          "host": "http://clickhouse-clickhouse-headless:8123",
+          "port": 8123,
+          "username": "app",
+          "password": "local-clickstack-app"
+        }
+      ]
+  ingress:
+    enabled: true
+    spec:
+      ingressClassName: traefik
+      rules:
+        - host: clickstack.localhost
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: clickstack-app
+                    port:
+                      number: 3000
+
+mongodb:
+  spec:
+    statefulSet:
+      spec:
+        template:
+          metadata:
+            labels:
+              platform.local/owner: platform-team
+          spec:
+            containers:
+              - name: mongod
+                resources:
+                  requests:
+                    ephemeral-storage: "0"
+              - name: mongodb-agent
+                resources:
+                  requests:
+                    ephemeral-storage: "0"
+        volumeClaimTemplates:
+          - metadata:
+              name: data-volume
+            spec:
+              accessModes: [ReadWriteOnce]
+              storageClassName: local-path
+              resources:
+                requests:
+                  storage: 1Gi
+          - metadata:
+              name: logs-volume
+            spec:
+              accessModes: [ReadWriteOnce]
+              storageClassName: local-path
+              resources:
+                requests:
+                  storage: 1Gi
+
+clickhouse:
+  enabled: false
+
+otel-collector:
+  fullnameOverride: clickstack-otel-collector
+  resources: {}
+  podLabels:
+    platform.local/owner: platform-team

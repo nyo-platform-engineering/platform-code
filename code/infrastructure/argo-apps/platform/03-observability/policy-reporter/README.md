@@ -10,28 +10,24 @@ with `reports.kyverno.io/enabled: 'true'`; Kyverno retains ownership of its spec
 Argo CD applies these labels after the parent policy and retries while generation
 completes. If native policies are deleted/recreated, Argo CD reapplies the opt-in.
 The existing cluster OpenTelemetry collector scrapes these gauges every 30 seconds
-and sends them to Mimir. Metric labels retain namespace, policy, rule, kind,
+and sends them to ClickStack. Metric labels retain namespace, policy, rule, kind,
 resource name, status, and source; messages and report IDs are not metric labels.
 
-New Kyverno result events also go to Loki, including violation messages. Startup
-does not replay old reports. The existing Loki retention is 72 hours; historical
-events remain after the resource or its report is deleted. Current-result gauges
-disappear when their reports are removed. These are evaluation results, not
+ClickStack retains the scraped metrics for 72 hours. Current-result gauges stop
+being emitted when their reports are removed. These are evaluation results, not
 unique workload counts or a count of admission attempts: Pods and their
 controllers can each have results. Rejected admission requests that do not
-produce a report are outside this dashboard.
+produce a report are outside these metrics.
 
-Grafana provisions **Policies / Kyverno Policy Reports** from the Git-managed
-dashboard in `../grafana/manifests/kyverno-policy-reports.json`. Open
-`http://grafana.localhost/d/kyverno-policy-reports` and filter by namespace or
-policy. The dashboard shows current failures, errors, warnings, passing results,
-ownership failures, collection health, trends, affected resources, and event
-messages. A zero failure count is meaningful only while collection is healthy;
-reports reflect the last Kyverno evaluation, not continuous revalidation.
+Policy telemetry is available from the HyperDX metrics source. Filter
+the `policy_report_result` and `cluster_policy_report_result` metrics by namespace,
+policy, rule, resource, and status. A zero
+failure count is meaningful only while collection is healthy; reports reflect the
+last Kyverno evaluation, not continuous revalidation.
 
 Ownership remains in Audit. This application collects results and does not change
-policy enforcement or admission coverage. Argo CD deploys the collector,
-dashboard ConfigMap, Grafana provider, and OpenTelemetry configuration from main.
+policy enforcement or admission coverage. Argo CD deploys Policy Reporter and
+the collectors use the OpenTelemetry configuration from main.
 
 References: [Policy Reporter metrics](https://kyverno.github.io/policy-reporter-docs/policy-reporter/metrics.html)
 and [Kyverno reports](https://kyverno.io/docs/guides/reports/).

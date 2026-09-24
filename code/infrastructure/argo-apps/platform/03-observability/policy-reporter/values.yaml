@@ -12,9 +12,3 @@ metrics:
   mode: custom
   # Workload names enable drill-down; messages and report IDs stay out of metrics.
   customLabels: [namespace, policy, rule, kind, name, status, source]
-target:
-  loki:
-    host: http://loki.monitoring.svc.cluster.local:3100
-    sources: [kyverno, KyvernoValidatingPolicy, KyvernoImageValidatingPolicy, ValidatingAdmissionPolicy]
-    # Send new results without replaying old events on every restart.
-    skipExistingOnStartup: true

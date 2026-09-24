@@ -20,7 +20,7 @@ would keep shared infrastructure separately.
 The stack uses **k3d** to run Kubernetes inside your Linux Docker engine.
 **Traefik** gives services local URLs, **Argo CD** applies deployment changes
 from Git, and **GitLab** hosts local app projects and runs their pipelines.
-**Grafana, Mimir, Loki, and Tempo** provide dashboards and telemetry storage.
+**ClickStack** provides the HyperDX UI and ClickHouse-backed telemetry storage.
 Two **OpenTelemetry Collectors** collect a small set of cluster metrics and
 node/container telemetry. **Kyverno** reports ownership-label mismatches across
 all namespaces and other cluster policy violations in Audit mode.
