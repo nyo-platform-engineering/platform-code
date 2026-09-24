@@ -7,7 +7,7 @@ adminUser: admin
 adminPassword: admin
 resources: {}
 plugins:
-  - grafana-clickhouse-datasource 4.21.3
+  - grafana-clickhouse-datasource@4.21.3
 envValueFrom:
   CLICKHOUSE_APP_PASSWORD:
     secretKeyRef:
