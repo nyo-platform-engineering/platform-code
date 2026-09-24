@@ -16,10 +16,17 @@ initContainers:
     command: [sh, -ec]
     args:
       - |
-        until nslookup clickhouse.monitoring.svc.cluster.local >/dev/null 2>&1 && nc -z clickhouse.monitoring.svc.cluster.local 9000; do
-          echo "waiting for ClickHouse DNS and native port"
+        auth="Authorization: Basic $(printf '%s' "otelcollector:$CLICKHOUSE_PASSWORD" | base64 | tr -d '\n')"
+        until [ "$(wget -qO- --header="$auth" --post-data="SELECT count() FROM system.tables WHERE database = 'otel' AND name IN ('otel_logs', 'otel_traces')" http://clickhouse.monitoring.svc.cluster.local:8123/)" = "2" ]; do
+          echo "waiting for ClickHouse OpenTelemetry tables"
           sleep 2
         done
+    env:
+      - name: CLICKHOUSE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-credentials
+            key: ingestPassword
     resources: {}
 extraEnvs:
   - name: CLICKHOUSE_PASSWORD
@@ -106,7 +113,7 @@ alternateConfig:
       send_batch_size: 256
       send_batch_max_size: 512
   exporters:
-    prometheusremotewrite/mimir:
+    prometheus_remote_write/mimir:
       endpoint: http://mimir:9009/api/v1/push
     clickhouse:
       endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4&enable_json_type=1
@@ -131,7 +138,7 @@ alternateConfig:
       metrics:
         receivers: [prometheus]
         processors: [filter/minimal, batch]
-        exporters: [prometheusremotewrite/mimir]
+        exporters: [prometheus_remote_write/mimir]
       logs:
         receivers: [file_log]
         processors: [batch]

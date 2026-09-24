@@ -104,7 +104,7 @@ config:
       send_batch_max_size: 512
   exporters:
     debug: null
-    prometheusremotewrite/mimir:
+    prometheus_remote_write/mimir:
       endpoint: http://mimir:9009/api/v1/push
     clickhouse:
       endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4&enable_json_type=1
@@ -127,7 +127,7 @@ config:
       metrics:
         receivers: [prometheus, otlp]
         processors: [filter/minimal, batch]
-        exporters: [prometheusremotewrite/mimir]
+        exporters: [prometheus_remote_write/mimir]
       traces:
         receivers: [otlp]
         processors: [batch]
