@@ -1,38 +1,64 @@
-@theme {
-  --font-sans: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+@theme inline {
+  --font-sans: 'IBM Plex Sans', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   --color-canvas: var(--ui-canvas);
   --color-surface: var(--ui-surface);
   --color-ink: var(--ui-text);
   --color-muted: var(--ui-text-muted);
   --color-accent: var(--ui-accent);
+  --color-surface-raised: var(--ui-surface-raised);
+  --color-surface-hover: var(--ui-surface-hover);
+  --color-dim: var(--ui-text-dim);
+  --color-border: var(--ui-border);
+  --color-border-strong: var(--ui-border-strong);
+  --color-hover: var(--ui-hover);
+  --color-track: var(--ui-track);
+  --color-accent-strong: var(--ui-accent-strong);
+  --color-accent-text: var(--ui-accent-text);
+  --color-accent-soft: var(--ui-accent-soft);
+  --color-orange: var(--ui-orange);
+  --color-yellow: var(--ui-yellow);
+  --color-danger: var(--ui-danger);
+  --color-violet: var(--ui-violet);
+  --color-rail: var(--ui-rail);
   --radius-ui: var(--ui-radius);
 }
 
 :root {
+  --chart-info: #2563eb;
+  --chart-warn: #b45309;
+  --chart-error: #dc2626;
+  --chart-fatal: #be123c;
+  --chart-debug: #0891b2;
+  --chart-trace: #64748b;
+  --chart-unspecified: #71717a;
+  --chart-p50: #0f766e;
+  --chart-p90: #2563eb;
+  --chart-p95: #7c3aed;
+  --chart-p99: #be185d;
   color-scheme: light;
-  --ui-canvas: #f4f5f7;
-  --ui-canvas-gradient: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%);
+  --ui-canvas: #edf1f6;
+  --ui-canvas-gradient: linear-gradient(135deg, #f5f7fb 0%, #eaf0f6 100%);
   --ui-rail: rgba(255, 255, 255, 0.96);
-  --ui-surface: #ffffff;
+  --ui-surface: #f5f7fa;
   --ui-surface-raised: #ffffff;
-  --ui-surface-hover: #f8f9fa;
-  --ui-text: #16181b;
-  --ui-text-muted: #5f646c;
-  --ui-text-dim: #858b94;
-  --ui-border: rgba(17, 24, 39, 0.12);
-  --ui-border-strong: rgba(17, 24, 39, 0.2);
-  --ui-hover: rgba(17, 24, 39, 0.035);
+  --ui-surface-hover: #e8eef5;
+  --ui-text: #1b2638;
+  --ui-text-muted: #526176;
+  --ui-text-dim: #66758a;
+  --ui-border: #d6dee9;
+  --ui-border-strong: #a8b8cc;
+  --ui-hover: rgba(51, 83, 125, 0.08);
   --ui-track: rgba(17, 24, 39, 0.06);
   --ui-accent: #e9a008;
-  --ui-accent-strong: #c77800;
+  --ui-accent-strong: #925300;
   --ui-accent-text: #201500;
-  --ui-accent-soft: rgba(233, 160, 8, 0.11);
+  --ui-accent-soft: #fff0cc;
   --ui-orange: #e56f16;
   --ui-orange-soft: rgba(229, 111, 22, 0.5);
   --ui-yellow: #d6a700;
   --ui-yellow-soft: rgba(214, 167, 0, 0.5);
-  --ui-danger: #c84a2f;
+  --ui-danger: #dc2626;
   --ui-danger-soft: rgba(200, 74, 47, 0.5);
   --ui-violet: #8b6bb7;
   --ui-violet-soft: rgba(139, 107, 183, 0.5);
@@ -42,11 +68,21 @@
   --ui-space-3: 12px;
   --ui-space-4: 16px;
   --ui-space-5: 24px;
-
 }
 
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   color-scheme: dark;
+  --chart-info: #60a5fa;
+  --chart-warn: #fbbf24;
+  --chart-error: #f87171;
+  --chart-fatal: #fb7185;
+  --chart-debug: #22d3ee;
+  --chart-trace: #94a3b8;
+  --chart-unspecified: #a1a1aa;
+  --chart-p50: #2dd4bf;
+  --chart-p90: #60a5fa;
+  --chart-p95: #a78bfa;
+  --chart-p99: #f472b6;
   --ui-canvas: #090a0b;
   --ui-canvas-gradient: linear-gradient(135deg, #090a0b 0%, #0d0f11 100%);
   --ui-rail: rgba(8, 9, 10, 0.96);
@@ -68,7 +104,7 @@
   --ui-orange-soft: rgba(255, 129, 40, 0.55);
   --ui-yellow: #f0bd25;
   --ui-yellow-soft: rgba(240, 189, 37, 0.55);
-  --ui-danger: #ff795f;
+  --ui-danger: #f87171;
   --ui-danger-soft: rgba(255, 121, 95, 0.55);
   --ui-violet: #c49af0;
   --ui-violet-soft: rgba(196, 154, 240, 0.5);
@@ -77,6 +113,17 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
+    --chart-info: #60a5fa;
+    --chart-warn: #fbbf24;
+    --chart-error: #f87171;
+    --chart-fatal: #fb7185;
+    --chart-debug: #22d3ee;
+    --chart-trace: #94a3b8;
+    --chart-unspecified: #a1a1aa;
+    --chart-p50: #2dd4bf;
+    --chart-p90: #60a5fa;
+    --chart-p95: #a78bfa;
+    --chart-p99: #f472b6;
     --ui-canvas: #090a0b;
     --ui-canvas-gradient: linear-gradient(135deg, #090a0b 0%, #0d0f11 100%);
     --ui-rail: rgba(8, 9, 10, 0.96);
@@ -98,7 +145,7 @@
     --ui-orange-soft: rgba(255, 129, 40, 0.55);
     --ui-yellow: #f0bd25;
     --ui-yellow-soft: rgba(240, 189, 37, 0.55);
-    --ui-danger: #ff795f;
+    --ui-danger: #f87171;
     --ui-danger-soft: rgba(255, 121, 95, 0.55);
     --ui-violet: #c49af0;
     --ui-violet-soft: rgba(196, 154, 240, 0.5);

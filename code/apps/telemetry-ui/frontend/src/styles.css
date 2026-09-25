@@ -1,6 +1,23 @@
-@import "tailwindcss";
-@import "./design-system.css";
-@import "./styles/base.css";
-@import "./styles/shell.css";
-@import "./styles/workspace.css";
-@import "./styles/responsive.css";
+@import 'tailwindcss';
+@import './design-system.css';
+
+@layer base {
+  :root {
+    color: var(--ui-text);
+    background: var(--ui-canvas);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply m-0 min-h-screen min-w-80 font-sans antialiased;
+    background: var(--ui-canvas-gradient);
+  }
+  a,
+  summary,
+  [tabindex] {
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+  }
+  summary {
+    @apply cursor-pointer;
+  }
+}

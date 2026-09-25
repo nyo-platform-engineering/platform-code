@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -31,6 +32,8 @@ const version = "0.1.0"
 
 type config struct {
 	Port                    int
+	ListenHost              string
+	Store                   queryStore
 	WebDistDir              string
 	AuthMode                string
 	BackendOTLPEnabled      bool
@@ -54,6 +57,7 @@ func loadConfig() (config, error) {
 
 	return config{
 		Port:                    port,
+		ListenHost:              os.Getenv("LISTEN_HOST"),
 		WebDistDir:              envOr("WEB_DIST_DIR", "frontend/dist"),
 		AuthMode:                authMode,
 		BackendOTLPEnabled:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "",
@@ -127,7 +131,7 @@ type capability struct {
 	Description string `json:"description"`
 }
 
-func registerAPIRoutes(router *gin.Engine, auth localAuthenticator) {
+func registerAPIRoutes(router *gin.Engine, auth localAuthenticator, store queryStore) {
 	api := router.Group("/api/v1")
 	api.GET("/meta", requirePermission(auth, permissionMetadataRead), func(c *gin.Context) {
 		actor, _ := c.Get(string(principalKey))
@@ -136,22 +140,23 @@ func registerAPIRoutes(router *gin.Engine, auth localAuthenticator) {
 			"version": version,
 			"actor":   actor,
 			"capabilities": []capability{
-				{ID: "trace-red", Title: "Trace RED", Status: "planned", Bucket: "1m", Description: "Request rate, errors, and duration grouped by service."},
-				{ID: "log-volume", Title: "Log volume by severity", Status: "planned", Bucket: "1m", Description: "Log counts grouped into OpenTelemetry severity bands."},
+				{ID: "trace-red", Title: "Trace RED", Status: "available", Bucket: "1m", Description: "Request rate, errors, and duration grouped by service."},
+				{ID: "log-volume", Title: "Log volume by severity", Status: "available", Bucket: "1m", Description: "Log counts grouped into OpenTelemetry severity bands."},
 			},
 		})
 	})
-	api.GET("/traces/red", requirePermission(auth, permissionTracesRead), plannedHandler("trace-red"))
-	api.GET("/logs/volume", requirePermission(auth, permissionLogsRead), plannedHandler("log-volume"))
-}
-
-func plannedHandler(feature string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"error":   "not_implemented",
-			"feature": feature,
-			"message": "The API contract is reserved; implementation is tracked in PLAN.md.",
-		})
+	slots := make(chan struct{}, 4)
+	for _, route := range []struct{ path, kind, permission string }{
+		{"/services", "services", permissionMetadataRead},
+		{"/traces/attributes", "traces-keys", permissionTracesRead},
+		{"/logs/attributes", "logs-keys", permissionLogsRead},
+		{"/traces/red", "red", permissionTracesRead},
+		{"/traces", "traces", permissionTracesRead},
+		{"/traces/:traceId", "detail", permissionTracesRead},
+		{"/logs/volume", "logs-volume", permissionLogsRead},
+		{"/logs", "logs", permissionLogsRead},
+	} {
+		api.GET(route.path, requirePermission(auth, route.permission), analyticsHandler(store, route.kind, slots))
 	}
 }
 
@@ -265,8 +270,16 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 	)
 
 	router.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok\n") })
-	router.GET("/readyz", func(c *gin.Context) { c.String(http.StatusOK, "ok\n") })
-	registerAPIRoutes(router, localAuthenticator{})
+	router.GET("/readyz", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		if _, err := cfg.Store.Query(ctx, "SELECT TraceId FROM otel.otel_traces LIMIT 0"); err != nil {
+			c.JSON(503, gin.H{"error": "storage_unavailable"})
+			return
+		}
+		c.String(200, "ok\n")
+	})
+	registerAPIRoutes(router, localAuthenticator{}, cfg.Store)
 
 	frontend := newFrontendHandler(cfg.WebDistDir)
 	router.GET("/", gin.WrapH(frontend))
@@ -282,6 +295,9 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 }
 
 func run(ctx context.Context, cfg config, logger *slog.Logger) error {
+	store := openStore()
+	defer store.db.Close()
+	cfg.Store = store
 	provider, err := newTracerProvider(ctx, cfg)
 	if err != nil {
 		return err
@@ -299,7 +315,7 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 		return err
 	}
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Addr:              net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port)),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

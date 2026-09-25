@@ -1,12 +1,14 @@
 # Signal Deck telemetry UI
 
-Initial Go and React/TypeScript shell for querying the platform's
-OpenTelemetry logs and traces. It is deliberately an initialization slice:
-the UI, API contracts, security boundary, and server-side self-telemetry work, while the
-ClickHouse analytics endpoints remain explicit `501 Not Implemented` tasks.
+Go and React/TypeScript UI for ClickHouse-backed OpenTelemetry traces and logs.
+It includes request/error/latency summaries, one-minute charts, trace spans,
+severity filtering, and correlated log navigation.
+
+For the complete local workflow, use the [development guide](../dev/README.md):
+ClickHouse and Collector run in Docker; both Go applications and Vite run natively.
 
 The browser never receives ClickHouse credentials. It calls the Go API, which
-will enforce tenant and permission filters before querying ClickHouse. The
+enforces tenant and permission filters before querying ClickHouse. The
 current `AUTH_MODE=local` identity is only for local development and fails
 closed for every other mode until OIDC is implemented.
 
@@ -24,7 +26,13 @@ authentication, tenant isolation, and authorization on every request.
 
 ## Run it
 
-Build and run everything through Docker:
+For native app development with ClickHouse and the Collector in Docker Compose,
+see the [dependency setup](../dev/README.md) and
+[local development implementation plan](LOCAL_DEVELOPMENT_PLAN.md).
+Run `task dev:setup` and `task dev` from `code/apps`.
+
+An optional UI application image can also be built with Docker (its ClickHouse
+connection must be configured separately):
 
 ```bash
 docker build -t local/telemetry-ui:dev .
@@ -52,4 +60,4 @@ requests start server-owned traces; public `traceparent` and baggage headers
 are deliberately ignored until a trusted authentication boundary exists.
 
 See [PLAN.md](PLAN.md) for the implementation sequence, access-control rules,
-API contracts, and initial ClickHouse queries.
+API contracts, and production follow-up work. See [API.md](API.md) for implemented query contracts.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,7 +18,7 @@ import (
 func newHandler(logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		logger.Info("request", "method", r.Method, "path", r.URL.Path)
+		logger.InfoContext(r.Context(), "request", "method", r.Method, "path", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]string{
 			"service": "go-demo",
@@ -32,7 +33,8 @@ func newHandler(logger *slog.Logger) http.Handler {
 			fmt.Fprintln(w, "ok")
 		})
 	}
-	return mux
+	registerDemo(mux, logger)
+	return instrumentRequests(mux, logger)
 }
 
 func run(ctx context.Context, logger *slog.Logger) error {
@@ -45,7 +47,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("invalid PORT %q: expected 1-65535", port)
 	}
 	server := &http.Server{
-		Addr:              ":" + port,
+		Addr:              net.JoinHostPort(os.Getenv("LISTEN_HOST"), port),
 		Handler:           newHandler(logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -79,8 +81,15 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	logger, shutdown, err := setupTelemetry(ctx, logger)
+	if err != nil {
+		logger.Error("telemetry setup failed", "error", err)
+		os.Exit(1)
+	}
+	defer shutdown()
 	if err := run(ctx, logger); err != nil {
 		logger.Error("server stopped", "error", err)
+		shutdown()
 		os.Exit(1)
 	}
 }

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 
 func testHandler(t *testing.T) http.Handler {
 	t.Helper()
-	handler, err := newHandler(config{WebDistDir: t.TempDir()}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler, err := newHandler(config{WebDistDir: t.TempDir(), Store: failingStore{}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +28,7 @@ func TestHealthIsPublic(t *testing.T) {
 	}
 }
 
-func TestMetaDescribesPlannedCapabilities(t *testing.T) {
+func TestMetaDescribesCapabilities(t *testing.T) {
 	response := httptest.NewRecorder()
 	testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/meta", nil))
 	if response.Code != http.StatusOK {
@@ -47,11 +49,11 @@ func TestMetaDescribesPlannedCapabilities(t *testing.T) {
 	}
 }
 
-func TestPlannedEndpointIsExplicit(t *testing.T) {
+func TestStorageOutageIsExplicit(t *testing.T) {
 	response := httptest.NewRecorder()
 	testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/traces/red", nil))
-	if response.Code != http.StatusNotImplemented {
-		t.Fatalf("expected 501, got %d", response.Code)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", response.Code)
 	}
 }
 
@@ -63,4 +65,10 @@ func TestPublicOTLPEndpointDoesNotExist(t *testing.T) {
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", response.Code)
 	}
+}
+
+type failingStore struct{}
+
+func (failingStore) Query(context.Context, string, ...any) ([]map[string]any, error) {
+	return nil, errors.New("offline")
 }

@@ -1,5 +1,62 @@
 version: '3'
 tasks:
+  dev:
+    desc: Run native Go apps and Vite with Docker telemetry dependencies
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/manage.py' run
+  dev:setup:
+    desc: Install native dependencies and validate the Collector configuration
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/manage.py' setup
+  dev:stop:
+    desc: Stop the app supervisor and dependencies it started, preserving telemetry
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/manage.py' stop
+  dev:status:
+    desc: Show native app PIDs, URLs, health, source/log paths, and Docker containers
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/manage.py' status
+  dev:bot:
+    desc: Generate randomized demo telemetry natively (Ctrl-C stops; --count/--interval/--seed supported)
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/traffic.py' {{.CLI_ARGS}}
+  dev:smoke:
+    desc: Verify demo actions reach ClickHouse and the trace/log API
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/manage.py' smoke
+  dev:reset:
+    desc: Delete the local telemetry volume and stop development processes
+    cmds:
+      - python3 '{{.TASKFILE_DIR}}/dev/manage.py' reset
+  dev:integration:
+    desc: Test live ClickHouse isolation and permissions (Compose must be running)
+    dir: '{{.TASKFILE_DIR}}/telemetry-ui/backend'
+    env:
+      CLICKHOUSE_INTEGRATION: '1'
+    cmds:
+      - go test -run Integration -v
+  dev:test:
+    desc: Test Go applications and build/typecheck the frontend natively
+    cmds:
+      - task: go-demo-test-native
+      - task: telemetry-api-test-native
+      - task: telemetry-web-test-native
+  go-demo-test-native:
+    dir: '{{.TASKFILE_DIR}}/go-demo'
+    cmds:
+      - go test ./...
+      - go vet ./...
+  telemetry-api-test-native:
+    dir: '{{.TASKFILE_DIR}}/telemetry-ui/backend'
+    cmds:
+      - go test ./...
+      - go vet ./...
+  telemetry-web-test-native:
+    dir: '{{.TASKFILE_DIR}}/telemetry-ui/frontend'
+    cmds:
+      - pnpm format:check
+      - pnpm test
+      - pnpm build
   telemetry-ui-test:
     desc: Install/build the telemetry UI with pnpm and test/vet its Go API in containers
     dir: '{{.TASKFILE_DIR}}/telemetry-ui'

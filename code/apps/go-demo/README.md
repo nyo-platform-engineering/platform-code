@@ -2,7 +2,11 @@
 
 This is the example app you can follow through the platform. It's a small Go
 HTTP service with JSON request logs, health checks, and graceful shutdown.
-It uses the Go standard library and has no external application dependencies.
+It uses the Go standard HTTP library and OpenTelemetry SDKs for trace/log export.
+
+For live development with Signal Deck, follow the [local development guide](../dev/README.md).
+Run `task dev:setup` and `task dev` from `code/apps`, then open
+`http://127.0.0.1:8081/demo` to generate success, slow, and error traces with correlated logs.
 
 New to the repo? Start with the [root guide](../../../README.md).
 
@@ -20,6 +24,10 @@ Open `http://localhost:8080`. Set `PORT` to use another port.
 | Endpoint | What it returns |
 | --- | --- |
 | `GET /` | A JSON greeting. |
+| `GET /demo` | Buttons for generating telemetry and links to traces. |
+| `POST /demo/success` | Successful work and an info log. |
+| `POST /demo/slow` | Approximately 500 ms work and a warning log. |
+| `POST /demo/error` | Intentional HTTP 500 with error span/log. |
 | `GET /healthz` | `ok`: the process is alive. |
 | `GET /readyz` | `ok`: the service is ready to receive requests. |
 

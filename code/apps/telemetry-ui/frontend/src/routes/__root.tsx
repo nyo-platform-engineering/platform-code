@@ -1,7 +1,4 @@
 import { createRootRoute } from '@tanstack/react-router'
-import App, { NotFoundPage } from '../App'
-
-export const Route = createRootRoute({
-  component: App,
-  notFoundComponent: NotFoundPage,
-})
+import AppLayout from '../layouts/AppLayout'
+import { NotFoundPage } from '../pages/not-found'
+export const Route = createRootRoute({ component: AppLayout, notFoundComponent: NotFoundPage })

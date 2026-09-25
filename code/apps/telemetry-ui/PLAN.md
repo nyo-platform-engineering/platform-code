@@ -1,5 +1,10 @@
 # Trace and log UI implementation plan
 
+The local ClickHouse-backed development workflow is implemented; see the
+[local checklist](LOCAL_DEVELOPMENT_PLAN.md) and [API contracts](API.md).
+The checklist below retains the broader production roadmap; local mode does
+not implement OIDC or production ingress controls.
+
 ## Baseline completed
 
 - [x] Gin-based Go API, React/TypeScript shell, and multi-stage container build.
