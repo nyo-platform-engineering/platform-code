@@ -16,6 +16,7 @@ import urllib.request
 
 APPS = Path(__file__).resolve().parents[1]
 STATE = APPS / 'dev' / '.runtime'
+FRONTEND = APPS / 'telemetry-ui/frontend'
 COMPOSE = ['docker', 'compose', '-f', str(APPS / 'compose.yaml')]
 STOP = False
 
@@ -32,24 +33,54 @@ def request(url, method='GET'):
         return error.code, error.read()
 
 
-def wait_for(url, timeout=60):
+def wait_for(url, timeout=60, process=None, logfile=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and not STOP:
+        if process is not None and process.poll() is not None:
+            raise RuntimeError(f'Process exited with code {process.returncode} before {url} was ready. See {logfile}')
         try:
             if request(url)[0] == 200:
                 return
         except (OSError, urllib.error.URLError):
             pass
         time.sleep(.5)
-    raise RuntimeError(f'Not ready: {url}. Check {STATE} and docker compose logs.')
+    raise RuntimeError(f'Not ready after {timeout}s: {url}. Check {logfile or STATE} and docker compose logs.')
+
+
+def resolve_pnpm():
+    """Validate launchers in project context; avoid stale Corepack cache shims."""
+    expected = json.loads((FRONTEND / 'package.json').read_text())['packageManager'].split('@', 1)[1]
+    candidates = [Path(folder) / 'pnpm' for folder in os.get_exec_path()]
+    if os.environ.get('PNPM_HOME'):
+        candidates.append(Path(os.environ['PNPM_HOME']) / 'pnpm')
+    candidates.extend([Path.home() / 'Library/pnpm/pnpm', Path.home() / '.local/share/pnpm/pnpm'])
+    errors, seen = [], set()
+    for candidate in candidates:
+        candidate = candidate.absolute()
+        if candidate in seen or not candidate.is_file() or not os.access(candidate, os.X_OK):
+            continue
+        seen.add(candidate)
+        try:
+            result = subprocess.run([str(candidate), '--version'], cwd=FRONTEND,
+                                    capture_output=True, text=True, timeout=30)
+            if result.returncode == 0 and result.stdout.strip() == expected:
+                print(f'pnpm {expected}: {candidate}', flush=True)
+                return str(candidate)
+            detail = (result.stderr or result.stdout).strip()[-1500:]
+            errors.append(f'{candidate}: {detail or "unexpected version"}')
+        except (OSError, subprocess.TimeoutExpired) as error:
+            errors.append(f'{candidate}: {error}')
+    raise RuntimeError(f'No working pnpm {expected} launcher. Install the pinned version; see dev/README.md.\n' + '\n'.join(errors))
 
 
 def prerequisites():
-    for tool in ['docker', 'go', 'pnpm']:
+    for tool in ['docker', 'go']:
         if not shutil.which(tool):
             raise RuntimeError(f'Missing {tool}; see dev/README.md')
+    pnpm = resolve_pnpm()
     run(COMPOSE + ['config', '--quiet'])
     run(['docker', 'info', '--format', '{{.ServerVersion}}'], stdout=subprocess.DEVNULL)
+    return pnpm
 
 
 def status():
@@ -96,12 +127,12 @@ def status():
 
 
 def setup():
-    prerequisites()
+    pnpm = prerequisites()
     run(COMPOSE + ['pull'])
     run(COMPOSE + ['run', '--rm', '--no-deps', 'otel-collector', 'validate', '--config=/etc/otelcol-contrib/local.yaml'])
     for folder in ['go-demo', 'telemetry-ui/backend']:
         run(['go', 'mod', 'download'], APPS / folder)
-    run(['pnpm', 'install', '--frozen-lockfile'], APPS / 'telemetry-ui/frontend')
+    run([pnpm, 'install', '--frozen-lockfile'], FRONTEND)
 
 
 def stop_process(process):
@@ -121,7 +152,7 @@ def fingerprint(folder):
 
 def serve():
     global STOP
-    prerequisites()
+    pnpm = prerequisites()
     STATE.mkdir(exist_ok=True)
     lock = (STATE / 'lock').open('w')
     try:
@@ -164,10 +195,10 @@ def serve():
             process = subprocess.Popen([str(binary)], cwd=source, env=env, stdout=log, stderr=log, start_new_session=True)
             processes.append(process)
             apps.append(dict(source=source, binary=binary, env=env, log=log, process=process, fingerprint=fingerprint(source)))
-            wait_for(f'http://127.0.0.1:{port}/readyz')
+            wait_for(f'http://127.0.0.1:{port}/readyz', process=process, logfile=log.name)
         log = (STATE / 'frontend.log').open('a'); logs.append(log)
-        processes.append(subprocess.Popen(['pnpm', 'dev', '--host', '127.0.0.1', '--strictPort'], cwd=APPS / 'telemetry-ui/frontend', stdout=log, stderr=log, start_new_session=True))
-        wait_for('http://127.0.0.1:5173/')
+        processes.append(subprocess.Popen([pnpm, 'dev', '--host', '127.0.0.1', '--strictPort'], cwd=FRONTEND, stdout=log, stderr=log, start_new_session=True))
+        wait_for('http://127.0.0.1:5173/', process=processes[-1], logfile=log.name)
         print(f'Go demo: http://127.0.0.1:8081/demo\nTelemetry UI: http://127.0.0.1:5173\nLogs: {STATE}\nWatching Go sources; Ctrl-C stops owned processes and dependencies.', flush=True)
         while not STOP:
             for app in apps:

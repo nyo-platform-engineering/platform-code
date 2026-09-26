@@ -28,6 +28,12 @@ child span, and correlated logs. Typical visibility in local testing was 2–3
 seconds; the intentional error action returns HTTP 500.
 
 The launcher checks ports and readiness, builds both Go apps, and starts Vite.
+Before starting Docker, it checks pnpm launchers from PATH, PNPM_HOME, and the
+standard macOS/Linux standalone locations against the project's pinned version.
+It prints and reuses the first working absolute path for setup/startup, skipping
+broken Corepack shims. If no launcher works, it reports the launcher errors.
+Native processes that exit during startup fail immediately with their exit code
+and log path instead of waiting for the readiness timeout.
 Go file/module edits trigger rebuilds and graceful restarts. Failed builds keep
 the last working process and write diagnostics to `dev/.runtime/*.log`. Vite
 provides frontend hot reload. No application images are built.
