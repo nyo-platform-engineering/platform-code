@@ -1,0 +1,5 @@
+# Remove fixed host port so multiple Aggregator replicas can coexist.
+# Reach them via service DNS inside the services network (or a future reverse proxy).
+services:
+  aggregator:
+    ports: !reset []

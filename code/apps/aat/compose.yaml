@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${POSTGRES_DB:?required}
+    volumes:
+      - canonical-data:/var/lib/postgresql/data
+    networks: [storage]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  aggregator:
+    build:
+      context: .
+      dockerfile: aggregator/Dockerfile
+    environment:
+      DATABASE_URL: "host=postgres user=${POSTGRES_USER:?required} password=${POSTGRES_PASSWORD:?required} dbname=${POSTGRES_DB:?required} sslmode=disable"
+      AGGREGATOR_TOKEN: ${AGGREGATOR_TOKEN:?required}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-5}
+    ports: ["127.0.0.1:${AGGREGATOR_PORT:-8083}:8083"]
+    networks: [services, storage]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  bmkg:
+    build:
+      context: .
+      dockerfile: bmkg/Dockerfile
+    environment:
+      BMKG_API_KEY: ${BMKG_API_KEY:?required}
+      BMKG_DELAY_MS: ${BMKG_DELAY_MS:-100}
+      EVENT_INTERVAL_SECONDS: ${EVENT_INTERVAL_SECONDS:-10}
+    ports: ["127.0.0.1:${BMKG_PORT:-8081}:8081"]
+    networks: [services]
+  pvmbg:
+    build:
+      context: .
+      dockerfile: pvmbg/Dockerfile
+    environment:
+      PVMBG_TOKEN: ${PVMBG_TOKEN:?required}
+      PVMBG_DELAY_MIN_MS: ${PVMBG_DELAY_MIN_MS:-500}
+      PVMBG_DELAY_MAX_MS: ${PVMBG_DELAY_MAX_MS:-3000}
+      EVENT_INTERVAL_SECONDS: ${EVENT_INTERVAL_SECONDS:-10}
+    ports: ["127.0.0.1:${PVMBG_PORT:-8082}:8082"]
+    networks: [services]
+
+networks:
+  services:
+  storage:
+    internal: true
+volumes:
+  canonical-data:
