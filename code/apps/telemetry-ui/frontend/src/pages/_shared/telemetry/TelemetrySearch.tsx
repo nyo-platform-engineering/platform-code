@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { LuPlus, LuX } from 'react-icons/lu'
 import { Button } from '../../../components/Button'
@@ -38,6 +38,9 @@ export function TelemetrySearch({
 }) {
   const hintId = useId()
   const initial = readAttributes(attributes)
+  const [readJSON, setReadJSON] = useState(() =>
+    initial.conditions.some((item) => item.scope === 'body'),
+  )
   const {
     register,
     control,
@@ -57,8 +60,8 @@ export function TelemetrySearch({
   const conditions = useWatch({ control, name: 'conditions' })
   const scopeOptions = [
     { value: 'resource', label: 'Resource' },
-    ...(mode === 'logs' ? [{ value: 'body', label: 'JSON body' }] : []),
-    { value: mode === 'logs' ? 'log' : 'span', label: mode === 'logs' ? 'Log' : 'Span' },
+    ...(mode === 'logs' && readJSON ? [{ value: 'body', label: 'Log Content JSON' }] : []),
+    { value: mode === 'logs' ? 'log' : 'span', label: mode === 'logs' ? 'Log Attribute' : 'Span' },
   ]
   const invalidScope = conditions.some(
     (item) => !scopeOptions.some((option) => option.value === item.scope),
@@ -115,12 +118,42 @@ export function TelemetrySearch({
       )}
       <section aria-label="Filters" className="grid min-w-0 gap-3">
         {controls}
+        {mode === 'logs' && (
+          <div className="grid gap-1.5">
+            <label className="flex items-center gap-2 text-xs font-medium text-ink">
+              <input
+                type="checkbox"
+                checked={readJSON}
+                className="accent-accent"
+                aria-describedby={`${hintId}-json`}
+                onChange={(event) => {
+                  setReadJSON(event.target.checked)
+                  if (!event.target.checked)
+                    remove(
+                      conditions.flatMap((condition, index) =>
+                        condition.scope === 'body' ? [index] : [],
+                      ),
+                    )
+                }}
+              />
+              Enable Log Content JSON
+            </label>
+            <p id={`${hintId}-json`} className="text-[11px] text-muted">
+              Read structured log content as JSON to filter by fields within it.
+            </p>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button
             className="flex items-center gap-1.5"
             disabled={fields.length >= 8}
             onClick={() =>
-              append({ scope: mode === 'logs' ? 'log' : 'span', key: '', op: 'eq', value: '' })
+              append({
+                scope: mode === 'logs' ? (readJSON ? 'body' : 'log') : 'span',
+                key: '',
+                op: 'eq',
+                value: '',
+              })
             }
           >
             <LuPlus aria-hidden />
@@ -154,7 +187,7 @@ export function TelemetrySearch({
           return (
             <fieldset
               key={item.id}
-              className="grid grid-cols-2 items-end gap-2 rounded border border-border bg-canvas/40 p-3 min-[1200px]:grid-cols-[120px_minmax(240px,2fr)_140px_minmax(160px,1fr)_32px]"
+              className="grid min-w-0 grid-cols-[180px_minmax(180px,2fr)_140px_minmax(140px,1fr)_32px] items-end gap-2 overflow-x-auto rounded border border-border bg-canvas/40 p-3"
             >
               <legend className="sr-only">Condition {index + 1}</legend>
               <Controller
@@ -175,39 +208,27 @@ export function TelemetrySearch({
                   />
                 )}
               />
-              {isBody ? (
-                <label className="grid gap-1.5 text-[11px] font-semibold text-muted">
-                  {isBody ? 'JSON path' : 'Attribute key'} {index + 1}
-                  <input
-                    {...register(`conditions.${index}.key`, {
-                      validate: (value) =>
-                        validateAttributeKey(value) === true && isBody
-                          ? validateJSONPath(value)
-                          : validateAttributeKey(value),
-                    })}
-                    className={inputClass}
-                    aria-invalid={Boolean(conditionErrors?.key)}
-                    placeholder={isBody ? 'user.id or items.0.price' : 'http.request.method'}
+              <Controller
+                control={control}
+                name={`conditions.${index}.key`}
+                rules={{
+                  validate: (value) =>
+                    validateAttributeKey(value) === true && isBody
+                      ? validateJSONPath(value)
+                      : validateAttributeKey(value),
+                }}
+                render={({ field }) => (
+                  <AttributeKeySelect
+                    key={`${conditions[index]?.scope}:${search.toString()}`}
+                    label={`${isBody ? 'JSON field' : 'Attribute key'} ${index + 1}`}
+                    value={field.value}
+                    onChange={field.onChange}
+                    mode={mode}
+                    scope={conditions[index]?.scope ?? 'resource'}
+                    search={search}
                   />
-                </label>
-              ) : (
-                <Controller
-                  control={control}
-                  name={`conditions.${index}.key`}
-                  rules={{ validate: validateAttributeKey }}
-                  render={({ field }) => (
-                    <AttributeKeySelect
-                      key={`${conditions[index]?.scope}:${search.toString()}`}
-                      label={`Attribute key ${index + 1}`}
-                      value={field.value}
-                      onChange={field.onChange}
-                      mode={mode}
-                      scope={conditions[index]?.scope ?? 'resource'}
-                      search={search}
-                    />
-                  )}
-                />
-              )}
+                )}
+              />
               <Controller
                 control={control}
                 name={`conditions.${index}.op`}
@@ -250,27 +271,6 @@ export function TelemetrySearch({
               >
                 <LuX aria-hidden className="mx-auto" />
               </Button>
-              {!isBody && (
-                <details
-                  className="col-span-full"
-                  open={conditions[index]?.path ? true : undefined}
-                >
-                  <summary className="cursor-pointer text-[11px] text-muted">
-                    Extract a JSON field (optional)
-                  </summary>
-                  <label className="mt-2 grid gap-1.5 text-[11px] text-muted">
-                    JSON path {index + 1} (optional, when the attribute contains JSON)
-                    <input
-                      {...register(`conditions.${index}.path`, {
-                        validate: (value) => validateJSONPath(value ?? ''),
-                      })}
-                      className={inputClass}
-                      placeholder="user.id or items.0.price"
-                      aria-invalid={Boolean(conditionErrors?.path)}
-                    />
-                  </label>
-                </details>
-              )}
               {(conditionErrors?.key || conditionErrors?.value || conditionErrors?.path) && (
                 <p className="col-span-full text-[11px] text-danger" role="alert">
                   {conditionErrors.key?.message ??

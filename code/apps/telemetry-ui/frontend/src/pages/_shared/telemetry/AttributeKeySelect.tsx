@@ -27,7 +27,7 @@ export function AttributeKeySelect({
     if (!open) return
     const controller = new AbortController()
     setOptions([])
-    setStatus('Loading attribute keys…')
+    setStatus(scope === 'body' ? 'Reading Log Content JSON fields…' : 'Loading attribute keys…')
     const timer = setTimeout(() => {
       fetchAttributeKeys(mode, new URLSearchParams(searchKey), scope, term, controller.signal)
         .then((result) => {
@@ -36,7 +36,9 @@ export function AttributeKeySelect({
           setStatus(
             result.truncated
               ? 'First 50 keys · type to narrow results'
-              : `${result.data.length} keys in this time range · or enter your own`,
+              : scope === 'body'
+                ? `${result.data.length} fields from up to 100 recent logs · or enter a path`
+                : `${result.data.length} keys in this time range · or enter your own`,
           )
         })
         .catch(() => {
@@ -55,7 +57,7 @@ export function AttributeKeySelect({
       options={options}
       values={value ? [value] : []}
       onChange={(values) => onChange(values[0] ?? '')}
-      placeholder="Find an attribute…"
+      placeholder={scope === 'body' ? 'Find a JSON field…' : 'Find an attribute…'}
       allowCustom
       onOpenChange={setOpen}
       onSearchChange={setTerm}

@@ -1,3 +1,4 @@
+import { discoverBodyFields } from './json-body-fields'
 import { validateWindow } from './time-window'
 import { filterValues } from './filters'
 import type {
@@ -193,6 +194,17 @@ export async function fetchAttributeKeys(
   signal: AbortSignal,
 ) {
   const params = without(queryParameters(mode, search), 'q', 'attr', 'traceId')
+  if (scope === 'body' && mode === 'logs') {
+    const result = await query<LogRecord>('logs', params, signal)
+    const keys = discoverBodyFields(result.data.map((record) => record.body)).filter((key) =>
+      key.toLowerCase().includes(term.toLowerCase()),
+    )
+    return {
+      ...result,
+      data: keys.slice(0, 50).map((key) => ({ key })),
+      truncated: keys.length > 50,
+    }
+  }
   params.set('scope', scope)
   params.set('keySearch', term)
   return query<{ key: string }>(`${mode}/attributes`, params, signal)
