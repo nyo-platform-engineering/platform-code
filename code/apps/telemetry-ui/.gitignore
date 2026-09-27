@@ -3,3 +3,4 @@ frontend/dist/
 frontend/*.tsbuildinfo
 backend/telemetry-ui
 *.tar
+backend/.air/

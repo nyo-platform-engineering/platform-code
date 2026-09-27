@@ -1,7 +1,7 @@
 import { Controller, useForm } from 'react-hook-form'
 import { SearchableSelect } from '../../../components/SearchableSelect'
 import { filterValues, type SetFilter } from './filters'
-import { SEVERITIES, windowMinutes, type TelemetryMode } from './types'
+import { SEVERITIES, type TelemetryMode } from './types'
 
 type Props = {
   mode: TelemetryMode
@@ -17,7 +17,6 @@ export function QueryControls({ mode, search, services, setFilter }: Props) {
   const { control } = useForm({
     values: {
       service,
-      minutes: [String(windowMinutes(search))],
       severity: filterValues(search, 'severity'),
       status: filterValues(search, 'status'),
       minDurationMs: [search.get('minDurationMs') ?? ''],
@@ -26,7 +25,9 @@ export function QueryControls({ mode, search, services, setFilter }: Props) {
 
   return (
     <div className="grid gap-4">
-      <div className="grid grid-cols-2 gap-x-2 gap-y-3 min-[700px]:grid-cols-4">
+      <div
+        className={`grid grid-cols-2 gap-x-2 gap-y-3 ${mode === 'traces' ? 'min-[700px]:grid-cols-3' : ''}`}
+      >
         <Controller
           control={control}
           name="service"
@@ -34,32 +35,14 @@ export function QueryControls({ mode, search, services, setFilter }: Props) {
             <SearchableSelect
               label="Service"
               multiple
+              minSelected={1}
               options={serviceNames.map((name) => ({ value: name, label: name }))}
               values={field.value}
-              placeholder="All services"
+              placeholder="Waiting for services"
               onChange={(values) => {
+                if (!values.length) return
                 field.onChange(values)
                 setFilter('service', values)
-              }}
-            />
-          )}
-        />
-        <Controller
-          control={control}
-          name="minutes"
-          render={({ field }) => (
-            <SearchableSelect
-              label="Time range"
-              options={[
-                { value: '5', label: 'Last 5 minutes' },
-                { value: '30', label: 'Last 30 minutes' },
-                { value: '60', label: 'Last hour' },
-                { value: '1440', label: 'Last 24 hours' },
-              ]}
-              values={field.value}
-              onChange={(values) => {
-                field.onChange(values)
-                setFilter('minutes', values)
               }}
             />
           )}

@@ -82,6 +82,10 @@ export function formatTime(value: string, seconds = false) {
 }
 
 export function windowMinutes(search: URLSearchParams) {
-  const value = search.get('minutes') ?? '30'
-  return ['5', '30', '60', '1440'].includes(value) ? Number(value) : 30
+  const from = Date.parse(search.get('from') ?? '')
+  const to = Date.parse(search.get('to') ?? '')
+  const duration = (to - from) / 60_000
+  if (Number.isFinite(duration) && duration > 0 && duration <= 1440) return duration
+  const value = Number(search.get('minutes') ?? 30)
+  return Number.isFinite(value) && value > 0 && value <= 1440 ? value : 30
 }

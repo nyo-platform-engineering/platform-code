@@ -1,3 +1,4 @@
+import { validateWindow } from './time-window'
 import { filterValues } from './filters'
 import type {
   LogBucket,
@@ -32,13 +33,21 @@ function without(params: URLSearchParams, ...keys: string[]) {
   return copy
 }
 
-function queryParameters(mode: TelemetryMode, search: URLSearchParams) {
+function queryParameters(mode: TelemetryMode, search: URLSearchParams, requireService = true) {
+  if (requireService && !filterValues(search, 'service').length) {
+    throw new Error('Select at least one service before querying telemetry.')
+  }
   const fixedTo = search.get('to')
   const to = fixedTo && !Number.isNaN(Date.parse(fixedTo)) ? new Date(fixedTo) : new Date()
+  const bounds = validateWindow(
+    search.get('from') && fixedTo
+      ? search.get('from')!
+      : new Date(to.getTime() - windowMinutes(search) * 60_000).toISOString(),
+    to.toISOString(),
+  )
   const params = new URLSearchParams({
     environment: 'local',
-    from: new Date(to.getTime() - windowMinutes(search) * 60_000).toISOString(),
-    to: to.toISOString(),
+    ...bounds,
     limit: '100',
   })
   for (const service of filterValues(search, 'service')) params.append('service', service)
@@ -50,6 +59,25 @@ function queryParameters(mode: TelemetryMode, search: URLSearchParams) {
     for (const value of search.getAll(key).filter(Boolean)) params.append(key, value)
   }
   return params
+}
+
+export async function fetchServices(
+  mode: TelemetryMode,
+  search: URLSearchParams,
+  signal: AbortSignal,
+) {
+  const params = without(
+    queryParameters(mode, search, false),
+    'service',
+    'traceId',
+    'severity',
+    'status',
+    'minDurationMs',
+    'q',
+    'attr',
+  )
+  const result = await query<{ service: string }>('services', params, signal)
+  return result.data.map((row) => row.service)
 }
 
 export async function fetchTelemetry(
@@ -114,14 +142,7 @@ export async function fetchTelemetry(
 
 export async function fetchTraceDetail(search: URLSearchParams, signal: AbortSignal) {
   const traceId = search.get('traceId') ?? ''
-  const params = without(
-    queryParameters('traces', search),
-    'service',
-    'status',
-    'minDurationMs',
-    'q',
-    'attr',
-  )
+  const params = without(queryParameters('traces', search), 'status', 'minDurationMs', 'q', 'attr')
   params.set('limit', '500')
   // One detail request at a time leaves room for the three overview requests.
   const detail = await query<SpanRecord>(`traces/${encodeURIComponent(traceId)}`, params, signal)

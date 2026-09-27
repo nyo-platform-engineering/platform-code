@@ -26,7 +26,7 @@ func ExecuteServices(ctx context.Context, traces, logs query.QueryStore, queries
 	}
 	names := map[string]struct{}{}
 	for n, store := range []query.QueryStore{traces, logs} {
-		rows, err := store.Query(ctx, queries[n].SQL, queries[n].Args...)
+		rows, err := query.Execute(ctx, store, queries[n])
 		if err != nil {
 			return nil, err
 		}

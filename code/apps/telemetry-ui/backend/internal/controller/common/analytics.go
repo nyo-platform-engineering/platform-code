@@ -86,7 +86,7 @@ func Handler(store model.QueryStore, op Operation, slots chan struct{}) gin.Hand
 		if op.Execute != nil {
 			data, err = op.Execute(ctx, queries)
 		} else {
-			data, err = store.Query(ctx, queries[0].SQL, queries[0].Args...)
+			data, err = model.Execute(ctx, store, queries[0])
 		}
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "query_unavailable", "message": "Query unavailable or resource limit reached. Narrow the time range or service filter and retry."})
@@ -101,7 +101,7 @@ func Handler(store model.QueryStore, op Operation, slots chan struct{}) gin.Hand
 			body["nextOffset"] = f.Offset + f.Limit
 		}
 		if op.Summary {
-			summary, err := store.Query(ctx, queries[1].SQL, queries[1].Args...)
+			summary, err := model.Execute(ctx, store, queries[1])
 			if err != nil {
 				c.JSON(503, gin.H{"error": "query_unavailable"})
 				return

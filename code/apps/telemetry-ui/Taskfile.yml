@@ -1,0 +1,67 @@
+version: '3'
+
+vars:
+  # npm supplies cached, pinned tools without invoking a global Corepack shim.
+  # Run from the app root so npm does not interpret frontend/devEngines.
+  PNPM: npm exec --yes --package=node@24.11.0 --package=pnpm@12.6.0 -- pnpm --dir frontend
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  setup:
+    run: once
+    desc: Install frontend dependencies
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - '{{.PNPM}} install --frozen-lockfile'
+
+  dev:
+    desc: Run mock API and frontend with hot reload (no containers)
+    aliases: [dev:mock]
+    deps: [setup]
+    cmds:
+      - task: dev:services
+
+  dev:services:
+    internal: true
+    deps: [dev:api, dev:web]
+
+  dev:api:
+    desc: Run the mock API on localhost:8080 with automatic Go reloads
+    dir: '{{.TASKFILE_DIR}}/backend'
+    env:
+      MOCK: 'true'
+      LISTEN_HOST: '127.0.0.1'
+      PORT: '8080'
+      GOMAXPROCS: '2'
+    cmds:
+      - go run -p 1 github.com/air-verse/air@v1.67.4 -c .air.toml
+
+  dev:web:
+    desc: Run the frontend on localhost:5173 with hot reload
+    dir: '{{.TASKFILE_DIR}}'
+    deps: [setup]
+    cmds:
+      - '{{.PNPM}} dev --strictPort'
+
+  build:
+    desc: Build the frontend and Go binary locally
+    deps: [setup]
+    dir: '{{.TASKFILE_DIR}}'
+    env:
+      GOMAXPROCS: '2'
+    cmds:
+      - '{{.PNPM}} build'
+      - cd backend && go build -p 1 -o telemetry-ui .
+
+  test:
+    desc: Run backend and frontend tests locally
+    deps: [setup]
+    dir: '{{.TASKFILE_DIR}}'
+    env:
+      GOMAXPROCS: '2'
+    cmds:
+      - cd backend && go test -p 1 ./...
+      - '{{.PNPM}} test'

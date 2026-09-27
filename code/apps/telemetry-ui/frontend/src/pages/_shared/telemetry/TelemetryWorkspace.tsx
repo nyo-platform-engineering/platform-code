@@ -5,15 +5,11 @@ import { filterValues } from './filters'
 import { useState, type ReactNode } from 'react'
 import { PageHeader } from '../../../layouts/PageHeader'
 import { useTelemetryData, useTelemetryFilters } from './hooks'
+import { preferredRefreshInterval, refreshInterval } from './refresh'
+import { TimeControls } from './TimeControls'
 import { QueryControls } from './QueryControls'
 import { TelemetryChart } from './TelemetryChart'
-import {
-  formatTime,
-  windowMinutes,
-  type TelemetryMode,
-  type TraceLink,
-  type TelemetryData,
-} from './types'
+import { windowMinutes, type TelemetryMode, type TraceLink, type TelemetryData } from './types'
 
 type SelectionProps = {
   traceId: string
@@ -35,26 +31,40 @@ export function TelemetryWorkspace({
   renderRecords,
   renderSelection,
 }: Props) {
-  const { search, setFilter, setSearchQuery } = useTelemetryFilters()
+  const { search, setFilter, setSearchQuery, setTimeWindow } = useTelemetryFilters()
+  const [refreshSeconds, setRefreshSeconds] = useState(preferredRefreshInterval)
   const [paused, setPaused] = useState(
-    () => Number(search.get('offset')) > 0 || Boolean(search.get('q')) || search.has('attr'),
+    () =>
+      search.has('to') ||
+      Number(search.get('offset')) > 0 ||
+      Boolean(search.get('q')) ||
+      search.has('attr'),
   )
   const { data, updated, problem, loading, services, refresh } = useTelemetryData(
     mode,
     search,
     paused,
+    setFilter,
+    refreshSeconds,
   )
   const [showCharts, setShowCharts] = useState(false)
   const traceId = search.get('traceId') ?? ''
   const link: TraceLink = (id, target) => {
     const params = new URLSearchParams({ traceId: id, minutes: String(windowMinutes(search)) })
     const services = filterValues(search, 'service')
-    for (const service of services.length ? services : ['']) params.append('service', service)
+    for (const service of services) params.append('service', service)
+    for (const key of ['from', 'to']) {
+      const value = search.get(key)
+      if (value) params.set(key, value)
+    }
     return `/${target}?${params}`
   }
 
   function toggleLive() {
-    if (paused) setFilter('offset', '0')
+    setTimeWindow(
+      String(windowMinutes(search)),
+      paused ? undefined : (data?.to ?? new Date().toISOString()),
+    )
     setPaused((current) => !current)
   }
 
@@ -69,19 +79,35 @@ export function TelemetryWorkspace({
       <PageHeader
         compact
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button aria-pressed={!paused} onClick={toggleLive} className="flex items-center gap-2">
-              <span className={`size-1.5 rounded-full ${paused ? 'bg-dim' : 'bg-accent'}`} />
-              {paused ? 'Resume live' : 'Live · pause'}
-            </Button>
-            <Button onClick={refresh} disabled={loading}>
-              Refresh
-            </Button>
-            <span className="text-[11px] text-muted">
-              {paused ? 'Updates paused' : problem ? 'Retrying…' : 'Every 2s'}
-              {updated ? ` · Updated ${formatTime(updated, true)}` : ''}
-            </span>
-          </div>
+          <TimeControls
+            minutes={windowMinutes(search)}
+            paused={paused}
+            refreshSeconds={refreshSeconds}
+            onIntervalChange={(seconds) => {
+              const interval = refreshInterval(seconds)
+              setRefreshSeconds(interval)
+              try {
+                localStorage.setItem('signal-deck-refresh-seconds', String(interval))
+              } catch {
+                /* Optional preference. */
+              }
+            }}
+            loading={loading}
+            problem={problem}
+            updated={updated}
+            from={data?.from}
+            to={data?.to}
+            onRangeChange={(minutes) => {
+              setPaused(false)
+              setTimeWindow(minutes)
+            }}
+            onWindowChange={({ from, to }) => {
+              setPaused(true)
+              setTimeWindow(String((Date.parse(to) - Date.parse(from)) / 60_000), to, from)
+            }}
+            onToggleLive={toggleLive}
+            onRefresh={refresh}
+          />
         }
         eyebrow="Observability"
         title={mode === 'traces' ? 'Traces' : 'Logs'}

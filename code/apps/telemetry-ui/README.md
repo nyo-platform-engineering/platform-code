@@ -54,6 +54,55 @@ authentication, tenant isolation, and authorization on every request.
 
 ## Run it
 
+For mock development with backend reloads and frontend hot reload, run from this directory:
+
+```bash
+task dev
+```
+
+Open http://127.0.0.1:5173. This installs frontend dependencies and starts the
+mock API on port 8080 alongside Vite. No containers are started. Ctrl-C stops
+the development tasks. Air watches Go source and module files, rebuilding and
+restarting the API after saves (500 ms debounce, limited build concurrency).
+Build failures stop the previous API so stale code is not served. The pinned
+watcher is downloaded through Go on first use; no global install is needed.
+Stop any earlier preview using
+port 8080 first. Requires Go, Task, and npm. The tasks use npm's cache to run Node 24.11.0
+and pnpm 12.6.0 directly, bypassing global Corepack shims. The first run downloads
+these tools; frontend setup completes before either development server starts.
+
+Use `task dev:api` or `task dev:web` for separate terminals, `task build` for a
+native build, and `task test` for backend/frontend tests. `task dev:mock` is an
+alias for `task dev`.
+
+
+For a lightweight preview without Docker, ClickHouse, or a collector, build the
+frontend once and run the Go server with `MOCK=true` (from this directory):
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm build
+cd ../backend
+GOMAXPROCS=2 go build -p 1 -o /tmp/telemetry-ui .
+cd ..
+MOCK=true LISTEN_HOST=127.0.0.1 /tmp/telemetry-ui
+```
+
+Open http://127.0.0.1:8080. Mock mode serves synthetic local-tenant traces and
+correlated logs from the hour before the query end time. Live refreshes move the
+fixtures forward with the current time; paused queries and pagination with a fixed
+`to` retain stable timestamps. No restart is needed to keep sample data fresh.
+Filters, charts, pagination, and trace details work against the in-memory data;
+SQL previews still show the real query. Readiness checks the in-memory store.
+Mock stores and fixtures live beside each domain model in
+`internal/domain/traces/model/mock.go` and `internal/domain/logs/model/mock.go`.
+Shared in-memory query helpers live in `internal/domain/common/mock`.
+Mock mode opens no database connections and disables backend OTLP export.
+`MOCK` defaults to `false`; invalid boolean values fail startup. Helm always sets
+`MOCK=false`, exposes no mock value, and rejects `MOCK` through `extraEnv`.
+
+
 For native app development with ClickHouse and the Collector in Docker Compose,
 see the [dependency setup](../dev/README.md) and
 [local development implementation plan](LOCAL_DEVELOPMENT_PLAN.md).

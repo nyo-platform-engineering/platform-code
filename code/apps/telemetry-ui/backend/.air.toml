@@ -1,0 +1,30 @@
+root = "."
+tmp_dir = ".air"
+
+[build]
+cmd = "go build -p 1 -o ./.air/telemetry-ui ."
+entrypoint = ["./.air/telemetry-ui"]
+include_ext = ["go"]
+include_file = ["go.mod", "go.sum"]
+exclude_dir = [".air", "vendor", ".git"]
+exclude_regex = ["_test\\.go$"]
+exclude_unchanged = true
+# Coalesce saves; use filesystem events instead of continuous polling.
+delay = 500
+poll = false
+stop_on_error = true
+send_interrupt = true
+kill_delay = "5s"
+
+[build.windows]
+cmd = "go build -p 1 -o ./.air/telemetry-ui.exe ."
+entrypoint = ["./.air/telemetry-ui.exe"]
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = false

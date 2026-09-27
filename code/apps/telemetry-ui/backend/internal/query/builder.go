@@ -18,6 +18,10 @@ const (
 // (projection, grouping, ordering) are code-owned constants, never request input.
 // User values enter through Filter, ContainsKey, and pagination arguments only.
 type SelectBuilder struct {
+	filter                                   Filter
+	tenant                                   string
+	signalTable                              Table
+	serverOnly                               bool
 	table, columns, pre, where, group, order string
 	preArgs, whereArgs                       []any
 	limit, offset                            int
@@ -38,7 +42,7 @@ func Select(table Table, columns string, f Filter, tenant string, serverOnly boo
 		return nil, err
 	}
 	pre, preArgs, where, whereArgs := f.conditions(tenant, table == Logs, serverOnly)
-	return &SelectBuilder{table: name, columns: columns, pre: pre, preArgs: preArgs, where: where, whereArgs: whereArgs, searchBudget: f.Settings() != ""}, nil
+	return &SelectBuilder{filter: f, tenant: tenant, signalTable: table, serverOnly: serverOnly, table: name, columns: columns, pre: pre, preArgs: preArgs, where: where, whereArgs: whereArgs, searchBudget: f.Settings() != ""}, nil
 }
 
 func (b *SelectBuilder) ContainsKey(value string) *SelectBuilder {
@@ -86,7 +90,7 @@ func (b *SelectBuilder) Compile(name string) (CompiledQuery, error) {
 	if b.searchBudget {
 		sql.WriteString(SearchSettings)
 	}
-	return CompiledQuery{Name: name, SQL: sql.String(), Args: args}, nil
+	return CompiledQuery{Name: name, SQL: sql.String(), Args: args, Filter: b.filter, Tenant: b.tenant, Table: b.signalTable, ServerOnly: b.serverOnly}, nil
 }
 
 // Services returns one bounded query per connection. The metadata model merges them.

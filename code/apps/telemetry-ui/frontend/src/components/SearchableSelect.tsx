@@ -8,12 +8,15 @@ type Props = {
   options: SelectOption[]
   values: string[]
   onChange: (values: string[]) => void
+  compact?: boolean
+  portalContainer?: () => HTMLElement | null
   multiple?: boolean
   placeholder?: string
   allowCustom?: boolean
   onOpenChange?: (open: boolean) => void
   onSearchChange?: (query: string) => void
   status?: string
+  minSelected?: number
   maxSelected?: number
 }
 
@@ -22,8 +25,11 @@ export function SearchableSelect({
   options,
   values,
   onChange,
+  compact = false,
+  portalContainer,
   multiple = false,
   placeholder = 'Select an option',
+  minSelected = 0,
   maxSelected = 20,
   allowCustom = false,
   onOpenChange,
@@ -64,8 +70,9 @@ export function SearchableSelect({
 
   function choose(value: string) {
     if (multiple) {
-      if (values.includes(value)) onChange(values.filter((item) => item !== value))
-      else if (values.length < maxSelected) onChange([...values, value])
+      if (values.includes(value)) {
+        if (values.length > minSelected) onChange(values.filter((item) => item !== value))
+      } else if (values.length < maxSelected) onChange([...values, value])
     } else {
       onChange([value])
       close(true)
@@ -76,7 +83,7 @@ export function SearchableSelect({
     if (!open) return
     const place = () => {
       const rect = trigger.current!.getBoundingClientRect()
-      const width = Math.min(Math.max(rect.width, 280), window.innerWidth - 24)
+      const width = Math.min(Math.max(rect.width, compact ? 200 : 280), window.innerWidth - 24)
       const below = window.innerHeight - rect.bottom - 20
       const above = rect.top - 20
       const upward = below < 260 && above > below
@@ -114,7 +121,7 @@ export function SearchableSelect({
       document.removeEventListener('pointerdown', outside)
       document.removeEventListener('focusin', focus)
     }
-  }, [open])
+  }, [open, compact])
 
   useEffect(() => {
     if (open)
@@ -122,14 +129,17 @@ export function SearchableSelect({
   }, [activeIndex, id, open])
 
   return (
-    <div className="grid w-full min-w-0 gap-1.5">
-      <span id={`${id}-label`} className="text-[11px] font-semibold text-muted">
+    <div className={compact ? 'grid min-w-0' : 'grid w-full min-w-0 gap-1.5'}>
+      <span
+        id={`${id}-label`}
+        className={compact ? 'sr-only' : 'text-[11px] font-semibold text-muted'}
+      >
         {label}
       </span>
       <Button
         ref={trigger}
         type="button"
-        className="flex min-h-8.5 w-full items-center gap-2 text-left"
+        className={`flex w-full items-center gap-2 text-left ${compact ? 'min-h-8 px-2' : 'min-h-8.5'}`}
         aria-labelledby={`${id}-label ${id}-value`}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -226,7 +236,9 @@ export function SearchableSelect({
             >
               {filtered.map((option, index) => {
                 const checked = values.includes(option.value)
-                const disabled = multiple && !checked && values.length >= maxSelected
+                const disabled =
+                  multiple &&
+                  (checked ? values.length <= minSelected : values.length >= maxSelected)
                 return (
                   <div
                     key={option.value}
@@ -259,7 +271,7 @@ export function SearchableSelect({
                     : `${filtered.length} options · Enter to select`)}
             </div>
             <div className="flex justify-end gap-2 border-t border-border pt-1.5">
-              {multiple && (
+              {multiple && minSelected === 0 && (
                 <Button type="button" disabled={!values.length} onClick={() => onChange([])}>
                   Clear selection
                 </Button>
@@ -277,7 +289,7 @@ export function SearchableSelect({
               </Button>
             </div>
           </div>,
-          document.body,
+          portalContainer?.() ?? document.body,
         )}
     </div>
   )

@@ -19,6 +19,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
+	logmodel "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/logs/model"
+	tracemodel "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/traces/model"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/policy"
 	model "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/routes"
@@ -35,6 +37,7 @@ import (
 const version = "0.1.0"
 
 type config struct {
+	Mock                    bool
 	Port                    int
 	ListenHost              string
 	TraceStore              model.QueryStore
@@ -56,17 +59,23 @@ func loadConfig() (config, error) {
 		port = parsed
 	}
 
+	mockEnabled, err := strconv.ParseBool(envOr("MOCK", "false"))
+	if err != nil {
+		return config{}, fmt.Errorf("invalid MOCK: expected a boolean")
+	}
+
 	authMode := envOr("AUTH_MODE", "local")
 	if authMode != "local" {
 		return config{}, fmt.Errorf("unsupported AUTH_MODE %q: only local is available in the scaffold", authMode)
 	}
 
 	return config{
+		Mock:                    mockEnabled,
 		Port:                    port,
 		ListenHost:              os.Getenv("LISTEN_HOST"),
 		WebDistDir:              envOr("WEB_DIST_DIR", "frontend/dist"),
 		AuthMode:                authMode,
-		BackendOTLPEnabled:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "",
+		BackendOTLPEnabled:      !mockEnabled && os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "",
 		TelemetryShutdownPeriod: 5 * time.Second,
 	}, nil
 }
@@ -202,12 +211,18 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 }
 
 func run(ctx context.Context, cfg config, logger *slog.Logger) error {
-	traceStore, logStore := model.OpenStores()
-	defer traceStore.Close()
-	if logStore != traceStore {
-		defer logStore.Close()
+	if cfg.Mock {
+		cfg.TraceStore, cfg.LogStore = tracemodel.MockStore{}, logmodel.MockStore{}
+		cfg.BackendOTLPEnabled = false
+		logger.Warn("MOCK enabled: serving synthetic telemetry without database connections")
+	} else {
+		traceStore, logStore := model.OpenStores()
+		defer traceStore.Close()
+		if logStore != traceStore {
+			defer logStore.Close()
+		}
+		cfg.TraceStore, cfg.LogStore = traceStore, logStore
 	}
-	cfg.TraceStore, cfg.LogStore = traceStore, logStore
 	provider, err := newTracerProvider(ctx, cfg)
 	if err != nil {
 		return err

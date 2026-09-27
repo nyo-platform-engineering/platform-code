@@ -6,9 +6,13 @@ import (
 )
 
 type CompiledQuery struct {
-	Name string `json:"name"`
-	SQL  string `json:"sql"`
-	Args []any  `json:"-"`
+	Name       string `json:"name"`
+	SQL        string `json:"sql"`
+	Args       []any  `json:"-"`
+	Filter     Filter `json:"-"`
+	Tenant     string `json:"-"`
+	Table      Table  `json:"-"`
+	ServerOnly bool   `json:"-"`
 }
 
 // PREWHERE reads scope/filter columns before loading bodies and evaluating JSON.

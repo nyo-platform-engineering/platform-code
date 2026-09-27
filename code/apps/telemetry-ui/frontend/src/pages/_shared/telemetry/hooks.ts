@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchTelemetry } from './api'
+import { fetchServices, fetchTelemetry } from './api'
+import { filterValues, initialService, type SetFilter } from './filters'
 import type { TelemetryData, TelemetryMode } from './types'
 
-const REFRESH_INTERVAL_MS = 2_000
+import { refreshDelay } from './refresh'
 
 export function useTelemetryFilters() {
   const [search, setSearch] = useState(() => new URLSearchParams(window.location.search))
@@ -14,16 +15,15 @@ export function useTelemetryFilters() {
   }, [])
 
   const setFilter = useCallback((key: string, value: string | string[], resetPagination = true) => {
+    const values = Array.isArray(value) ? value : [value]
+    if (key === 'service' && !values.some(Boolean)) return
     const next = new URLSearchParams(window.location.search)
     next.delete(key)
-    const values = Array.isArray(value) ? value : [value]
     for (const item of [...new Set(values)].filter(Boolean)) next.append(key, item)
-    if (key === 'service' && !next.has(key)) next.set(key, '')
 
     if (resetPagination && (key !== 'offset' || value === '0')) {
       next.delete('offset')
-      next.delete('to')
-      if (key !== 'offset' && (next.get('q') || next.has('attr')))
+      if (!next.has('to') && key !== 'offset' && (next.get('q') || next.has('attr')))
         next.set('to', new Date().toISOString())
     } else if (key === 'offset' && !next.has('to')) {
       next.set('to', new Date().toISOString())
@@ -40,10 +40,10 @@ export function useTelemetryFilters() {
 
   const setSearchQuery = useCallback((query: string, attributes: string[]) => {
     const next = new URLSearchParams(window.location.search)
-    for (const key of ['q', 'attr', 'offset', 'to']) next.delete(key)
+    for (const key of ['q', 'attr', 'offset']) next.delete(key)
     if (query) next.set('q', query)
     for (const attribute of attributes) next.append('attr', attribute)
-    if (query || attributes.length) next.set('to', new Date().toISOString())
+    if (!next.has('to') && (query || attributes.length)) next.set('to', new Date().toISOString())
     window.history.pushState(
       window.history.state,
       '',
@@ -51,10 +51,27 @@ export function useTelemetryFilters() {
     )
     setSearch(next)
   }, [])
-  return { search, setFilter, setSearchQuery }
+  const setTimeWindow = useCallback((minutes: string, to?: string, from?: string) => {
+    const next = new URLSearchParams(window.location.search)
+    next.set('minutes', minutes)
+    next.delete('offset')
+    if (from && to) next.set('from', from)
+    else next.delete('from')
+    if (to) next.set('to', to)
+    else next.delete('to')
+    window.history.pushState(window.history.state, '', `${window.location.pathname}?${next}`)
+    setSearch(next)
+  }, [])
+  return { search, setFilter, setSearchQuery, setTimeWindow }
 }
 
-export function useTelemetryData(mode: TelemetryMode, search: URLSearchParams, paused: boolean) {
+export function useTelemetryData(
+  mode: TelemetryMode,
+  search: URLSearchParams,
+  paused: boolean,
+  setFilter: SetFilter,
+  refreshSeconds: number,
+) {
   const overviewSearch = new URLSearchParams(search)
   if (mode === 'traces') overviewSearch.delete('traceId')
   const queryKey = `${mode}?${overviewSearch}`
@@ -77,6 +94,16 @@ export function useTelemetryData(mode: TelemetryMode, search: URLSearchParams, p
       busy = true
       setLoading(true)
       try {
+        if (!filterValues(params, 'service').length) {
+          const available = await fetchServices(mode, params, controller.signal)
+          if (controller.signal.aborted) return
+          setServices(available)
+          const service = initialService(params, available)
+          if (!service)
+            throw new Error('No services found in this time range. Choose a wider time range.')
+          setFilter('service', service)
+          return
+        }
         const data = await fetchTelemetry(mode, params, controller.signal)
         if (!controller.signal.aborted) {
           setResult({ key: queryKey, data, updated: new Date().toISOString() })
@@ -92,11 +119,7 @@ export function useTelemetryData(mode: TelemetryMode, search: URLSearchParams, p
         busy = false
         if (!controller.signal.aborted) {
           setLoading(false)
-          if (!paused)
-            timer = setTimeout(
-              () => void load(),
-              Math.min(30_000, REFRESH_INTERVAL_MS * 2 ** Math.min(failures, 4)),
-            )
+          if (!paused) timer = setTimeout(() => void load(), refreshDelay(refreshSeconds, failures))
         }
       }
     }
@@ -113,7 +136,7 @@ export function useTelemetryData(mode: TelemetryMode, search: URLSearchParams, p
       clearTimeout(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [mode, queryKey, paused, revision])
+  }, [mode, queryKey, paused, revision, setFilter, refreshSeconds])
 
   // Keep charts mounted during refresh/pause, but never show data for old filters.
   return {

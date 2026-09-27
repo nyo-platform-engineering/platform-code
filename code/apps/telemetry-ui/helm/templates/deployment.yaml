@@ -40,6 +40,7 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
+            - {name: MOCK, value: "false"}
             - {name: PORT, value: "8080"}
             - {name: LISTEN_HOST, value: "0.0.0.0"}
             - {name: WEB_DIST_DIR, value: /web}
@@ -54,7 +55,7 @@ spec:
             {{- fail "clickhouse.type must be unified or split" }}
             {{- end }}
             {{- range .Values.extraEnv }}
-            {{- if or (hasPrefix "CLICKHOUSE_" .name) (has .name (list "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE")) }}
+            {{- if or (hasPrefix "CLICKHOUSE_" .name) (has .name (list "MOCK" "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE")) }}
             {{- fail (printf "extraEnv cannot override managed variable %s" .name) }}
             {{- end }}
             {{- toYaml (list .) | nindent 12 }}
