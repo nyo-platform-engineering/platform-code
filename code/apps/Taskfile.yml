@@ -34,7 +34,7 @@ tasks:
     env:
       CLICKHOUSE_INTEGRATION: '1'
     cmds:
-      - go test -run Integration -v
+      - go test ./... -run Integration -v
   dev:test:
     desc: Test Go applications and build/typecheck the frontend natively
     cmds:

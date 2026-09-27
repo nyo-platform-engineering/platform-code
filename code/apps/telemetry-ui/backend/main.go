@@ -18,6 +18,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/policy"
+	model "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/routes"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -33,9 +37,11 @@ const version = "0.1.0"
 type config struct {
 	Port                    int
 	ListenHost              string
-	Store                   queryStore
+	TraceStore              model.QueryStore
+	LogStore                model.QueryStore
 	WebDistDir              string
 	AuthMode                string
+	Authenticator           auth.Authenticator
 	BackendOTLPEnabled      bool
 	TelemetryShutdownPeriod time.Duration
 }
@@ -70,94 +76,6 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-type principal struct {
-	Subject     string   `json:"subject"`
-	DisplayName string   `json:"displayName"`
-	Tenant      string   `json:"tenant"`
-	Permissions []string `json:"permissions"`
-}
-
-type contextKey string
-
-const principalKey contextKey = "principal"
-
-const (
-	permissionMetadataRead = "observability:metadata:read"
-	permissionTracesRead   = "observability:traces:read"
-	permissionLogsRead     = "observability:logs:read"
-)
-
-type localAuthenticator struct{}
-
-func (localAuthenticator) authenticate(_ *http.Request) principal {
-	return principal{
-		Subject:     "local-development",
-		DisplayName: "Local developer",
-		Tenant:      "local",
-		Permissions: []string{permissionMetadataRead, permissionTracesRead, permissionLogsRead},
-	}
-}
-
-func requirePermission(auth localAuthenticator, permission string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		actor := auth.authenticate(c.Request)
-		if !hasPermission(actor, permission) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
-			return
-		}
-		ctx := context.WithValue(c.Request.Context(), principalKey, actor)
-		c.Request = c.Request.WithContext(ctx)
-		c.Set(string(principalKey), actor)
-		c.Next()
-	}
-}
-
-func hasPermission(actor principal, expected string) bool {
-	for _, permission := range actor.Permissions {
-		if permission == expected {
-			return true
-		}
-	}
-	return false
-}
-
-type capability struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Status      string `json:"status"`
-	Bucket      string `json:"bucket"`
-	Description string `json:"description"`
-}
-
-func registerAPIRoutes(router *gin.Engine, auth localAuthenticator, store queryStore) {
-	api := router.Group("/api/v1")
-	api.GET("/meta", requirePermission(auth, permissionMetadataRead), func(c *gin.Context) {
-		actor, _ := c.Get(string(principalKey))
-		c.JSON(http.StatusOK, gin.H{
-			"service": "telemetry-ui",
-			"version": version,
-			"actor":   actor,
-			"capabilities": []capability{
-				{ID: "trace-red", Title: "Trace RED", Status: "available", Bucket: "1m", Description: "Request rate, errors, and duration grouped by service."},
-				{ID: "log-volume", Title: "Log volume by severity", Status: "available", Bucket: "1m", Description: "Log counts grouped into OpenTelemetry severity bands."},
-			},
-		})
-	})
-	slots := make(chan struct{}, 4)
-	for _, route := range []struct{ path, kind, permission string }{
-		{"/services", "services", permissionMetadataRead},
-		{"/traces/attributes", "traces-keys", permissionTracesRead},
-		{"/logs/attributes", "logs-keys", permissionLogsRead},
-		{"/traces/red", "red", permissionTracesRead},
-		{"/traces", "traces", permissionTracesRead},
-		{"/traces/:traceId", "detail", permissionTracesRead},
-		{"/logs/volume", "logs-volume", permissionLogsRead},
-		{"/logs", "logs", permissionLogsRead},
-	} {
-		api.GET(route.path, requirePermission(auth, route.permission), analyticsHandler(store, route.kind, slots))
-	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -249,6 +167,12 @@ func newTracerProvider(ctx context.Context, cfg config) (*sdktrace.TracerProvide
 }
 
 func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
+	if cfg.AuthMode != "" && cfg.AuthMode != "local" {
+		return nil, fmt.Errorf("unsupported AUTH_MODE %q", cfg.AuthMode)
+	}
+	if cfg.Authenticator == nil {
+		cfg.Authenticator = auth.LocalAuthenticator{}
+	}
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(
@@ -269,35 +193,21 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 		requestLogger(logger),
 	)
 
-	router.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok\n") })
-	router.GET("/readyz", func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
-		defer cancel()
-		if _, err := cfg.Store.Query(ctx, "SELECT TraceId FROM otel.otel_traces LIMIT 0"); err != nil {
-			c.JSON(503, gin.H{"error": "storage_unavailable"})
-			return
-		}
-		c.String(200, "ok\n")
-	})
-	registerAPIRoutes(router, localAuthenticator{}, cfg.Store)
-
-	frontend := newFrontendHandler(cfg.WebDistDir)
-	router.GET("/", gin.WrapH(frontend))
-	router.GET("/assets/*filepath", gin.WrapH(frontend))
-	router.NoRoute(func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/otlp/") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
-			return
-		}
-		frontend.ServeHTTP(c.Writer, c.Request)
-	})
+	router.Use(policy.Enforce(cfg.Authenticator))
+	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version)
+	if err := policy.ValidateRoutes(router.Routes()); err != nil {
+		return nil, err
+	}
 	return router, nil
 }
 
 func run(ctx context.Context, cfg config, logger *slog.Logger) error {
-	store := openStore()
-	defer store.db.Close()
-	cfg.Store = store
+	traceStore, logStore := model.OpenStores()
+	defer traceStore.Close()
+	if logStore != traceStore {
+		defer logStore.Close()
+	}
+	cfg.TraceStore, cfg.LogStore = traceStore, logStore
 	provider, err := newTracerProvider(ctx, cfg)
 	if err != nil {
 		return err

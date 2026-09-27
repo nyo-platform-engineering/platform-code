@@ -1,0 +1,9 @@
+# Requires Gateway API CRDs, a Gateway, and permission to attach this route.
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: internal
+      namespace: networking
+      sectionName: https
+  hostnames:
+    - telemetry.example.com

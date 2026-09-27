@@ -59,7 +59,9 @@ ClickHouse's nanoseconds to milliseconds. Severity 0 remains `unspecified`.
 - `429`: query concurrency exhausted (`too_many_queries`).
 - `503`: storage/query failure (`query_unavailable`); never substituted with empty data.
 
-`/healthz` checks process liveness. `/readyz` checks access to the trace table.
+`/healthz` checks process liveness. `/readyz` checks database connectivity and
+read access to both trace and log tables, using either a shared connection or
+separate signal connections. Either backend failing returns 503.
 An empty trace detail returns `200` with an empty data array, allowing the UI to
 poll while export is still in progress. SQL errors and credentials are not
 returned to the browser.
@@ -217,3 +219,15 @@ Trace charts show request frequency, error rate, and latency separately. Both RE
 buckets and the whole-window summary include `p90Ms` alongside `p50Ms`, `p95Ms`, and
 `p99Ms`; empty buckets keep all four percentiles null. Percentiles share one TDigest
 aggregate state. Error rate reflects server-span Error status, not log severity.
+
+### Shared or separate database connections
+
+`CLICKHOUSE_ADDR`, `CLICKHOUSE_USER`, and `CLICKHOUSE_PASSWORD` configure the shared
+connection. Optional `CLICKHOUSE_TRACES_*` and `CLICKHOUSE_LOGS_*` overrides select
+separate backends. Identical resolved settings share a connection pool.
+
+`/services` runs one tenant-scoped query on each backend, merges distinct names,
+sorts them, and retains the first 500. If either query fails, it returns 503 rather
+than a partial service list. `preview=1` returns `trace-services` and `log-services`
+queries without connecting to storage. The shared query concurrency budget and
+five-second deadline still cover the complete operation.

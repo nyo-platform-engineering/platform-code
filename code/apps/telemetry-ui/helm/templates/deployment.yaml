@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telemetry-ui.fullname" . }}
+  labels:
+    {{- include "telemetry-ui.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "telemetry-ui.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telemetry-ui.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: telemetry-ui
+          image: {{ include "telemetry-ui.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - {name: PORT, value: "8080"}
+            - {name: LISTEN_HOST, value: "0.0.0.0"}
+            - {name: WEB_DIST_DIR, value: /web}
+            - name: AUTH_MODE
+              value: {{ .Values.authMode | quote }}
+            {{- if eq .Values.clickhouse.type "unified" }}
+            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_" "config" .Values.clickhouse.unified) | nindent 12 }}
+            {{- else if eq .Values.clickhouse.type "split" }}
+            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_TRACES_" "config" .Values.clickhouse.traces) | nindent 12 }}
+            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_LOGS_" "config" .Values.clickhouse.logs) | nindent 12 }}
+            {{- else }}
+            {{- fail "clickhouse.type must be unified or split" }}
+            {{- end }}
+            {{- range .Values.extraEnv }}
+            {{- if or (hasPrefix "CLICKHOUSE_" .name) (has .name (list "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE")) }}
+            {{- fail (printf "extraEnv cannot override managed variable %s" .name) }}
+            {{- end }}
+            {{- toYaml (list .) | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

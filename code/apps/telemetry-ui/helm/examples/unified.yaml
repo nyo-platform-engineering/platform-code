@@ -1,0 +1,9 @@
+# Create telemetry-ui-clickhouse with a password key in the release namespace.
+clickhouse:
+  type: unified
+  unified:
+    address: clickhouse.monitoring.svc.cluster.local:9000
+    username: app
+    passwordSecret:
+      name: telemetry-ui-clickhouse
+      key: password

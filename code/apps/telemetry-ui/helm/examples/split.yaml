@@ -1,0 +1,14 @@
+clickhouse:
+  type: split
+  traces:
+    address: clickhouse-traces.monitoring.svc.cluster.local:9000
+    username: trace-reader
+    passwordSecret:
+      name: telemetry-ui-traces
+      key: password
+  logs:
+    address: clickhouse-logs.monitoring.svc.cluster.local:9000
+    username: log-reader
+    passwordSecret:
+      name: telemetry-ui-logs
+      key: password

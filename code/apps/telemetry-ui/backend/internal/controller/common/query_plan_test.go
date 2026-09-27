@@ -1,7 +1,6 @@
-package main
+package common
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -10,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
+	model "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 )
 
 func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
@@ -19,9 +20,9 @@ func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
 		if strings.HasPrefix(kind, "logs") {
 			scope = "log"
 		}
-		raw, _ := json.Marshal(attributeFilter{Scope: scope, Key: "payload", Path: "user.id", Op: "eq", Value: "a' OR 1=1 --"})
+		raw, _ := json.Marshal(model.AttributeFilter{Scope: scope, Key: "payload", Path: "user.id", Op: "eq", Value: "a' OR 1=1 --"})
 		params.Set("attr", string(raw))
-		run := func(preview, auth bool) (*httptest.ResponseRecorder, *captureStore) {
+		run := func(preview, authenticated bool) (*httptest.ResponseRecorder, *captureStore) {
 			params.Del("preview")
 			if preview {
 				params.Set("preview", "1")
@@ -29,8 +30,8 @@ func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
 			out := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(out)
 			c.Request = httptest.NewRequest("GET", "/?"+params.Encode(), nil)
-			if auth {
-				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), principalKey, principal{Tenant: "test-tenant"}))
+			if authenticated {
+				c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: "test-tenant"}))
 			}
 			store := &captureStore{}
 			analyticsHandler(store, kind, make(chan struct{}, 1))(c)

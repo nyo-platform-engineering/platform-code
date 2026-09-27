@@ -1,0 +1,8 @@
+Telemetry UI: {{ include "telemetry-ui.fullname" . }}
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "telemetry-ui.fullname" . }} 8080:{{ .Values.service.port }}
+
+Open http://localhost:8080
+ClickHouse connection type: {{ .Values.clickhouse.type }}
+Readiness requires database connectivity and read access to both signal tables.
+AUTH_MODE=local grants the local identity read permissions; secure access at your gateway.

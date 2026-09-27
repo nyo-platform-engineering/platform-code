@@ -1,4 +1,4 @@
-package main
+package query
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 )
 
-type attributeFilter struct {
+type AttributeFilter struct {
 	Scope string `json:"scope"`
 	Key   string `json:"key"`
 	Op    string `json:"op"`
@@ -19,16 +19,16 @@ type attributeFilter struct {
 	Path  string `json:"path,omitempty"`
 }
 
-func parseAttributes(values []string) ([]attributeFilter, error) {
+func ParseAttributes(values []string) ([]AttributeFilter, error) {
 	if len(values) > 8 {
 		return nil, errors.New("at most 8 attribute conditions are allowed")
 	}
-	result := make([]attributeFilter, 0, len(values))
+	result := make([]AttributeFilter, 0, len(values))
 	for _, value := range values {
 		if len(value) > 4096 {
 			return nil, errors.New("attribute condition too long")
 		}
-		var item attributeFilter
+		var item AttributeFilter
 		decoder := json.NewDecoder(strings.NewReader(value))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&item); err != nil {
@@ -37,50 +37,15 @@ func parseAttributes(values []string) ([]attributeFilter, error) {
 		if err := decoder.Decode(new(any)); err != io.EOF {
 			return nil, errors.New("invalid attribute condition JSON")
 		}
-		if item.Scope != "resource" && item.Scope != "span" && item.Scope != "log" && item.Scope != "body" {
-			return nil, errors.New("invalid attribute scope")
-		}
-		if !utf8.ValidString(item.Key) || len(item.Key) == 0 || utf8.RuneCountInString(item.Key) > 128 || strings.ContainsFunc(item.Key, unicode.IsControl) {
-			return nil, errors.New("attribute key must contain 1–128 characters without controls")
-		}
-		if !utf8.ValidString(item.Value) || utf8.RuneCountInString(item.Value) > 256 || strings.ContainsFunc(item.Value, unicode.IsControl) {
-			return nil, errors.New("attribute value must contain at most 256 characters without controls")
-		}
-		path := item.Path
-		if item.Scope == "body" {
-			if path != "" {
-				return nil, errors.New("body uses key as its JSON path")
-			}
-			path = item.Key
-		}
-		if path != "" {
-			if _, err := jsonPath(path); err != nil {
-				return nil, err
-			}
-		}
-		switch item.Op {
-		case "eq", "neq", "contains":
-			if item.Op == "contains" && item.Value == "" {
-				return nil, errors.New("contains requires a value")
-			}
-		case "exists", "missing":
-			if item.Value != "" {
-				return nil, errors.New("exists/missing cannot have a value")
-			}
-		case "gt", "gte", "lt", "lte":
-			n, err := strconv.ParseFloat(item.Value, 64)
-			if err != nil || n != n || n > 1.7976931348623157e308 || n < -1.7976931348623157e308 {
-				return nil, errors.New("numeric comparison requires a finite number")
-			}
-		default:
-			return nil, errors.New("invalid attribute operator")
+		if err := item.validate(); err != nil {
+			return nil, err
 		}
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-func (f attributeFilter) sql() (string, []any) {
+func (f AttributeFilter) sql() (string, []any) {
 	if f.Scope == "body" || f.Path != "" {
 		return f.jsonSQL()
 	}
@@ -136,7 +101,7 @@ func jsonPath(path string) ([]any, error) {
 	return args, nil
 }
 
-func (f attributeFilter) jsonSQL() (string, []any) {
+func (f AttributeFilter) jsonSQL() (string, []any) {
 	source, path := "Body", f.Key
 	var sourceArgs []any
 	if f.Scope != "body" {
@@ -181,4 +146,46 @@ func (f attributeFilter) jsonSQL() (string, []any) {
 		args = append(args, n)
 	}
 	return "(" + valid + " AND " + exists + " AND " + predicate + ")", args
+}
+
+func (item AttributeFilter) validate() error {
+	if item.Scope != "resource" && item.Scope != "span" && item.Scope != "log" && item.Scope != "body" {
+		return errors.New("invalid attribute scope")
+	}
+	if !utf8.ValidString(item.Key) || len(item.Key) == 0 || utf8.RuneCountInString(item.Key) > 128 || strings.ContainsFunc(item.Key, unicode.IsControl) {
+		return errors.New("attribute key must contain 1–128 characters without controls")
+	}
+	if !utf8.ValidString(item.Value) || utf8.RuneCountInString(item.Value) > 256 || strings.ContainsFunc(item.Value, unicode.IsControl) {
+		return errors.New("attribute value must contain at most 256 characters without controls")
+	}
+	path := item.Path
+	if item.Scope == "body" {
+		if path != "" {
+			return errors.New("body uses key as its JSON path")
+		}
+		path = item.Key
+	}
+	if path != "" {
+		if _, err := jsonPath(path); err != nil {
+			return err
+		}
+	}
+	switch item.Op {
+	case "eq", "neq", "contains":
+		if item.Op == "contains" && item.Value == "" {
+			return errors.New("contains requires a value")
+		}
+	case "exists", "missing":
+		if item.Value != "" {
+			return errors.New("exists/missing cannot have a value")
+		}
+	case "gt", "gte", "lt", "lte":
+		n, err := strconv.ParseFloat(item.Value, 64)
+		if err != nil || n != n || n > 1.7976931348623157e308 || n < -1.7976931348623157e308 {
+			return errors.New("numeric comparison requires a finite number")
+		}
+	default:
+		return errors.New("invalid attribute operator")
+	}
+	return nil
 }

@@ -10,7 +10,7 @@ FROM golang:1.27.1-alpine AS go-build
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
-COPY backend/*.go ./
+COPY backend/ ./
 RUN go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /telemetry-ui .
 
 FROM alpine:3.22

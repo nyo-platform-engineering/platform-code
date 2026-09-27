@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"context"
@@ -6,9 +6,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
+	model "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 )
 
 func TestFilterRejectsUnboundedAndInvalidQueries(t *testing.T) {
@@ -20,24 +21,6 @@ func TestFilterRejectsUnboundedAndInvalidQueries(t *testing.T) {
 				t.Fatal("expected invalid query")
 			}
 		})
-	}
-}
-func TestWhereAlwaysScopesTenantAndBindsValues(t *testing.T) {
-	from := time.Now()
-	f := queryFilter{From: from, To: from.Add(time.Minute), Services: []string{"x' OR 1=1 --"}, Environment: "local", TraceID: strings.Repeat("a", 32), Severities: []string{"error"}}
-	for _, logs := range []bool{false, true} {
-		sql, args := f.where("tenant-a", logs)
-		if !strings.Contains(sql, "ResourceAttributes['tenant.id'] = ?") || strings.Contains(sql, f.Services[0]) || args[2] != "tenant-a" {
-			t.Fatalf("unsafe query: %s %#v", sql, args)
-		}
-	}
-}
-func TestGapFillingKeepsMissingLatencyNull(t *testing.T) {
-	from := time.Date(2026, 9, 25, 1, 0, 30, 0, time.UTC)
-	f := queryFilter{From: from, To: from.Add(2 * time.Minute)}
-	rows := fillBuckets(nil, f, false)
-	if len(rows) != 3 || rows[0]["partial"] != true || rows[1]["partial"] != false || rows[2]["partial"] != true || rows[1]["p90Ms"] != nil || rows[1]["p95Ms"] != nil || rows[1]["requests"] != 0 {
-		t.Fatalf("unexpected buckets: %#v", rows)
 	}
 }
 
@@ -58,7 +41,7 @@ func TestEveryQueryIncludesTenant(t *testing.T) {
 			out := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(out)
 			c.Request = httptest.NewRequest("GET", "/?traceId="+strings.Repeat("a", 32), nil)
-			c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), principalKey, principal{Tenant: "test-scope"}))
+			c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: "test-scope"}))
 			analyticsHandler(store, kind, make(chan struct{}, 1))(c)
 			if out.Code != 200 {
 				t.Fatalf("%d %s", out.Code, out.Body)
@@ -90,11 +73,11 @@ func TestMultiFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sql, args := f.where("tenant-a", true)
+	sql, args := f.Where("tenant-a", true)
 	if !strings.Contains(sql, "ServiceName IN (?, ?)") || !strings.Contains(sql, "AND (SeverityNumber BETWEEN ? AND ? OR SeverityNumber BETWEEN ? AND ?)") || args[2] != "tenant-a" || len(args) != 10 {
 		t.Fatalf("%s %#v", sql, args)
 	}
-	sql, _ = f.where("tenant-a", false)
+	sql, _ = f.Where("tenant-a", false)
 	if strings.Contains(sql, "StatusCode") {
 		t.Fatal("both statuses should include all traces")
 	}
@@ -121,17 +104,17 @@ func TestSearchValidationAndBinding(t *testing.T) {
 	}
 	term := "needle%' OR 1=1 --"
 	for _, logs := range []bool{false, true} {
-		f := queryFilter{Search: term}
-		sql, args := f.where("isolated", logs)
+		f := model.Filter{Search: term}
+		sql, args := f.Where("isolated", logs)
 		if strings.Contains(sql, term) || args[2] != "isolated" || args[len(args)-1] != term || !strings.Contains(sql, "AND (positionCaseInsensitiveUTF8(") {
 			t.Fatalf("unsafe search: %s %#v", sql, args)
 		}
-		if !strings.Contains(f.settings(), "read_overflow_mode='throw'") {
+		if !strings.Contains(f.Settings(), "read_overflow_mode='throw'") {
 			t.Fatal("search must fail on resource limits")
 		}
 	}
-	f := queryFilter{Search: strings.Repeat("A", 32)}
-	sql, args := f.where("isolated", false)
+	f := model.Filter{Search: strings.Repeat("A", 32)}
+	sql, args := f.Where("isolated", false)
 	if !strings.Contains(sql, "AND TraceId = ?") || strings.Contains(sql, "positionCaseInsensitive") || args[len(args)-1] != strings.Repeat("a", 32) {
 		t.Fatal("full trace ID must use exact match")
 	}

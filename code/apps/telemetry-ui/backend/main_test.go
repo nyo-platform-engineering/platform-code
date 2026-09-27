@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
+	view "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/metadata/view"
 )
 
 func testHandler(t *testing.T) http.Handler {
 	t.Helper()
-	handler, err := newHandler(config{WebDistDir: t.TempDir(), Store: failingStore{}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler, err := newHandler(config{WebDistDir: t.TempDir(), TraceStore: failingStore{}, LogStore: failingStore{}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +38,8 @@ func TestMetaDescribesCapabilities(t *testing.T) {
 		t.Fatalf("expected 200, got %d", response.Code)
 	}
 	var body struct {
-		Capabilities []capability `json:"capabilities"`
-		Actor        principal    `json:"actor"`
+		Capabilities []view.Capability `json:"capabilities"`
+		Actor        auth.Principal    `json:"actor"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatal(err)
