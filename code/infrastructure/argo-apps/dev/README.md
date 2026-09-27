@@ -52,3 +52,16 @@ workload can start. Private registries also need an image pull Secret.
 
 The parent can show Healthy while an individual child is still starting or
 unhealthy. Check the child's Application to understand its actual rollout.
+
+## Telemetry UI
+
+[`telemetry-ui/app.yaml`](telemetry-ui/app.yaml) uses the app-owned Helm chart in
+local GitLab `root/telemetry-ui`. The infrastructure [values](telemetry-ui/values.yaml)
+select unified ClickHouse, the read-only app account, the `telemetry.localhost`
+route, and the local cluster's ownership/resource conventions. GitLab CI controls
+only `deploy/values.yaml` in the app project for image selection.
+
+Run `task onboard APP=telemetry-ui` from `code/infrastructure` after the platform
+and GitLab are ready. This imports tracked source, configures GitLab CI pushes and
+read-only Argo CD/registry credentials, and creates the app's ClickHouse Secret.
+See [the app guide](../../../apps/telemetry-ui/README.md).

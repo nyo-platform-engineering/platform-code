@@ -39,6 +39,8 @@ httpRoute:
 # Kubernetes EnvVar entries; use for OTEL_* settings and Secret references.
 # Managed PORT/LISTEN_HOST/WEB_DIST_DIR/AUTH_MODE/CLICKHOUSE_* names are rejected.
 extraEnv: []
+labels: {}
+podLabels: {}
 podAnnotations: {}
 resources:
   requests:

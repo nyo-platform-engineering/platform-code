@@ -65,7 +65,7 @@ Custom workload templates belong in `charts`; plain manifests and
 app-specific deployment values belong in `argo-apps`. Source code and
 Dockerfiles belong in `code/apps`.
 `argo-apps/dev` contains only development Application definitions; its
-Kustomization registers the Go demo from `code/apps/go-demo`. Sync waves order the
+Kustomization registers Go demo and telemetry UI from `code/apps`. Sync waves order the
 Application definitions. Child Application health is not propagated to the
 parent: `platform` and `dev-apps` can stay Healthy while a child is Degraded
 or Progressing. Each child still reports its own workload health and sync
@@ -241,6 +241,7 @@ HTTP port, use `task links HTTP_PORT=8080` with the same port used for `task up`
 | http://radar.localhost | No login configured |
 | http://traefik.localhost/dashboard/ | No login configured |
 | http://go.localhost | Go demo JSON greeting |
+| http://telemetry.localhost | Trace/log UI; local read identity |
 
 Published ports bind to 127.0.0.1. If your browser does not resolve
 `*.localhost`, add these names against `127.0.0.1` in `/etc/hosts` on macOS or
@@ -497,3 +498,8 @@ automatically. `task logs` defaults to the cluster collector; use `APP=otel-coll
 Use your configured name instead of `dev` in direct k3d/kubectl commands.
 If a child app is unhealthy, inspect that child even when the parent is Healthy.
 For GitLab-specific retries, use the [GitLab guide](argo-apps/platform/03-cd/gitlab/README.md).
+
+Telemetry UI uses its app-owned Helm chart under `code/apps/telemetry-ui/helm`.
+Its Argo CD Application and environment values are in `argo-apps/dev/telemetry-ui`.
+After GitLab is ready, run `task onboard APP=telemetry-ui` to import the project
+and configure credentials. See [the telemetry app guide](../apps/telemetry-ui/README.md).

@@ -121,3 +121,16 @@ Dependency data, Git repositories, and app source persist in Kubernetes volumes.
 Stopping k3d preserves them; deleting/recreating the cluster deletes local data.
 
 [Go demo guide](../../../../../apps/go-demo/README.md) ? [Infrastructure guide](../../../../README.md)
+
+## Onboard telemetry UI
+
+After platform/GitLab startup, `task onboard APP=telemetry-ui` uploads only tracked
+telemetry app files and configures `root/telemetry-ui`. Its pipeline builds both Go
+and React, then publishes a digest-pinned image. Argo CD reads its app-owned Helm
+chart and deployment override from GitLab. The existing runner service account has
+an additional role granting only `get` on the `telemetry-ui` Deployment in `dev`.
+Repository/image credentials remain separate, project-scoped read-only deploy tokens.
+The app's ClickHouse Secret is copied from `monitoring/clickhouse-credentials` into
+`dev/telemetry-ui-clickhouse` without logging its value. Run `task gitlab ACTION=deploy`
+to refresh deployment credentials, including the copied database password, then
+restart the app after password rotation.

@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: telemetry-ui
+  namespace: argocd
+  labels:
+    platform.local/owner: platform-team
+spec:
+  project: default
+  sources:
+    - repoURL: http://gitlab-webservice-default.gitlab.svc.cluster.local:8181/root/telemetry-ui.git
+      targetRevision: main
+      path: helm
+      helm:
+        releaseName: telemetry-ui
+        valueFiles:
+          - $platform/code/infrastructure/argo-apps/dev/telemetry-ui/values.yaml
+          - ../deploy/values.yaml
+    - repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+      targetRevision: main
+      ref: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

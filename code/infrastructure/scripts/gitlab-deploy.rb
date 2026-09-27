@@ -9,7 +9,9 @@ token = root.personal_access_tokens.build(name: 'local-deploy-setup', scopes: ['
 token.set_token(SecureRandom.hex(10))
 token.save!
 begin
-  project = Project.find_by_full_path('root/go-demo') or raise 'Import root/go-demo first.'
+  app = ENV.fetch('APP_NAME', 'go-demo')
+  raise 'Unsupported application' unless %w[go-demo telemetry-ui].include?(app)
+  project = Project.find_by_full_path("root/#{app}") or raise "Import root/#{app} first."
   uri = URI("http://gitlab-webservice-default:8181/api/v4/projects/#{project.id}/deploy_tokens")
   request = Net::HTTP::Post.new(uri)
   request['Host'] = 'gitlab.localhost'
@@ -21,11 +23,11 @@ begin
   credential = JSON.parse(response.body)
   auth = Base64.strict_encode64("#{credential.fetch('username')}:#{credential.fetch('token')}")
   repo = { apiVersion: 'v1', kind: 'Secret', type: 'Opaque',
-    metadata: { name: 'go-demo-repository', namespace: 'argocd', labels: { 'argocd.argoproj.io/secret-type' => 'repository' } },
-    stringData: { type: 'git', url: 'http://gitlab-webservice-default.gitlab.svc.cluster.local:8181/root/go-demo.git',
+    metadata: { name: "#{app}-repository", namespace: 'argocd', labels: { 'argocd.argoproj.io/secret-type' => 'repository' } },
+    stringData: { type: 'git', url: "http://gitlab-webservice-default.gitlab.svc.cluster.local:8181/root/#{app}.git",
                   username: credential.fetch('username'), password: credential.fetch('token') } }
   registry = { apiVersion: 'v1', kind: 'Secret', type: 'kubernetes.io/dockerconfigjson',
-    metadata: { name: 'go-demo-registry', namespace: 'dev' },
+    metadata: { name: "#{app}-registry", namespace: 'dev' },
     stringData: { '.dockerconfigjson' => JSON.generate(auths: { 'registry.localhost' => { auth: auth } }) } }
   puts JSON.generate(apiVersion: 'v1', kind: 'List', items: [repo, registry])
 ensure

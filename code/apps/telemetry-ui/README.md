@@ -121,3 +121,31 @@ API contracts, and production follow-up work. See [API.md](API.md) for implement
 
 For Kubernetes deployment, use the [Helm chart](helm/README.md), including unified
 and separate ClickHouse connection examples and readiness probes.
+
+## Local GitLab and k3d deployment
+
+The GitOps Application is registered under
+`code/infrastructure/argo-apps/dev/telemetry-ui`. It reads this app's `helm/` chart
+and CI-managed `deploy/values.yaml` from the private local GitLab project
+`root/telemetry-ui`, with environment values from the infrastructure repository.
+
+After committing and pushing the infrastructure configuration, run from
+`code/infrastructure`:
+
+```sh
+task up
+task onboard APP=telemetry-ui
+```
+
+Onboarding uploads tracked app files, imports the GitLab project, enables CI pushes,
+provisions read-only repository/registry deploy credentials, and copies the local
+ClickHouse read-only app credential into a Secret in `dev`. Secrets are passed
+directly to Kubernetes and are never printed. Existing GitLab source/history and
+CI-selected image values are preserved on subsequent imports; push normal source
+changes to the GitLab app project after its initial import.
+
+CI checks Go formatting/vet/tests, tests and builds the frontend, lints the chart,
+then packages the static binary, frontend, and CA certificates using Crane without
+a Docker socket or privileged container. Deploy commits the immutable image digest
+back to GitLab; Argo CD performs the rollout. CI only has read access to the app's
+Deployment. Visit `http://telemetry.localhost` on your configured cluster HTTP port.

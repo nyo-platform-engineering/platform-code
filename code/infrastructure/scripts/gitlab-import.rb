@@ -30,6 +30,7 @@ begin
   Dir.children('/workspace/apps').sort.each do |name|
     directory = File.join('/workspace/apps', name)
     next unless File.directory?(directory) && !File.symlink?(directory)
+    next if ENV['APP_NAME'] && name != ENV['APP_NAME']
     next unless name.match?(/\A[a-z0-9][a-z0-9_-]*\z/)
 
     status, project = api.call(Net::HTTP::Get, "/projects/#{URI.encode_www_form_component("root/#{name}")}")
@@ -39,9 +40,9 @@ begin
       })
     end
 
-    if name == 'go-demo'
+    if %w[go-demo telemetry-ui].include?(name)
       api.call(Net::HTTP::Put, "/projects/#{project.fetch('id')}", { ci_push_repository_for_job_token_allowed: true })
-      if ENV['LOCAL_IMAGE_TAG']
+      if name == 'go-demo' && ENV['LOCAL_IMAGE_TAG']
         content = "image:\n  repository: local/go-demo\n  tag: #{ENV.fetch('LOCAL_IMAGE_TAG')}\n  digest: ''\nimagePullSecrets:\n  - name: go-demo-registry\n"
         api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {
           branch: 'main', commit_message: 'Use local Go demo image [skip ci]',

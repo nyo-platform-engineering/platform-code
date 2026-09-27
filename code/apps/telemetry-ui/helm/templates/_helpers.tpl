@@ -10,6 +10,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- define "telemetry-ui.labels" -}}
 {{ include "telemetry-ui.selectorLabels" . }}
+{{- with .Values.labels }}
+{{ toYaml . }}
+{{- end }}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | quote }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}

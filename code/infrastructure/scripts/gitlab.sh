@@ -56,8 +56,17 @@ spec:
       claimName: gitlab-app-code
 EOF
   kube wait -n gitlab --for=condition=Ready "pod/$upload_pod" --timeout=180s
-  tar --exclude='*.tar' --exclude='.git' -C "$source" -cf - . | \
-    kube exec -i -n gitlab "$upload_pod" -- tar -xf - -C /workspace/apps
+  if [[ -n "${APP_NAME:-}" ]]; then
+    [[ "$APP_NAME" == go-demo || "$APP_NAME" == telemetry-ui ]] || { echo 'Unsupported APP_NAME' >&2; return 1; }
+    # Only committed/tracked app files: no node_modules, build outputs, or local secrets.
+    git -C "$source" ls-files -z -- "$APP_NAME" | \
+      tar -C "$source" --null -T - -cf - | \
+      kube exec -i -n gitlab "$upload_pod" -- tar -xf - -C /workspace/apps
+  else
+    tar --exclude='*.tar' --exclude='.git' --exclude=node_modules --exclude=dist \
+      --exclude=.pnpm-store --exclude='.env*' --exclude='*.tsbuildinfo' \
+      -C "$source" -cf - . | kube exec -i -n gitlab "$upload_pod" -- tar -xf - -C /workspace/apps
+  fi
   kube delete pod "$upload_pod" -n gitlab --wait=false
   trap - EXIT
   echo 'App sources uploaded; toolbox mounts them read-only at /workspace/apps.'
@@ -65,17 +74,29 @@ EOF
 projects() {
   kube rollout status deployment/gitlab-toolbox -n gitlab --timeout=300s
   kube rollout status deployment/gitlab-webservice-default -n gitlab --timeout=300s
-  kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-import.rb
+  if [[ -n "${APP_NAME:-}" ]]; then
+    kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- env "APP_NAME=$APP_NAME" gitlab-rails runner - < scripts/gitlab-import.rb
+  else
+    kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-import.rb
+  fi
 }
 deploy() {
   kube create namespace dev --dry-run=client -o yaml | kube apply -f -
-  if ! kube get secret go-demo-repository -n argocd >/dev/null 2>&1 || \
-     ! kube get secret go-demo-registry -n dev >/dev/null 2>&1; then
-    local credentials
-    credentials="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-deploy.rb)"
-    # Toolbox may emit startup notices; the final line contains the manifest.
-    printf '%s\n' "$credentials" | tail -n 1 | kube apply --server-side -f -
-  fi
+  local app credentials
+  for app in ${APP_NAME:-go-demo telemetry-ui}; do
+    [[ "$app" == go-demo || "$app" == telemetry-ui ]] || { echo 'Unsupported APP_NAME' >&2; return 1; }
+    if ! kube get secret "$app-repository" -n argocd >/dev/null 2>&1 || \
+       ! kube get secret "$app-registry" -n dev >/dev/null 2>&1; then
+      credentials="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- env "APP_NAME=$app" gitlab-rails runner - < scripts/gitlab-deploy.rb)"
+      printf '%s\n' "$credentials" | tail -n 1 | kube apply --server-side -f -
+    fi
+    if [[ "$app" == telemetry-ui ]]; then
+      local password
+      password="$(kube get secret clickhouse-credentials -n monitoring -o go-template='{{index .data "appPassword"}}')"
+      [[ -n "$password" ]] || { echo 'ClickHouse app password is missing' >&2; return 1; }
+      printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"telemetry-ui-clickhouse","namespace":"dev"},"type":"Opaque","data":{"password":"%s"}}\n' "$password" | kube apply --server-side -f -
+    fi
+  done
   bash scripts/gitlab-registry.sh
 }
 runner() {
@@ -114,6 +135,16 @@ ready() {
 }
 case "${1:-up}" in
   prepare) prepare ;;
+  onboard)
+    [[ "${APP_NAME:-}" == go-demo || "${APP_NAME:-}" == telemetry-ui ]] || { echo 'Set APP_NAME to go-demo or telemetry-ui' >&2; exit 1; }
+    code
+    runner
+    projects
+    deploy
+    kube apply --server-side -f "argo-apps/dev/$APP_NAME/app.yaml"
+    echo "Onboarded root/$APP_NAME; GitLab CI publishes its image and Argo CD deploys it."
+    ;;
+  deploy) deploy ;;
   up)
     prepare
     kube apply --server-side -f argo-apps/platform/02-cd/gitlab-services/app.yaml
@@ -143,5 +174,5 @@ case "${1:-up}" in
   runner) runner ;;
   status) kube get pods,pvc -n gitlab; kube get applications gitlab gitlab-services -n argocd ;;
   logs) kube logs -n gitlab -l app=webservice -c webservice --tail=100 --follow ;;
-  *) echo 'Supported actions: up, prepare, code, projects, runner, status, logs; passwords: task password' >&2; exit 1 ;;
+  *) echo 'Supported actions: up, prepare, code, projects, deploy, onboard, runner, status, logs; passwords: task password' >&2; exit 1 ;;
 esac

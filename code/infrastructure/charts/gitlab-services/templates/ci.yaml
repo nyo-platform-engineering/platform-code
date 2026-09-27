@@ -51,3 +51,33 @@ data:
       name exact registry.localhost traefik.traefik.svc.cluster.local
       answer auto
     }
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: telemetry-ui-ci
+  namespace: dev
+  labels:
+    platform.local/owner: platform-team
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [telemetry-ui]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: telemetry-ui-ci
+  namespace: dev
+  labels:
+    platform.local/owner: platform-team
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: telemetry-ui-ci
+subjects:
+  - kind: ServiceAccount
+    name: go-demo-ci
+    namespace: {{ .Release.Namespace }}

@@ -63,6 +63,12 @@ tasks:
       ACTION: '{{.ACTION | default "up"}}'
     cmds:
       - 'bash scripts/gitlab.sh "{{.ACTION}}"'
+  onboard:
+    desc: Import an app into GitLab and configure its GitOps credentials
+    vars:
+      APP: '{{.APP | default "telemetry-ui"}}'
+    cmds:
+      - 'APP_NAME="{{.APP}}" bash scripts/gitlab.sh onboard'
   down:
     desc: Delete cluster and its data
     cmds:
@@ -92,6 +98,7 @@ tasks:
           'Radar' 'http://radar.localhost{{.URL_PORT}}' \
           'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
           'Go demo' 'http://go.localhost{{.URL_PORT}}' \
+          'Telemetry UI' 'http://telemetry.localhost{{.URL_PORT}}' \
           'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task password)' \
           'Registry' 'http://registry.localhost{{.URL_PORT}}' \
           'GitLab KAS' 'ws://kas.localhost{{.URL_PORT}}'
