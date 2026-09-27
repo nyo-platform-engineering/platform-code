@@ -1,6 +1,6 @@
 FROM node:24-alpine AS web-build
 WORKDIR /src
-RUN corepack enable
+RUN npm install --global pnpm@12.6.0
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc ./
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./

@@ -22,7 +22,7 @@ web:
   stage: test
   image: node:24-alpine
   script:
-    - corepack enable
+    - npm install --global pnpm@12.6.0
     - cd frontend
     - pnpm install --frozen-lockfile
     - pnpm test

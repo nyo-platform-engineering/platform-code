@@ -67,8 +67,8 @@ docker build -t local/telemetry-ui:dev .
 docker run --rm -p 8080:8080 local/telemetry-ui:dev
 ```
 
-For split frontend development, enable the package manager once with
-`corepack enable`, run `pnpm install --frozen-lockfile`, then `pnpm dev` under
+For split frontend development, install the pinned package manager with
+`npm install --global pnpm@12.6.0`, run `pnpm install --frozen-lockfile`, then `pnpm dev` under
 `frontend`. Start the Go server from `backend` on port 8080; Vite proxies
 `/api` to Go. The frontend enforces pnpm 12.6 and asks pnpm to download the
 pinned Node 24 runtime when it is not already available.
