@@ -63,6 +63,10 @@ tasks:
       ACTION: '{{.ACTION | default "up"}}'
     cmds:
       - 'bash scripts/gitlab.sh "{{.ACTION}}"'
+  gitlab-storage-images:
+    desc: Build pinned upstream MinIO images and import them into k3d
+    cmds:
+      - bash scripts/gitlab-minio.sh
   onboard:
     desc: Import an app into GitLab and configure its GitOps credentials
     vars:

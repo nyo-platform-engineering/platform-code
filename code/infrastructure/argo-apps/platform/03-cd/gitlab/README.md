@@ -134,3 +134,19 @@ The app's ClickHouse Secret is copied from `monitoring/clickhouse-credentials` i
 `dev/telemetry-ui-clickhouse` without logging its value. Run `task gitlab ACTION=deploy`
 to refresh deployment credentials, including the copied database password, then
 restart the app after password rotation.
+
+## Recover unavailable MinIO images
+
+The pinned upstream MinIO registry images became unavailable. Local GitOps values
+use `local/minio:RELEASE.2025-09-07T16-13-09Z` and
+`local/mc:RELEASE.2025-08-13T08-35-41Z`. `task gitlab` and `task onboard APP=telemetry-ui` ensure these images automatically.
+Matching local images (source revision and node architecture) are reused; otherwise
+they are built. Images are imported into the current cluster on each setup run.
+For an optional standalone retry, run `task gitlab-storage-images`.
+
+The image step verifies exact upstream source commits, cross-compiles static binaries
+on the host with Go, packages them on Alpine with CA certificates, and imports
+both images into k3d. It needs Go, Git, Docker, kubectl, and k3d. Source revisions
+are pinned in `scripts/gitlab-minio.sh`; image labels preserve their provenance.
+No database volumes are deleted. Argo CD continues to manage MinIO and bucket
+creation. Repeat after deleting/recreating the cluster or adding nodes.

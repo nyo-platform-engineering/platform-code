@@ -137,7 +137,7 @@ kind: Job
 metadata:
   labels:
     platform.local/owner: platform-team
-  name: gitlab-create-buckets-{{ printf "%s-platform-team" (.Values.buckets | toJson) | sha256sum | trunc 7 }}
+  name: gitlab-create-buckets-{{ printf "%s-%s-platform-team" (.Values.buckets | toJson) .Values.minioClientImage | sha256sum | trunc 7 }}
 spec:
   backoffLimit: 6
   activeDeadlineSeconds: 600

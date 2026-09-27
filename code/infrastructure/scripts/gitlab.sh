@@ -137,6 +137,7 @@ case "${1:-up}" in
   prepare) prepare ;;
   onboard)
     [[ "${APP_NAME:-}" == go-demo || "${APP_NAME:-}" == telemetry-ui ]] || { echo 'Set APP_NAME to go-demo or telemetry-ui' >&2; exit 1; }
+    bash scripts/gitlab-minio.sh
     code
     runner
     projects
@@ -147,6 +148,7 @@ case "${1:-up}" in
   deploy) deploy ;;
   up)
     prepare
+    bash scripts/gitlab-minio.sh
     kube apply --server-side -f argo-apps/platform/02-cd/gitlab-services/app.yaml
     kube apply --server-side -f argo-apps/platform/03-cd/gitlab/app.yaml
     echo 'Waiting for the GitLab app-code PVC...'
