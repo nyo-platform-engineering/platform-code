@@ -98,7 +98,9 @@ SQL previews still show the real query. Readiness checks the in-memory store.
 Mock stores and fixtures live beside each domain model in
 `internal/domain/traces/model/mock.go` and `internal/domain/logs/model/mock.go`.
 Shared in-memory query helpers live in `internal/domain/common/mock`.
-Mock mode opens no database connections and disables backend OTLP export.
+Mock mode opens no ClickHouse connections and disables backend OTLP export.
+When OAuth is enabled, its PostgreSQL control plane remains active and receives
+an in-memory mock datasource assignment for each configured organization.
 `MOCK` defaults to `false`; invalid boolean values fail startup. Helm always sets
 `MOCK=false`, exposes no mock value, and rejects `MOCK` through `extraEnv`.
 

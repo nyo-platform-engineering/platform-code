@@ -50,6 +50,38 @@ func TestUniqueStrings(t *testing.T) {
 	}
 }
 
+func TestBootstrapMockDataSourceAssignsBothSignals(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:mock-datasource?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&database.DataSource{}, &database.OrganizationDataSource{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := bootstrapMockDataSource(db, []string{"other", "local", "local"}); err != nil {
+		t.Fatal(err)
+	}
+	var source database.DataSource
+	if err := db.Where("id = ?", mockDataSourceID).Take(&source).Error; err != nil {
+		t.Fatal(err)
+	}
+	if source.Address != "In-memory mock" || source.ManagedBy != "config" {
+		t.Fatalf("unexpected mock datasource: %#v", source)
+	}
+	var assignments []database.OrganizationDataSource
+	if err := db.Order("organization_id, signal").Find(&assignments).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(assignments) != 4 {
+		t.Fatalf("expected one trace and log assignment per organization, got %#v", assignments)
+	}
+	for _, assignment := range assignments {
+		if assignment.DataSourceID != mockDataSourceID || assignment.ManagedBy != "config" {
+			t.Fatalf("unexpected mock assignment: %#v", assignment)
+		}
+	}
+}
+
 func TestCatalogAllowsMultipleDataSourcesPerSignal(t *testing.T) {
 	raw := `{
   "dataSources": {

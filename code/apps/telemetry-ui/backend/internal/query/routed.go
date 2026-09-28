@@ -48,6 +48,8 @@ type configuredDataSourceCatalogInput struct {
 	Assignments catalogGroups[configuredAssignmentGroup] `json:"assignments"`
 }
 
+const mockDataSourceID = "mock"
+
 // RoutedStore resolves an organization's signal datasource from PostgreSQL for
 // every operation. Pools are reused by immutable connection configuration.
 type RoutedStore struct {
@@ -273,6 +275,42 @@ func BootstrapDataSources(ctx context.Context, control *gorm.DB, organizationIDs
 		}
 		return nil
 	})
+}
+
+// BootstrapMockDataSource makes the in-memory backend selectable for every
+// configured organization when OAuth still supplies the control plane.
+func BootstrapMockDataSource(ctx context.Context, control *gorm.DB, organizationIDs []string) error {
+	return database.WithControlLock(ctx, control, func(tx *gorm.DB) error {
+		return bootstrapMockDataSource(tx, organizationIDs)
+	})
+}
+
+func bootstrapMockDataSource(tx *gorm.DB, organizationIDs []string) error {
+	if err := tx.Where("managed_by = ?", "config").Delete(&database.OrganizationDataSource{}).Error; err != nil {
+		return err
+	}
+	source := database.DataSource{
+		ID: mockDataSourceID, Address: "In-memory mock", Database: "synthetic",
+		Username: "mock", PasswordEnv: "CLICKHOUSE_MOCK_UNUSED",
+		ManagedBy: "config",
+	}
+	if err := upsertConfiguredDataSource(tx, source); err != nil {
+		return err
+	}
+	sort.Strings(organizationIDs)
+	organizationIDs = uniqueStrings(organizationIDs)
+	for _, organizationID := range organizationIDs {
+		for _, signal := range []string{"traces", "logs"} {
+			assignment := database.OrganizationDataSource{
+				OrganizationID: organizationID, Signal: signal,
+				DataSourceID: mockDataSourceID, ManagedBy: "config",
+			}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&assignment).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func upsertConfiguredDataSource(tx *gorm.DB, source database.DataSource) error {

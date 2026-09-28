@@ -267,18 +267,14 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	if cfg.Mock {
 		cfg.TraceStore, cfg.LogStore = tracemodel.MockStore{}, logmodel.MockStore{}
 		cfg.BackendOTLPEnabled = false
-		logger.Warn("MOCK enabled: serving synthetic telemetry without database connections")
-	} else if controlDB != nil {
-		organizations := make([]string, 0, len(cfg.OAuthConfig.Organizations))
-		for _, organization := range cfg.OAuthConfig.Organizations {
-			organizations = append(organizations, organization.ID)
-		}
-		if len(organizations) == 0 {
-			for _, grant := range cfg.OAuthConfig.Grants {
-				organizations = append(organizations, grant.OrganizationID)
+		if controlDB != nil {
+			if err := model.BootstrapMockDataSource(ctx, controlDB, configuredOrganizationIDs(cfg.OAuthConfig)); err != nil {
+				return fmt.Errorf("bootstrap mock telemetry datasource: %w", err)
 			}
 		}
-		if err := model.BootstrapDataSources(ctx, controlDB, organizations); err != nil {
+		logger.Warn("MOCK enabled: serving synthetic telemetry without ClickHouse connections")
+	} else if controlDB != nil {
+		if err := model.BootstrapDataSources(ctx, controlDB, configuredOrganizationIDs(cfg.OAuthConfig)); err != nil {
 			return fmt.Errorf("bootstrap telemetry datasources: %w", err)
 		}
 		traceStore, logStore := model.NewRoutedStores(controlDB)
@@ -339,6 +335,19 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 		}
 		return nil
 	}
+}
+
+func configuredOrganizationIDs(config auth.OAuthConfig) []string {
+	organizations := make([]string, 0, len(config.Organizations))
+	for _, organization := range config.Organizations {
+		organizations = append(organizations, organization.ID)
+	}
+	if len(organizations) == 0 {
+		for _, grant := range config.Grants {
+			organizations = append(organizations, grant.OrganizationID)
+		}
+	}
+	return organizations
 }
 
 func main() {
