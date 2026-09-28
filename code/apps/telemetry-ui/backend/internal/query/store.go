@@ -107,12 +107,7 @@ func CheckConnection(ctx context.Context, store QueryStore) error {
 	return nil
 }
 
-// Execute preserves the typed plan for in-memory stores; database stores use bound SQL.
+// Execute runs bound SQL against a database store.
 func Execute(ctx context.Context, store QueryStore, q CompiledQuery) ([]map[string]any, error) {
-	if planned, ok := store.(interface {
-		Execute(context.Context, CompiledQuery) ([]map[string]any, error)
-	}); ok {
-		return planned.Execute(ctx, q)
-	}
 	return store.Query(ctx, q.SQL, q.Args...)
 }

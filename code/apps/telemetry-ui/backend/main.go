@@ -35,8 +35,10 @@ import (
 )
 
 const version = "0.1.0"
+const defaultMaxConcurrentQueries = 4
 
 type config struct {
+	MaxConcurrentQueries    int
 	Mock                    bool
 	Port                    int
 	ListenHost              string
@@ -59,6 +61,11 @@ func loadConfig() (config, error) {
 		port = parsed
 	}
 
+	maxConcurrentQueries, err := strconv.Atoi(envOr("MAX_CONCURRENT_QUERIES", strconv.Itoa(defaultMaxConcurrentQueries)))
+	if err != nil || maxConcurrentQueries < 1 {
+		return config{}, fmt.Errorf("invalid MAX_CONCURRENT_QUERIES: expected a positive integer")
+	}
+
 	mockEnabled, err := strconv.ParseBool(envOr("MOCK", "false"))
 	if err != nil {
 		return config{}, fmt.Errorf("invalid MOCK: expected a boolean")
@@ -71,6 +78,7 @@ func loadConfig() (config, error) {
 
 	return config{
 		Mock:                    mockEnabled,
+		MaxConcurrentQueries:    maxConcurrentQueries,
 		Port:                    port,
 		ListenHost:              os.Getenv("LISTEN_HOST"),
 		WebDistDir:              envOr("WEB_DIST_DIR", "frontend/dist"),
@@ -176,6 +184,13 @@ func newTracerProvider(ctx context.Context, cfg config) (*sdktrace.TracerProvide
 }
 
 func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
+	if cfg.MaxConcurrentQueries == 0 {
+		cfg.MaxConcurrentQueries = defaultMaxConcurrentQueries
+	}
+	if cfg.MaxConcurrentQueries < 1 {
+		return nil, fmt.Errorf("MaxConcurrentQueries must be positive")
+	}
+	slots := make(chan struct{}, cfg.MaxConcurrentQueries)
 	if cfg.AuthMode != "" && cfg.AuthMode != "local" {
 		return nil, fmt.Errorf("unsupported AUTH_MODE %q", cfg.AuthMode)
 	}
@@ -203,7 +218,7 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 	)
 
 	router.Use(policy.Enforce(cfg.Authenticator))
-	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version)
+	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version, slots)
 	if err := policy.ValidateRoutes(router.Routes()); err != nil {
 		return nil, err
 	}

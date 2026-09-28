@@ -122,6 +122,12 @@ For split frontend development, install the pinned package manager with
 `/api` to Go. The frontend enforces pnpm 12.6 and asks pnpm to download the
 pinned Node 24 runtime when it is not already available.
 
+Set `MAX_CONCURRENT_QUERIES` to control how many analytics requests each backend
+instance can execute at once (default `4`, positive integers only). The limit is
+shared by logs, traces, and services, including mocks. Requests wait up to 250 ms
+for a slot before receiving HTTP 429; SQL previews bypass the limit. With Helm,
+set this environment variable through `extraEnv`.
+
 Configure one shared ClickHouse connection with:
 
 ```text

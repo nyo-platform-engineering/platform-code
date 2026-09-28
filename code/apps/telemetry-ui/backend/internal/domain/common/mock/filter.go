@@ -7,7 +7,7 @@ import (
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 )
 
-func matches(record Record, plan query.CompiledQuery) bool {
+func matches(record Record, plan query.Request) bool {
 	filter := plan.Filter
 	if record.ResourceAttributes["tenant.id"] != plan.Tenant {
 		return false
@@ -24,13 +24,13 @@ func matches(record Record, plan query.CompiledQuery) bool {
 	if !includes(filter.Services, record.Service) {
 		return false
 	}
-	if plan.ServerOnly && !record.Server {
+	if plan.ServerOnly() && !record.Server {
 		return false
 	}
-	if !matchesSignal(record, filter, plan.Table) {
+	if !matchesSignal(record, filter, plan.Table()) {
 		return false
 	}
-	if !matchesSearch(record, filter.Search, plan.Table) {
+	if !matchesSearch(record, filter.Search, plan.Table()) {
 		return false
 	}
 	for _, attribute := range filter.Attributes {

@@ -1,35 +1,25 @@
 package model
 
 import (
-	"context"
 	"fmt"
-	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 	"sort"
+
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 )
 
-func CompileQueries(f query.Filter, kind, tenant string) ([]query.CompiledQuery, bool, error) {
-	if kind != "services" {
-		return nil, false, fmt.Errorf("unsupported metadata query kind: %q", kind)
+func CompileQueries(request query.Request) ([]query.CompiledQuery, error) {
+	switch request.Kind {
+	case "services", "trace-services", "log-services":
+		return query.Compile(request)
+	default:
+		return nil, fmt.Errorf("unsupported metadata query kind: %q", request.Kind)
 	}
-	compiled, err := query.Services(f, tenant)
-	if err != nil {
-		return nil, false, err
-	}
-	return compiled, false, nil
 }
 
-// ExecuteServices queries both backends with the same deadline and trusted tenant.
-// Any failure rejects the whole response rather than hiding a signal's services.
-func ExecuteServices(ctx context.Context, traces, logs query.QueryStore, queries []query.CompiledQuery) ([]map[string]any, error) {
-	if len(queries) != 2 {
-		return nil, fmt.Errorf("expected two service queries")
-	}
+// MergeServices combines both signal results into a bounded, sorted list.
+func MergeServices(signals ...[]map[string]any) []map[string]any {
 	names := map[string]struct{}{}
-	for n, store := range []query.QueryStore{traces, logs} {
-		rows, err := query.Execute(ctx, store, queries[n])
-		if err != nil {
-			return nil, err
-		}
+	for _, rows := range signals {
 		for _, row := range rows {
 			if name, ok := row["service"].(string); ok {
 				names[name] = struct{}{}
@@ -48,5 +38,5 @@ func ExecuteServices(ctx context.Context, traces, logs query.QueryStore, queries
 	for _, name := range sorted {
 		result = append(result, map[string]any{"service": name})
 	}
-	return result, nil
+	return result
 }

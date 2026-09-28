@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/controller/common"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/metadata/model"
@@ -9,9 +10,29 @@ import (
 )
 
 func Services(traceStore, logStore query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Handler(traceStore, common.Operation{Signal: "", Services: true, Execute: func(ctx context.Context, queries []query.CompiledQuery) ([]map[string]any, error) {
-		return model.ExecuteServices(ctx, traceStore, logStore, queries)
-	}, Compile: func(f query.Filter, tenant string) ([]query.CompiledQuery, bool, error) {
-		return model.CompileQueries(f, "services", tenant)
-	}}, slots)
+	traces, logs := handler(traceStore), handler(logStore)
+	execute := func(ctx context.Context, request query.Request) (query.Result, error) {
+		request.Filter = query.ServiceFilter(request.Filter)
+		request.Kind = "trace-services"
+		traceResult, err := traces(ctx, request)
+		if err != nil {
+			return query.Result{}, err
+		}
+		request.Kind = "log-services"
+		logResult, err := logs(ctx, request)
+		if err != nil {
+			return query.Result{}, err
+		}
+		return query.Result{Data: model.MergeServices(traceResult.Data, logResult.Data)}, nil
+	}
+	return common.Endpoint("services", slots, execute, common.WriteResponse)
+}
+
+func handler(store query.QueryStore) common.RequestHandler {
+	mock, isMock := store.(query.MockExecutor)
+	var mockHandler common.RequestHandler
+	if isMock {
+		mockHandler = mock.Execute
+	}
+	return common.Handler(isMock, mockHandler, common.QueryHandler(store, model.CompileQueries))
 }

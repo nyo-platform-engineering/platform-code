@@ -19,22 +19,18 @@ import (
 func TestMockTimeFollowsQueryWindow(t *testing.T) {
 	end := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	for _, signal := range []struct {
-		name    string
-		store   query.QueryStore
-		compile func(query.Filter, string, string) ([]query.CompiledQuery, bool, error)
+		name  string
+		store query.MockExecutor
 	}{
-		{"traces", tracemodel.MockStore{}, tracemodel.CompileQueries},
-		{"logs", logmodel.MockStore{}, logmodel.CompileQueries},
+		{"traces", tracemodel.MockStore{}},
+		{"logs", logmodel.MockStore{}},
 	} {
 		t.Run(signal.name, func(t *testing.T) {
 			fetch := func(to time.Time, offset int) []map[string]any {
 				t.Helper()
 				filter := query.Filter{From: to.Add(-5 * time.Minute), To: to, Limit: 2, Offset: offset}
-				plans, _, err := signal.compile(filter, signal.name, "local")
-				if err != nil {
-					t.Fatal(err)
-				}
-				rows, err := query.Execute(context.Background(), signal.store, plans[0])
+				result, err := signal.store.Execute(context.Background(), query.Request{Filter: filter, Kind: signal.name, Tenant: "local"})
+				rows := result.Data
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -150,11 +146,8 @@ func TestMockAPI(t *testing.T) {
 			t.Fatal("JSON attribute filter ignored")
 		}
 	}
-	plans, _, err := tracemodel.CompileQueries(query.Filter{From: epoch.Add(-time.Hour), To: epoch, Limit: 100}, "traces", "another-tenant")
-	if err != nil {
-		t.Fatal(err)
-	}
-	isolated, err := query.Execute(context.Background(), tracemodel.MockStore{}, plans[0])
+	result, err := (tracemodel.MockStore{}).Execute(context.Background(), query.Request{Filter: query.Filter{From: epoch.Add(-time.Hour), To: epoch, Limit: 100}, Kind: "traces", Tenant: "another-tenant"})
+	isolated := result.Data
 	if err != nil || len(isolated) != 0 {
 		t.Fatal("mock tenant isolation failed")
 	}

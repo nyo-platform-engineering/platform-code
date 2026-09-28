@@ -17,7 +17,7 @@ func (s MockStore) Query(ctx context.Context, sql string, args ...any) ([]map[st
 	return (mock.Store{}).Query(ctx, sql, args...)
 }
 
-func (s MockStore) Execute(ctx context.Context, q query.CompiledQuery) ([]map[string]any, error) {
+func (s MockStore) Execute(ctx context.Context, q query.Request) (query.Result, error) {
 	return (mock.Store{Rows: s.rows(q.Filter.To)}).Execute(ctx, q)
 }
 

@@ -1,12 +1,9 @@
-package query_test
+package query
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	logs "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/logs/model"
-	traces "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/traces/model"
-	. "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 	"os"
 	"strings"
 	"testing"
@@ -25,8 +22,8 @@ func TestClickHouseIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, query := range []string{
-		"SELECT " + traces.REDFields + " FROM otel.otel_traces WHERE ResourceAttributes['tenant.id'] = ? AND SpanKind = 'Server'",
-		"SELECT " + logs.SeveritySQL + " AS severity,count() FROM otel.otel_logs WHERE ResourceAttributes['tenant.id'] = ? GROUP BY severity",
+		"SELECT " + redFields + " FROM otel.otel_traces WHERE ResourceAttributes['tenant.id'] = ? AND SpanKind = 'Server'",
+		"SELECT " + severitySQL + " AS severity,count() FROM otel.otel_logs WHERE ResourceAttributes['tenant.id'] = ? GROUP BY severity",
 	} {
 		if _, err := store.Query(ctx, query, "local"); err != nil {
 			t.Fatal(err)
@@ -44,7 +41,7 @@ func TestQueryPlanIntegration(t *testing.T) {
 	store := OpenStore()
 	defer store.Close()
 	f := Filter{From: time.Now().Add(-time.Hour), To: time.Now(), Services: []string{"go-demo"}, Limit: 100, Attributes: []AttributeFilter{{Scope: "body", Key: "user.id", Op: "eq", Value: "42"}}}
-	queries, _, compileErr := logs.CompileQueries(f, "logs", "local")
+	queries, compileErr := Compile(Request{Filter: f, Kind: "logs", Tenant: "local"})
 	if compileErr != nil {
 		t.Fatal(compileErr)
 	}
@@ -71,7 +68,7 @@ func TestQueryPlanIntegration(t *testing.T) {
 	}
 	t.Log("Verified PREWHERE, leading log time key, and one shared JSON extraction")
 	f.Attributes = nil
-	queries, _, compileErr = traces.CompileQueries(f, "red", "local")
+	queries, compileErr = Compile(Request{Filter: f, Kind: "red", Tenant: "local"})
 	if compileErr != nil {
 		t.Fatal(compileErr)
 	}
@@ -91,7 +88,7 @@ func TestLatencyPercentilesIntegration(t *testing.T) {
 	}
 	store := OpenStore()
 	defer store.Close()
-	rows, err := store.Query(context.Background(), "SELECT "+traces.REDFields+" FROM (SELECT (number+1)*1000000 AS Duration, 'Ok' AS StatusCode FROM numbers(1000))")
+	rows, err := store.Query(context.Background(), "SELECT "+redFields+" FROM (SELECT (number+1)*1000000 AS Duration, 'Ok' AS StatusCode FROM numbers(1000))")
 	if err != nil {
 		t.Fatal(err)
 	}

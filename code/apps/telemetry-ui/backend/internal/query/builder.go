@@ -14,21 +14,17 @@ const (
 	Logs
 )
 
-// SelectBuilder keeps predicates and their parameters together. SQL expressions
+// selectBuilder keeps predicates and their parameters together. SQL expressions
 // (projection, grouping, ordering) are code-owned constants, never request input.
-// User values enter through Filter, ContainsKey, and pagination arguments only.
-type SelectBuilder struct {
-	filter                                   Filter
-	tenant                                   string
-	signalTable                              Table
-	serverOnly                               bool
+// User values enter through Filter, containsKey, and pagination arguments only.
+type selectBuilder struct {
 	table, columns, pre, where, group, order string
 	preArgs, whereArgs                       []any
 	limit, offset                            int
 	paginated, searchBudget                  bool
 }
 
-func Select(table Table, columns string, f Filter, tenant string, serverOnly bool) (*SelectBuilder, error) {
+func selectQuery(table Table, columns string, f Filter, tenant string, serverOnly bool) (*selectBuilder, error) {
 	var name, signal string
 	switch table {
 	case Traces:
@@ -42,10 +38,10 @@ func Select(table Table, columns string, f Filter, tenant string, serverOnly boo
 		return nil, err
 	}
 	pre, preArgs, where, whereArgs := f.conditions(tenant, table == Logs, serverOnly)
-	return &SelectBuilder{filter: f, tenant: tenant, signalTable: table, serverOnly: serverOnly, table: name, columns: columns, pre: pre, preArgs: preArgs, where: where, whereArgs: whereArgs, searchBudget: f.Settings() != ""}, nil
+	return &selectBuilder{table: name, columns: columns, pre: pre, preArgs: preArgs, where: where, whereArgs: whereArgs, searchBudget: f.Settings() != ""}, nil
 }
 
-func (b *SelectBuilder) ContainsKey(value string) *SelectBuilder {
+func (b *selectBuilder) containsKey(value string) *selectBuilder {
 	if value != "" {
 		if b.where != "" {
 			b.where += " AND "
@@ -55,15 +51,15 @@ func (b *SelectBuilder) ContainsKey(value string) *SelectBuilder {
 	}
 	return b
 }
-func (b *SelectBuilder) GroupBy(expression string) *SelectBuilder { b.group = expression; return b }
-func (b *SelectBuilder) OrderBy(expression string) *SelectBuilder { b.order = expression; return b }
-func (b *SelectBuilder) Page(limit, offset int) *SelectBuilder {
+func (b *selectBuilder) groupBy(expression string) *selectBuilder { b.group = expression; return b }
+func (b *selectBuilder) orderBy(expression string) *selectBuilder { b.order = expression; return b }
+func (b *selectBuilder) page(limit, offset int) *selectBuilder {
 	b.limit, b.offset, b.paginated = limit, offset, true
 	return b
 }
-func (b *SelectBuilder) SearchBudget() *SelectBuilder { b.searchBudget = true; return b }
+func (b *selectBuilder) withSearchBudget() *selectBuilder { b.searchBudget = true; return b }
 
-func (b *SelectBuilder) Compile(name string) (CompiledQuery, error) {
+func (b *selectBuilder) compile(name string) (CompiledQuery, error) {
 	if b.table == "" || b.pre == "" {
 		return CompiledQuery{}, errors.New("unscoped query builder")
 	}
@@ -90,31 +86,5 @@ func (b *SelectBuilder) Compile(name string) (CompiledQuery, error) {
 	if b.searchBudget {
 		sql.WriteString(SearchSettings)
 	}
-	return CompiledQuery{Name: name, SQL: sql.String(), Args: args, Filter: b.filter, Tenant: b.tenant, Table: b.signalTable, ServerOnly: b.serverOnly}, nil
-}
-
-// Services returns one bounded query per connection. The metadata model merges them.
-func Services(f Filter, tenant string) ([]CompiledQuery, error) {
-	f.Search = ""
-	f.Attributes = nil
-	f.Severities = nil
-	f.Statuses = nil
-	f.MinDuration = 0
-	result := make([]CompiledQuery, 0, 2)
-	for _, table := range []Table{Traces, Logs} {
-		builder, err := Select(table, "DISTINCT ServiceName AS service", f, tenant, false)
-		if err != nil {
-			return nil, err
-		}
-		name := "trace-services"
-		if table == Logs {
-			name = "log-services"
-		}
-		compiled, err := builder.OrderBy("service").Page(500, 0).Compile(name)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, compiled)
-	}
-	return result, nil
+	return CompiledQuery{Name: name, SQL: sql.String(), Args: args}, nil
 }

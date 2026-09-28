@@ -13,7 +13,7 @@ import (
 )
 
 // Route wiring contains no permission decisions; see internal/policy/policy.go.
-func Register(router *gin.Engine, traceStore, logStore model.QueryStore, frontend http.Handler, version string) {
+func Register(router *gin.Engine, traceStore, logStore model.QueryStore, frontend http.Handler, version string, slots chan struct{}) {
 	router.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok\n") })
 	router.GET("/readyz", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
@@ -34,7 +34,6 @@ func Register(router *gin.Engine, traceStore, logStore model.QueryStore, fronten
 		}
 		c.String(200, "ok\n")
 	})
-	slots := make(chan struct{}, 4)
 	api := router.Group("/api/v1")
 	api.GET("/meta", metadata.Metadata(version))
 	api.GET("/services", metadata.Services(traceStore, logStore, slots))

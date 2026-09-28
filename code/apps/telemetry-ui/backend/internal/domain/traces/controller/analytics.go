@@ -9,22 +9,31 @@ import (
 )
 
 func List(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Handler(store, common.Operation{Signal: "span", Compile: func(f query.Filter, tenant string) ([]query.CompiledQuery, bool, error) {
-		return model.CompileQueries(f, "traces", tenant)
-	}}, slots)
+	return common.Endpoint("traces", slots, handler(store), common.WriteResponse)
 }
+
 func Detail(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Handler(store, common.Operation{Signal: "span", Compile: func(f query.Filter, tenant string) ([]query.CompiledQuery, bool, error) {
-		return model.CompileQueries(f, "detail", tenant)
-	}}, slots)
+	return common.Endpoint("detail", slots, handler(store), common.WriteResponse)
 }
+
 func RED(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Handler(store, common.Operation{Signal: "span", Summary: true, Buckets: view.Buckets, Compile: func(f query.Filter, tenant string) ([]query.CompiledQuery, bool, error) {
-		return model.CompileQueries(f, "red", tenant)
-	}}, slots)
+	return common.Endpoint("red", slots, handler(store), writeBuckets)
 }
+
 func Attributes(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Handler(store, common.Operation{Signal: "span", Discovery: true, Compile: func(f query.Filter, tenant string) ([]query.CompiledQuery, bool, error) {
-		return model.CompileQueries(f, "traces-keys", tenant)
-	}}, slots)
+	return common.Endpoint("traces-keys", slots, handler(store), common.WriteResponse)
+}
+
+func handler(store query.QueryStore) common.RequestHandler {
+	mock, isMock := store.(query.MockExecutor)
+	var mockHandler common.RequestHandler
+	if isMock {
+		mockHandler = mock.Execute
+	}
+	return common.Handler(isMock, mockHandler, common.QueryHandler(store, model.CompileQueries))
+}
+
+func writeBuckets(c *gin.Context, request query.Request, result query.Result) {
+	result.Data = view.Buckets(result.Data, request.Filter)
+	common.WriteResponse(c, request, result)
 }

@@ -75,3 +75,24 @@ type failingStore struct{}
 func (failingStore) Query(context.Context, string, ...any) ([]map[string]any, error) {
 	return nil, errors.New("offline")
 }
+
+func TestMaxConcurrentQueriesConfig(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{{"", 4}, {"1", 1}, {"8", 8}, {"0", 0}, {"-1", 0}, {"abc", 0}, {"1.5", 0}} {
+		t.Run("value="+tc.value, func(t *testing.T) {
+			t.Setenv("MAX_CONCURRENT_QUERIES", tc.value)
+			cfg, err := loadConfig()
+			if tc.want == 0 {
+				if err == nil {
+					t.Fatal("invalid limit accepted")
+				}
+				return
+			}
+			if err != nil || cfg.MaxConcurrentQueries != tc.want {
+				t.Fatalf("limit = %d, error = %v; want %d", cfg.MaxConcurrentQueries, err, tc.want)
+			}
+		})
+	}
+}

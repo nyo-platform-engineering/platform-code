@@ -13,22 +13,18 @@ func TestMockServiceLatencyHasDistinctPercentiles(t *testing.T) {
 	for _, service := range []string{"api-gateway", "checkout", "payments"} {
 		t.Run(service, func(t *testing.T) {
 			filter := query.Filter{From: end.Add(-5 * time.Minute), To: end, Services: []string{service}}
-			plans, _, err := CompileQueries(filter, "red", "local")
+			result, err := (MockStore{}).Execute(context.Background(), query.Request{Filter: filter, Kind: "red", Tenant: "local"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, plan := range plans {
-				rows, err := query.Execute(context.Background(), MockStore{}, plan)
-				if err != nil {
-					t.Fatal(err)
-				}
+			for _, rows := range [][]map[string]any{result.Data, result.Summary} {
 				if len(rows) == 0 {
 					t.Fatal("no latency samples")
 				}
 				for _, row := range rows {
 					p50, p95, p99 := row["p50Ms"].(float64), row["p95Ms"].(float64), row["p99Ms"].(float64)
 					if !(p50 < p95 && p95 < p99) {
-						t.Errorf("%s: p50=%v p95=%v p99=%v", plan.Name, p50, p95, p99)
+						t.Errorf("p50=%v p95=%v p99=%v", p50, p95, p99)
 					}
 				}
 			}

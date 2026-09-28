@@ -21,7 +21,7 @@ The browser never receives database credentials or submits SQL.
 
 Time range defaults to the last 30 minutes and cannot exceed 24 hours. Time
 parameters retain nanosecond precision in SQL. Queries have five-second context
-deadlines and cancellation, four concurrent execution slots, and a bounded
+deadlines and cancellation, `MAX_CONCURRENT_QUERIES` execution slots (default 4 per backend instance), and a bounded
 250 ms wait for a slot. Database query limits also apply through the user profile.
 
 ## Routes
