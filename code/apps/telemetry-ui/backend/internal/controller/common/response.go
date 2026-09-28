@@ -15,7 +15,7 @@ func WriteResponse(c *gin.Context, request model.Request, result model.Result) {
 		data = data[:f.Limit]
 	}
 	body := gin.H{"data": data, "from": f.From, "to": f.To, "truncated": truncated}
-	if truncated && f.Offset+f.Limit <= 5000 && request.Kind != "logs-keys" && request.Kind != "traces-keys" {
+	if truncated && f.Offset+f.Limit <= 5000 && request.Operation != model.OperationAttributes {
 		body["nextOffset"] = f.Offset + f.Limit
 	}
 	if len(result.Summary) > 0 {

@@ -82,7 +82,7 @@ func TestGORMExecutionBindsValuesAndScansClickHouseTypes(t *testing.T) {
 	}
 	store := &Store{db: pool, orm: orm}
 	attack := "x' OR 1=1; -- ?"
-	compiled, err := Compile(Request{Kind: "traces", Tenant: attack, Filter: Filter{From: timestamp.Add(-time.Hour), To: timestamp, Search: attack, Limit: 2}})
+	compiled, err := Compile(Request{Signal: SignalTraces, Operation: OperationRecords, OrganizationScope: attack, Filter: Filter{From: timestamp.Add(-time.Hour), To: timestamp, Search: attack, Limit: 2}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestGORMCompilationDoesNotShareRequestState(t *testing.T) {
 		go func(tenant string) {
 			defer wg.Done()
 			for i := 0; i < 20; i++ {
-				queries, err := Compile(Request{Kind: "logs", Tenant: tenant, Filter: Filter{Limit: 3}})
+				queries, err := Compile(Request{Signal: SignalLogs, Operation: OperationRecords, OrganizationScope: tenant, Filter: Filter{Limit: 3}})
 				if err != nil {
 					t.Error(err)
 					return

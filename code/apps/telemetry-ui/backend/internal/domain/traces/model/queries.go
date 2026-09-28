@@ -7,10 +7,11 @@ import (
 )
 
 func CompileQueries(request query.Request) ([]query.CompiledQuery, error) {
-	switch request.Kind {
-	case "traces", "detail", "red", "traces-keys":
-		return query.Compile(request)
-	default:
-		return nil, fmt.Errorf("unsupported traces query kind: %q", request.Kind)
+	if request.Signal == query.SignalTraces {
+		switch request.Operation {
+		case query.OperationRecords, query.OperationDetail, query.OperationMetrics, query.OperationAttributes:
+			return query.Compile(request)
+		}
 	}
+	return nil, fmt.Errorf("unsupported traces query: signal=%q operation=%q", request.Signal, request.Operation)
 }

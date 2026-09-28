@@ -78,7 +78,9 @@ function Shell() {
               Active scope
             </span>
             <strong className="text-[11px] font-semibold">
-              {metadata?.actor.organizationName ?? metadata?.actor.tenant ?? 'connecting'}
+              {metadata?.actor.organizationName ??
+                metadata?.actor.organizationScope ??
+                'connecting'}
             </strong>
             <small className="truncate text-[10px] text-dim">
               {metadata

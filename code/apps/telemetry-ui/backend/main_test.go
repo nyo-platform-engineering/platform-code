@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
@@ -58,6 +59,9 @@ func TestMetaDescribesCapabilities(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", response.Code)
 	}
+	if strings.Contains(response.Body.String(), `"tenant"`) {
+		t.Fatal("metadata exposed the removed tenant alias")
+	}
 	var body struct {
 		Capabilities []view.Capability `json:"capabilities"`
 		Actor        auth.Principal    `json:"actor"`
@@ -68,8 +72,8 @@ func TestMetaDescribesCapabilities(t *testing.T) {
 	if len(body.Capabilities) != 2 || body.Capabilities[0].Bucket != "1m" {
 		t.Fatalf("unexpected capabilities: %#v", body.Capabilities)
 	}
-	if body.Actor.Tenant != "local" {
-		t.Fatalf("unexpected local tenant: %q", body.Actor.Tenant)
+	if body.Actor.OrganizationScope != "local" {
+		t.Fatalf("unexpected local organization scope: %q", body.Actor.OrganizationScope)
 	}
 }
 

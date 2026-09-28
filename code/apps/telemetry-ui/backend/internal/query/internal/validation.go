@@ -7,9 +7,9 @@ import (
 
 // ValidateScope is also used by model callers that do not pass through HTTP parsing.
 // SQL identifiers and operators must never be selected from unvalidated input.
-func (f Filter) ValidateScope(tenant, signal string, discovery bool) error {
-	if strings.TrimSpace(tenant) == "" {
-		return errors.New("missing tenant scope")
+func (f Filter) ValidateScope(organizationScope, signal string, discovery bool) error {
+	if strings.TrimSpace(organizationScope) == "" {
+		return errors.New("missing organization scope")
 	}
 	if discovery && f.DiscoveryScope != "resource" && f.DiscoveryScope != signal {
 		return errors.New("invalid attribute discovery scope")

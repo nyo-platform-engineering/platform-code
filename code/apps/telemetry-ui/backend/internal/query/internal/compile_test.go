@@ -11,11 +11,20 @@ import (
 // list, aggregation, discovery, detail and each service backend through the
 // public compiler, including map keys and JSON paths containing SQL syntax.
 func TestCompileBindsRequestValues(t *testing.T) {
-	for _, kind := range []string{"traces", "detail", "red", "traces-keys", "logs", "logs-volume", "logs-keys", "services", "trace-services", "log-services"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct {
+		signal    Signal
+		operation Operation
+	}{
+		{SignalTraces, OperationRecords}, {SignalTraces, OperationDetail},
+		{SignalTraces, OperationMetrics}, {SignalTraces, OperationAttributes},
+		{SignalTraces, OperationServices}, {SignalLogs, OperationRecords},
+		{SignalLogs, OperationMetrics}, {SignalLogs, OperationAttributes},
+		{SignalLogs, OperationServices},
+	} {
+		t.Run(string(tc.signal)+"/"+string(tc.operation), func(t *testing.T) {
 			end := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 			request := func(value string) Request {
-				return Request{Kind: kind, Tenant: value, Filter: Filter{
+				return Request{Signal: tc.signal, Operation: tc.operation, OrganizationScope: value, Filter: Filter{
 					From: end.Add(-time.Hour), To: end, Limit: 2, Offset: 4,
 					Services: []string{value}, Environment: value, TraceID: value,
 					Search: value, KeySearch: value, DiscoveryScope: "resource",
@@ -55,10 +64,10 @@ func TestCompileBindsRequestValues(t *testing.T) {
 
 func TestCompileRejectsSQLAsIdentifiers(t *testing.T) {
 	for _, request := range []Request{
-		{Kind: "logs; DROP TABLE x", Tenant: "local"},
-		{Kind: "logs-keys", Tenant: "local", Filter: Filter{DiscoveryScope: "LogAttributes)) FROM x --"}},
-		{Kind: "logs", Tenant: "local", Filter: Filter{Attributes: []AttributeFilter{{Scope: "log", Key: "k", Op: "= 1 OR 1=1"}}}},
-		{Kind: "logs", Tenant: "local", Filter: Filter{Attributes: []AttributeFilter{{Scope: "LogAttributes; --", Key: "k", Op: "eq"}}}},
+		{Signal: Signal("logs; DROP TABLE x"), Operation: OperationRecords, OrganizationScope: "local"},
+		{Signal: SignalLogs, Operation: OperationAttributes, OrganizationScope: "local", Filter: Filter{DiscoveryScope: "LogAttributes)) FROM x --"}},
+		{Signal: SignalLogs, Operation: OperationRecords, OrganizationScope: "local", Filter: Filter{Attributes: []AttributeFilter{{Scope: "log", Key: "k", Op: "= 1 OR 1=1"}}}},
+		{Signal: SignalLogs, Operation: OperationRecords, OrganizationScope: "local", Filter: Filter{Attributes: []AttributeFilter{{Scope: "LogAttributes; --", Key: "k", Op: "eq"}}}},
 	} {
 		if _, err := Compile(request); err == nil {
 			t.Fatalf("accepted SQL identifier: %+v", request)

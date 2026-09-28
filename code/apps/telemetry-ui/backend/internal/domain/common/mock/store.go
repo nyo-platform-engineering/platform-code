@@ -31,7 +31,7 @@ func (s Store) Execute(ctx context.Context, request query.Request) (query.Result
 	if err := request.Validate(); err != nil {
 		return query.Result{}, err
 	}
-	if request.Kind == "trace-services" || request.Kind == "log-services" {
+	if request.Operation == query.OperationServices {
 		request.Filter = query.ServiceFilter(request.Filter)
 	}
 	records := make([]Record, 0, len(s.Rows))
@@ -41,20 +41,20 @@ func (s Store) Execute(ctx context.Context, request query.Request) (query.Result
 		}
 	}
 	result := query.Result{}
-	switch request.Kind {
-	case "trace-services", "log-services":
+	switch request.Operation {
+	case query.OperationServices:
 		result.Data = services(records)
-	case "traces-keys", "logs-keys":
+	case query.OperationAttributes:
 		result.Data = attributeKeys(records, request.Filter)
-	case "red":
-		result.Data = buckets(records, false)
-		result.Summary = []map[string]any{summary(records)}
-	case "logs-volume":
-		result.Data = buckets(records, true)
-	case "traces", "logs", "detail":
-		result.Data = page(records, request.Filter, request.Kind == "detail")
+	case query.OperationMetrics:
+		result.Data = buckets(records, request.Signal == query.SignalLogs)
+		if request.Signal == query.SignalTraces {
+			result.Summary = []map[string]any{summary(records)}
+		}
+	case query.OperationRecords, query.OperationDetail:
+		result.Data = page(records, request.Filter, request.Operation == query.OperationDetail)
 	default:
-		return result, fmt.Errorf("unsupported mock query %q", request.Kind)
+		return result, fmt.Errorf("unsupported mock query: signal=%q operation=%q", request.Signal, request.Operation)
 	}
 	return result, nil
 }

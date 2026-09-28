@@ -12,7 +12,6 @@ type Metadata = {
   version: string
   actor: {
     displayName: string
-    tenant: string
     organizationId: string
     organizationName: string
     organizationScope: string

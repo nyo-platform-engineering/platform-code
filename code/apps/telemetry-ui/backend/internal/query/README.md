@@ -13,7 +13,11 @@ query/
 └── internal/      # validation, SQL building, storage, and routing
 ```
 
-- `Request` carries the filter, operation kind, and authenticated tenant to either the mock store or SQL compiler.
+See the [internal execution pipeline](internal/README.md) for request inputs,
+compilation stages, datasource routing, mock behavior, and file ownership.
+
+- `Request` carries a typed signal/operation pair, filters, and authenticated
+  organization scope to either the mock store or SQL compiler.
 - `Compile` selects fixed SQL definitions and uses GORM with the ClickHouse driver to produce SQL with bound arguments. Request values never become SQL identifiers or expressions.
 - `internal/filter.go`, `internal/attribute_filters.go`, and
   `internal/validation.go` handle filtering and validation.

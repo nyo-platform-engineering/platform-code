@@ -42,7 +42,7 @@ func auditHandler(t *testing.T, actor auth.Principal, store *auditStore) http.Ha
 // Independent expectations catch permission mixups in the production policy table.
 func TestAccessMatrix(t *testing.T) {
 	routes := []struct{ path, permission string }{
-		{"/meta", auth.MetadataRead}, {"/data-sources", auth.MetadataRead}, {"/services", auth.MetadataRead},
+		{"/meta", auth.MetadataRead}, {"/data-sources", auth.MetadataRead}, {"/services?signal=traces", auth.MetadataRead},
 		{"/traces", auth.TracesRead}, {"/traces/" + strings.Repeat("a", 32), auth.TracesRead},
 		{"/traces/red", auth.TracesRead}, {"/traces/attributes", auth.TracesRead},
 		{"/logs", auth.LogsRead}, {"/logs/volume", auth.LogsRead}, {"/logs/attributes", auth.LogsRead},
@@ -50,12 +50,20 @@ func TestAccessMatrix(t *testing.T) {
 	}
 	for _, route := range routes {
 		for _, permission := range []string{"", auth.MetadataRead, auth.TracesRead, auth.LogsRead, auth.AdminRead} {
-			for _, preview := range []string{"", "?preview=1"} {
+			for _, preview := range []string{"", "preview=1"} {
 				t.Run(route.path+"/"+permission+preview, func(t *testing.T) {
 					store := &auditStore{}
-					h := auditHandler(t, auth.Principal{Subject: "reader", OrganizationID: "tenant-a", Tenant: "tenant-a", Permissions: []string{permission}}, store)
-					req := httptest.NewRequest("GET", "/api/v1"+route.path+preview, nil)
-					req.Header.Set("X-Tenant-ID", "tenant-b")
+					h := auditHandler(t, auth.Principal{Subject: "reader", OrganizationID: "tenant-a", OrganizationScope: "tenant-a", Permissions: []string{permission}}, store)
+					path := "/api/v1" + route.path
+					if preview != "" {
+						separator := "?"
+						if strings.Contains(path, "?") {
+							separator = "&"
+						}
+						path += separator + preview
+					}
+					req := httptest.NewRequest("GET", path, nil)
+					req.Header.Set("X-Organization-Scope", "attacker-scope")
 					out := httptest.NewRecorder()
 					h.ServeHTTP(out, req)
 					expected := http.StatusForbidden
@@ -85,7 +93,7 @@ func TestAccessMatrix(t *testing.T) {
 func TestMissingIdentityOrTenantDenied(t *testing.T) {
 	for _, actor := range []auth.Principal{
 		{Subject: "reader", Permissions: []string{auth.MetadataRead, auth.TracesRead, auth.LogsRead}},
-		{Tenant: "tenant-a", Permissions: []string{auth.MetadataRead, auth.TracesRead, auth.LogsRead}},
+		{OrganizationScope: "tenant-a", Permissions: []string{auth.MetadataRead, auth.TracesRead, auth.LogsRead}},
 	} {
 		store := &auditStore{}
 		h := auditHandler(t, actor, store)

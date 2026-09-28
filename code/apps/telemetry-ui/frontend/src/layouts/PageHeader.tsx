@@ -22,7 +22,9 @@ export function PageHeader({
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
             <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-            <span className="text-xs text-muted">{metadata?.actor.tenant ?? 'Connecting…'}</span>
+            <span className="text-xs text-muted">
+              {metadata?.actor.organizationScope ?? 'Connecting…'}
+            </span>
           </div>
           {actions}
         </header>
@@ -59,7 +61,7 @@ export function PageHeader({
       ) : (
         <div className="mt-2 flex min-h-6 items-center gap-2 text-[10px] text-dim">
           <span className="size-1.5 rounded-full bg-accent ring-3 ring-accent-soft" />
-          <span>{metadata ? `${metadata.actor.tenant} scope` : 'Connecting'}</span>
+          <span>{metadata ? `${metadata.actor.organizationScope} scope` : 'Connecting'}</span>
           <span className="h-2.5 w-px bg-border-strong" />
           <span>ClickHouse · live telemetry</span>
         </div>

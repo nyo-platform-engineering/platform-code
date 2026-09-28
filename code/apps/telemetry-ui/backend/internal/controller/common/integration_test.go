@@ -39,13 +39,22 @@ func TestTenantIsolationIntegration(t *testing.T) {
 	}
 	store := model.OpenStore()
 	defer store.Close()
-	for _, kind := range []string{"detail", "logs", "traces", "services"} {
+	for _, request := range []struct {
+		name      string
+		signal    model.Signal
+		operation model.Operation
+	}{
+		{"trace detail", model.SignalTraces, model.OperationDetail},
+		{"log records", model.SignalLogs, model.OperationRecords},
+		{"trace records", model.SignalTraces, model.OperationRecords},
+		{"trace services", model.SignalTraces, model.OperationServices},
+	} {
 		for _, tenant := range []string{"local", "integration-other"} {
 			out := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(out)
 			c.Request = httptest.NewRequest("GET", "/?traceId="+id+"&service=missing&service=integration-test&severity=error&severity=info&status=error&status=ok", nil)
-			c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: tenant}))
-			analyticsHandler(store, kind, make(chan struct{}, 1))(c)
+			c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{OrganizationScope: tenant}))
+			analyticsHandler(store, request.signal, request.operation, make(chan struct{}, 1))(c)
 			var body struct {
 				Data []map[string]any `json:"data"`
 			}
@@ -57,7 +66,7 @@ func TestTenantIsolationIntegration(t *testing.T) {
 				want = 1
 			}
 			if out.Code != 200 || len(body.Data) != want {
-				t.Fatalf("%s tenant %s: %d %s", kind, tenant, out.Code, out.Body)
+				t.Fatalf("%s tenant %s: %d %s", request.name, tenant, out.Code, out.Body)
 			}
 		}
 	}
@@ -95,14 +104,14 @@ func TestSearchIntegration(t *testing.T) {
 	}
 	store := model.OpenStore()
 	defer store.Close()
-	run := func(kind, scope, params string) map[string]any {
+	run := func(signal model.Signal, operation model.Operation, scope, params string) map[string]any {
 		out := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(out)
 		c.Request = httptest.NewRequest("GET", "/?"+params, nil)
-		c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: scope}))
-		analyticsHandler(store, kind, make(chan struct{}, 1))(c)
+		c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{OrganizationScope: scope}))
+		analyticsHandler(store, signal, operation, make(chan struct{}, 1))(c)
 		if out.Code != 200 {
-			t.Fatalf("%s: %d %s", kind, out.Code, out.Body)
+			t.Fatalf("%s: %d %s", model.Request{Signal: signal, Operation: operation}.Name(), out.Code, out.Body)
 		}
 		var body map[string]any
 		if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil {
@@ -111,8 +120,8 @@ func TestSearchIntegration(t *testing.T) {
 		return body
 	}
 	q := "q=" + url.QueryEscape(strings.ToLower(needle))
-	for _, kind := range []string{"traces", "logs"} {
-		base := run(kind, tenant, "limit=100")
+	for _, signal := range []model.Signal{model.SignalTraces, model.SignalLogs} {
+		base := run(signal, model.OperationRecords, tenant, "limit=100")
 		if len(base["data"].([]any)) != 100 {
 			t.Fatal("fixture should fill first page")
 		}
@@ -122,26 +131,26 @@ func TestSearchIntegration(t *testing.T) {
 				t.Fatal("match must be beyond first page")
 			}
 		}
-		result := run(kind, tenant, q+"&limit=1")
+		result := run(signal, model.OperationRecords, tenant, q+"&limit=1")
 		if len(result["data"].([]any)) != 1 || result["truncated"] != true || result["nextOffset"] != float64(1) {
 			t.Fatalf("wrong search page: %#v", result)
 		}
-		next := run(kind, tenant, q+"&limit=1&offset=1")
+		next := run(signal, model.OperationRecords, tenant, q+"&limit=1&offset=1")
 		if len(next["data"].([]any)) != 1 || next["truncated"] != false {
 			t.Fatalf("wrong next page: %#v", next)
 		}
-		if len(run(kind, "unrelated", q)["data"].([]any)) != 0 {
+		if len(run(signal, model.OperationRecords, "unrelated", q)["data"].([]any)) != 0 {
 			t.Fatal("search leaked tenant")
 		}
-		if len(run(kind, tenant, "q="+strings.ToUpper(id))["data"].([]any)) != 100 {
+		if len(run(signal, model.OperationRecords, tenant, "q="+strings.ToUpper(id))["data"].([]any)) != 100 {
 			t.Fatal("exact trace ID search failed")
 		}
 	}
-	red := run("red", tenant, q)
+	red := run(model.SignalTraces, model.OperationMetrics, tenant, q)
 	if red["summary"].(map[string]any)["requests"] != float64(2) {
 		t.Fatalf("incorrect RED search summary: %#v", red["summary"])
 	}
-	logs := run("logs-volume", tenant, q)
+	logs := run(model.SignalLogs, model.OperationMetrics, tenant, q)
 	total := float64(0)
 	for _, row := range logs["data"].([]any) {
 		total += row.(map[string]any)["records"].(float64)
@@ -183,7 +192,7 @@ func TestAttributeSearchIntegration(t *testing.T) {
 	}
 	store := model.OpenStore()
 	defer store.Close()
-	run := func(kind, scope string, conditions []model.AttributeFilter, extra string) map[string]any {
+	run := func(signal model.Signal, operation model.Operation, scope string, conditions []model.AttributeFilter, extra string) map[string]any {
 		params := url.Values{}
 		for _, condition := range conditions {
 			encoded, _ := json.Marshal(condition)
@@ -192,10 +201,10 @@ func TestAttributeSearchIntegration(t *testing.T) {
 		out := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(out)
 		c.Request = httptest.NewRequest("GET", "/?"+params.Encode()+extra, nil)
-		c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: scope}))
-		analyticsHandler(store, kind, make(chan struct{}, 1))(c)
+		c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{OrganizationScope: scope}))
+		analyticsHandler(store, signal, operation, make(chan struct{}, 1))(c)
 		if out.Code != 200 {
-			t.Fatalf("%s %d %s", kind, out.Code, out.Body)
+			t.Fatalf("%s %d %s", model.Request{Signal: signal, Operation: operation}.Name(), out.Code, out.Body)
 		}
 		var body map[string]any
 		if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil {
@@ -204,25 +213,25 @@ func TestAttributeSearchIntegration(t *testing.T) {
 		return body
 	}
 	for _, scope := range []string{"span", "log"} {
-		kind := "traces"
+		signal := model.SignalTraces
 		if scope == "log" {
-			kind = "logs"
+			signal = model.SignalLogs
 		}
-		keys := run(kind+"-keys", tenant, nil, "&scope="+scope+"&keySearch=CO")
+		keys := run(signal, model.OperationAttributes, tenant, nil, "&scope="+scope+"&keySearch=CO")
 		if len(keys["data"].([]any)) != 1 || keys["data"].([]any)[0].(map[string]any)["key"] != "code" {
 			t.Fatalf("wrong discovered keys: %#v", keys)
 		}
-		if len(run(kind+"-keys", "unrelated", nil, "&scope="+scope)["data"].([]any)) != 0 {
+		if len(run(signal, model.OperationAttributes, "unrelated", nil, "&scope="+scope)["data"].([]any)) != 0 {
 			t.Fatal("key discovery leaked tenant")
 		}
-		if len(run(kind+"-keys", tenant, nil, "&scope="+scope+"&service=not-present")["data"].([]any)) != 0 {
+		if len(run(signal, model.OperationAttributes, tenant, nil, "&scope="+scope+"&service=not-present")["data"].([]any)) != 0 {
 			t.Fatal("key discovery ignored service")
 		}
-		capped := run(kind+"-keys", tenant, nil, "&scope=resource&keySearch=discovery")
+		capped := run(signal, model.OperationAttributes, tenant, nil, "&scope=resource&keySearch=discovery")
 		if len(capped["data"].([]any)) != 50 || capped["truncated"] != true || capped["nextOffset"] != nil {
 			t.Fatalf("discovery cap failed: %#v", capped)
 		}
-		narrowed := run(kind+"-keys", tenant, nil, "&scope=resource&keySearch=discovery.key.59")
+		narrowed := run(signal, model.OperationAttributes, tenant, nil, "&scope=resource&keySearch=discovery.key.59")
 		if len(narrowed["data"].([]any)) != 1 {
 			t.Fatal("cannot find key beyond first 50")
 		}
@@ -238,32 +247,32 @@ func TestAttributeSearchIntegration(t *testing.T) {
 			{"literal.key", "eq", "quote%'", 1},
 			{"x'] OR 1=1 --", "eq", "quote%'", 0},
 		} {
-			result := run(kind, tenant, []model.AttributeFilter{{Scope: scope, Key: tc.key, Op: tc.op, Value: tc.value}}, "")
+			result := run(signal, model.OperationRecords, tenant, []model.AttributeFilter{{Scope: scope, Key: tc.key, Op: tc.op, Value: tc.value}}, "")
 			if len(result["data"].([]any)) != tc.want {
 				t.Fatalf("%s %s: %#v", scope, tc.op, result)
 			}
 		}
 		conditions := []model.AttributeFilter{{Scope: "resource", Key: "region", Op: "eq", Value: "ap-southeast-1"}, {Scope: scope, Key: "code", Op: "gte", Value: "500"}}
-		if len(run(kind, tenant, conditions, "")["data"].([]any)) != 1 {
+		if len(run(signal, model.OperationRecords, tenant, conditions, "")["data"].([]any)) != 1 {
 			t.Fatal("AND failed")
 		}
-		if len(run(kind, "unrelated", conditions, "")["data"].([]any)) != 0 {
+		if len(run(signal, model.OperationRecords, "unrelated", conditions, "")["data"].([]any)) != 0 {
 			t.Fatal("tenant leaked")
 		}
 		if scope == "span" {
-			if run("red", tenant, conditions, "")["summary"].(map[string]any)["requests"] != float64(1) {
+			if run(signal, model.OperationMetrics, tenant, conditions, "")["summary"].(map[string]any)["requests"] != float64(1) {
 				t.Fatal("wrong RED total")
 			}
 		} else {
 			sum := float64(0)
-			for _, row := range run("logs-volume", tenant, conditions, "")["data"].([]any) {
+			for _, row := range run(signal, model.OperationMetrics, tenant, conditions, "")["data"].([]any) {
 				sum += row.(map[string]any)["records"].(float64)
 			}
 			if sum != 1 {
 				t.Fatal("wrong log chart total")
 			}
 		}
-		page := run(kind, tenant, []model.AttributeFilter{{Scope: scope, Key: "method", Op: "exists"}}, "&limit=1&offset=1")
+		page := run(signal, model.OperationRecords, tenant, []model.AttributeFilter{{Scope: scope, Key: "method", Op: "exists"}}, "&limit=1&offset=1")
 		if len(page["data"].([]any)) != 1 || page["truncated"] != true {
 			t.Fatal("attribute pagination failed")
 		}

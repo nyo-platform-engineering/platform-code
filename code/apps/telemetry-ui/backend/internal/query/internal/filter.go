@@ -19,9 +19,9 @@ type Filter struct {
 var TraceIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var SeverityRanges = map[string][2]int{"unspecified": {0, 0}, "trace": {1, 4}, "debug": {5, 8}, "info": {9, 12}, "warn": {13, 16}, "error": {17, 20}, "fatal": {21, 24}}
 
-func (f Filter) baseWhere(tenant string, logs bool) (string, []any) {
+func (f Filter) baseWhere(organizationScope string, logs bool) (string, []any) {
 	clause := "Timestamp >= fromUnixTimestamp64Nano(?) AND Timestamp < fromUnixTimestamp64Nano(?) AND ResourceAttributes['tenant.id'] = ?"
-	args := []any{f.From.UnixNano(), f.To.UnixNano(), tenant}
+	args := []any{f.From.UnixNano(), f.To.UnixNano(), organizationScope}
 	for _, item := range []struct{ column, value string }{{"ResourceAttributes['deployment.environment.name']", f.Environment}, {"TraceId", f.TraceID}} {
 		if item.value != "" {
 			clause += " AND " + item.column + " = ?"
@@ -96,8 +96,8 @@ func (f Filter) Settings() string {
 	return ""
 }
 
-func (f Filter) Where(tenant string, logs bool) (string, []any) {
-	base, args := f.baseWhere(tenant, logs)
+func (f Filter) Where(organizationScope string, logs bool) (string, []any) {
+	base, args := f.baseWhere(organizationScope, logs)
 	late, values := f.lateWhere(logs)
 	return base + late, append(args, values...)
 }

@@ -19,17 +19,17 @@ import (
 func TestMockTimeFollowsQueryWindow(t *testing.T) {
 	end := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	for _, signal := range []struct {
-		name  string
+		name  query.Signal
 		store query.MockExecutor
 	}{
-		{"traces", tracemodel.MockStore{}},
-		{"logs", logmodel.MockStore{}},
+		{query.SignalTraces, tracemodel.MockStore{}},
+		{query.SignalLogs, logmodel.MockStore{}},
 	} {
-		t.Run(signal.name, func(t *testing.T) {
+		t.Run(string(signal.name), func(t *testing.T) {
 			fetch := func(to time.Time, offset int) []map[string]any {
 				t.Helper()
 				filter := query.Filter{From: to.Add(-5 * time.Minute), To: to, Limit: 2, Offset: offset}
-				result, err := signal.store.Execute(context.Background(), query.Request{Filter: filter, Kind: signal.name, Tenant: "local"})
+				result, err := signal.store.Execute(context.Background(), query.Request{Filter: filter, Signal: signal.name, Operation: query.OperationRecords, OrganizationScope: "local"})
 				rows := result.Data
 				if err != nil {
 					t.Fatal(err)
@@ -147,12 +147,12 @@ func TestMockAPI(t *testing.T) {
 			t.Fatal("JSON attribute filter ignored")
 		}
 	}
-	result, err := (tracemodel.MockStore{}).Execute(context.Background(), query.Request{Filter: query.Filter{From: epoch.Add(-time.Hour), To: epoch, Limit: 100}, Kind: "traces", Tenant: "another-tenant"})
+	result, err := (tracemodel.MockStore{}).Execute(context.Background(), query.Request{Filter: query.Filter{From: epoch.Add(-time.Hour), To: epoch, Limit: 100}, Signal: query.SignalTraces, Operation: query.OperationRecords, OrganizationScope: "another-tenant"})
 	isolated := result.Data
 	if err != nil || len(isolated) != 0 {
 		t.Fatal("mock tenant isolation failed")
 	}
-	for _, path := range []string{"/api/v1/services", "/api/v1/traces/red", "/api/v1/logs/volume", "/api/v1/traces/attributes", "/api/v1/logs/attributes"} {
+	for _, path := range []string{"/api/v1/services?signal=traces", "/api/v1/traces/red", "/api/v1/logs/volume", "/api/v1/traces/attributes", "/api/v1/logs/attributes"} {
 		if len(get(path)["data"].([]any)) == 0 {
 			t.Fatalf("empty preview: %s", path)
 		}

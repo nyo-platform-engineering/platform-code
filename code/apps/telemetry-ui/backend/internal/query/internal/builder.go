@@ -22,7 +22,7 @@ type selectBuilder struct {
 	err error
 }
 
-func selectQuery(table Table, columns string, f Filter, tenant string, serverOnly bool) (*selectBuilder, error) {
+func selectQuery(table Table, columns string, f Filter, organizationScope string, serverOnly bool) (*selectBuilder, error) {
 	var name, signal string
 	switch table {
 	case Traces:
@@ -32,14 +32,14 @@ func selectQuery(table Table, columns string, f Filter, tenant string, serverOnl
 	default:
 		return nil, errors.New("invalid telemetry table")
 	}
-	if err := f.ValidateScope(tenant, signal, false); err != nil {
+	if err := f.ValidateScope(organizationScope, signal, false); err != nil {
 		return nil, err
 	}
 	base, err := compilerDB()
 	if err != nil {
 		return nil, err
 	}
-	pre, preArgs, where, whereArgs := f.conditions(tenant, table == Logs, serverOnly)
+	pre, preArgs, where, whereArgs := f.conditions(organizationScope, table == Logs, serverOnly)
 	db := base.Session(&gorm.Session{NewDB: true}).Table(name).Select(columns).
 		Clauses(prewhere{expression: clause.Expr{SQL: pre, Vars: preArgs}})
 	if where != "" {

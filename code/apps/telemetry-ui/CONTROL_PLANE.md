@@ -17,8 +17,8 @@ ClickHouse datasource used for each telemetry signal.
 
 Helm's `organizations` list is bootstrap data for organization metadata, identity
 mappings, permissions, and datasource assignments. The chart mounts it as
-`organizations.json`. Non-Helm development may continue using the legacy
-`auth.grants.json` format. Grant rows marked `managed_by=config` are reconciled at
+`organizations.json`. Non-Helm development can use the smaller
+`auth.grants.json` format with explicit `organizationId` fields. Grant rows marked `managed_by=config` are reconciled at
 startup. Rows marked `managed_by=database` are preserved and take precedence over
 a bootstrap selector.
 

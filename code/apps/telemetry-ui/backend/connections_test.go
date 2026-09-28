@@ -83,42 +83,46 @@ func TestSignalRoutesUseTheirOwnConnection(t *testing.T) {
 		})
 	}
 }
-func TestServicesMergeAcrossConnectionsAndPreviewBoth(t *testing.T) {
+func TestServicesUseSelectedSignalConnection(t *testing.T) {
 	traces := &signalStore{services: []string{"api", "shared"}}
 	logs := &signalStore{services: []string{"worker", "shared"}}
 	h := splitHandler(t, traces, logs)
-	out := httptest.NewRecorder()
-	h.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/services?preview=1", nil))
-	var preview struct{ Queries []struct{ Name, SQL string } }
-	if err := json.Unmarshal(out.Body.Bytes(), &preview); err != nil {
-		t.Fatal(err)
+	missingSignal := httptest.NewRecorder()
+	h.ServeHTTP(missingSignal, httptest.NewRequest("GET", "/api/v1/services", nil))
+	if missingSignal.Code != 400 || len(traces.queries)+len(logs.queries) != 0 {
+		t.Fatal("service discovery must require an explicit signal")
 	}
-	if out.Code != 200 || len(preview.Queries) != 2 || len(traces.queries)+len(logs.queries) != 0 {
-		t.Fatal("preview must describe both queries without executing")
-	}
-	if preview.Queries[0].Name != "trace-services" || preview.Queries[1].Name != "log-services" {
-		t.Fatal("preview lost connection labels")
-	}
-	out = httptest.NewRecorder()
-	h.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/services", nil))
-	var body struct{ Data []struct{ Service string } }
-	if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if out.Code != 200 || len(body.Data) != 3 || body.Data[0].Service != "api" || body.Data[1].Service != "shared" || body.Data[2].Service != "worker" {
-		t.Fatalf("bad merge: %s", out.Body)
-	}
-	if len(traces.queries) != 1 || len(logs.queries) != 1 || !strings.Contains(traces.queries[0], "FROM `otel`.`otel_traces`") || !strings.Contains(logs.queries[0], "FROM `otel`.`otel_logs`") {
-		t.Fatal("services used wrong connection")
-	}
-	if traces.args[0][2] != "local" || logs.args[0][2] != "local" {
-		t.Fatal("service tenant lost")
+	for _, tc := range []struct {
+		signal, name, table string
+		active, idle        *signalStore
+	}{{"traces", "traces.services", "otel_traces", traces, logs}, {"logs", "logs.services", "otel_logs", logs, traces}} {
+		t.Run(tc.signal, func(t *testing.T) {
+			out := httptest.NewRecorder()
+			h.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/services?signal="+tc.signal+"&preview=1", nil))
+			var preview struct{ Queries []struct{ Name, SQL string } }
+			if err := json.Unmarshal(out.Body.Bytes(), &preview); err != nil {
+				t.Fatal(err)
+			}
+			if out.Code != 200 || len(preview.Queries) != 1 || preview.Queries[0].Name != tc.name || len(tc.active.queries)+len(tc.idle.queries) != 0 {
+				t.Fatalf("bad %s preview: %s", tc.signal, out.Body)
+			}
+			out = httptest.NewRecorder()
+			h.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/services?signal="+tc.signal, nil))
+			if out.Code != 200 || len(tc.active.queries) != 1 || len(tc.idle.queries) != 0 || !strings.Contains(tc.active.queries[0], tc.table) || tc.active.args[0][2] != "local" {
+				t.Fatalf("services used wrong connection: %s", out.Body)
+			}
+			tc.active.queries, tc.active.args = nil, nil
+		})
 	}
 }
 func TestEitherBackendOutageFailsReadinessAndServices(t *testing.T) {
 	for _, traceFailure := range []bool{false, true} {
 		h := splitHandler(t, &signalStore{fail: traceFailure}, &signalStore{fail: !traceFailure})
-		for _, path := range []string{"/readyz", "/api/v1/services"} {
+		signal := "logs"
+		if traceFailure {
+			signal = "traces"
+		}
+		for _, path := range []string{"/readyz", "/api/v1/services?signal=" + signal} {
 			out := httptest.NewRecorder()
 			h.ServeHTTP(out, httptest.NewRequest("GET", path, nil))
 			if out.Code != 503 {

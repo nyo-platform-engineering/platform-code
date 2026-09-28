@@ -27,14 +27,14 @@ type IdentityMatch struct {
 	Domain  string `json:"domain,omitempty"`
 }
 
-// Grant is the normalized identity-to-organization rule used by both the
-// organization config and the legacy grant-file format.
+// Grant is the normalized identity-to-organization rule used by both supported
+// access-configuration formats.
 type Grant struct {
 	Provider          string   `json:"provider"`
 	Subject           string   `json:"subject,omitempty"`
 	GoogleEmail       string   `json:"googleEmail,omitempty"`
 	GoogleDomain      string   `json:"googleDomain,omitempty"`
-	OrganizationID    string   `json:"tenant"` // Legacy JSON key retained for non-Helm grant files.
+	OrganizationID    string   `json:"organizationId"`
 	Permissions       []string `json:"permissions"`
 	OrganizationName  string   `json:"-"`
 	OrganizationScope string   `json:"-"`
@@ -180,7 +180,6 @@ func (c OAuthConfig) principal(identity providerIdentity) Principal {
 				OrganizationID:    grant.OrganizationID,
 				OrganizationName:  firstNonEmpty(grant.OrganizationName, grant.OrganizationID),
 				OrganizationScope: organizationScope,
-				Tenant:            organizationScope,
 				Permissions:       append([]string{MetadataRead}, grant.Permissions...),
 			}
 		}

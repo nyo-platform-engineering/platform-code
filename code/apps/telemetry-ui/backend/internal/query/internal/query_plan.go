@@ -12,8 +12,8 @@ type CompiledQuery struct {
 }
 
 // PREWHERE reads scope/filter columns before loading bodies and evaluating JSON.
-func (f Filter) conditions(tenant string, logs, serverOnly bool) (string, []any, string, []any) {
-	pre, args := f.baseWhere(tenant, logs)
+func (f Filter) conditions(organizationScope string, logs, serverOnly bool) (string, []any, string, []any) {
+	pre, args := f.baseWhere(organizationScope, logs)
 	suffix, lateArgs := f.lateWhere(logs)
 	if logs {
 		// Match the log table's leading sorting key, retaining exact nanosecond bounds above.
@@ -27,8 +27,8 @@ func (f Filter) conditions(tenant string, logs, serverOnly bool) (string, []any,
 	return pre, args, strings.TrimPrefix(suffix, " AND "), lateArgs
 }
 
-func (f Filter) Conditions(tenant string, logs, serverOnly bool) (string, []any) {
-	pre, args, late, values := f.conditions(tenant, logs, serverOnly)
+func (f Filter) Conditions(organizationScope string, logs, serverOnly bool) (string, []any) {
+	pre, args, late, values := f.conditions(organizationScope, logs, serverOnly)
 	clause := "PREWHERE " + pre
 	if late != "" {
 		clause += " WHERE " + late

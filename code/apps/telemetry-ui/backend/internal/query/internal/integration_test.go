@@ -41,7 +41,7 @@ func TestQueryPlanIntegration(t *testing.T) {
 	store := OpenStore()
 	defer store.Close()
 	f := Filter{From: time.Now().Add(-time.Hour), To: time.Now(), Services: []string{"go-demo"}, Limit: 100, Attributes: []AttributeFilter{{Scope: "body", Key: "user.id", Op: "eq", Value: "42"}}}
-	queries, compileErr := Compile(Request{Filter: f, Kind: "logs", Tenant: "local"})
+	queries, compileErr := Compile(Request{Filter: f, Signal: SignalLogs, Operation: OperationRecords, OrganizationScope: "local"})
 	if compileErr != nil {
 		t.Fatal(compileErr)
 	}
@@ -68,7 +68,7 @@ func TestQueryPlanIntegration(t *testing.T) {
 	}
 	t.Log("Verified PREWHERE, leading log time key, and one shared JSON extraction")
 	f.Attributes = nil
-	queries, compileErr = Compile(Request{Filter: f, Kind: "red", Tenant: "local"})
+	queries, compileErr = Compile(Request{Filter: f, Signal: SignalTraces, Operation: OperationMetrics, OrganizationScope: "local"})
 	if compileErr != nil {
 		t.Fatal(compileErr)
 	}

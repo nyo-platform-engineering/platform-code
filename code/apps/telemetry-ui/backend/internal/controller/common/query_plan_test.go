@@ -14,10 +14,21 @@ import (
 )
 
 func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
-	for _, kind := range []string{"logs", "logs-volume", "traces", "red", "detail", "services"} {
+	for _, request := range []struct {
+		name      string
+		signal    model.Signal
+		operation model.Operation
+	}{
+		{"log records", model.SignalLogs, model.OperationRecords},
+		{"log metrics", model.SignalLogs, model.OperationMetrics},
+		{"trace records", model.SignalTraces, model.OperationRecords},
+		{"trace metrics", model.SignalTraces, model.OperationMetrics},
+		{"trace detail", model.SignalTraces, model.OperationDetail},
+		{"trace services", model.SignalTraces, model.OperationServices},
+	} {
 		params := url.Values{"from": {"2026-09-25T01:00:00.123456789Z"}, "to": {"2026-09-25T02:00:00.123456789Z"}, "q": {"needle"}, "service": {"go-demo"}, "offset": {"100"}}
 		scope := "span"
-		if strings.HasPrefix(kind, "logs") {
+		if request.signal == model.SignalLogs {
 			scope = "log"
 		}
 		raw, _ := json.Marshal(model.AttributeFilter{Scope: scope, Key: "payload", Path: "user.id", Op: "eq", Value: "a' OR 1=1 --"})
@@ -31,10 +42,10 @@ func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
 			c, _ := gin.CreateTestContext(out)
 			c.Request = httptest.NewRequest("GET", "/?"+params.Encode(), nil)
 			if authenticated {
-				c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: "test-tenant"}))
+				c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{OrganizationScope: "test-tenant"}))
 			}
 			store := &captureStore{}
-			analyticsHandler(store, kind, make(chan struct{}, 1))(c)
+			analyticsHandler(store, request.signal, request.operation, make(chan struct{}, 1))(c)
 			return out, store
 		}
 		denied, store := run(true, false)
@@ -44,7 +55,7 @@ func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
 		executed, store := run(false, true)
 		preview, unused := run(true, true)
 		if executed.Code != 200 || preview.Code != 200 || len(unused.queries) != 0 {
-			t.Fatalf("%s execution=%s preview=%s", kind, executed.Body, preview.Body)
+			t.Fatalf("%s execution=%s preview=%s", request.name, executed.Body, preview.Body)
 		}
 		var body struct {
 			Queries []struct {
@@ -73,7 +84,7 @@ func TestPreviewMatchesExecutionWithoutQueryingStore(t *testing.T) {
 					t.Fatal("parameter precision or ordering lost")
 				}
 			}
-			if kind != "services" {
+			if request.operation != model.OperationServices {
 				pieces := strings.SplitN(q.SQL, " WHERE ", 2)
 				if len(pieces) != 2 || strings.Contains(pieces[0], "JSONExtract") || !strings.Contains(pieces[1], "JSONExtract") {
 					t.Fatal("JSON must remain after PREWHERE")

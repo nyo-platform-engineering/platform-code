@@ -18,7 +18,7 @@ func openGORM(pool gorm.ConnPool, dryRun bool) (*gorm.DB, error) {
 		DryRun:                 dryRun,
 		DisableAutomaticPing:   true,
 		SkipDefaultTransaction: true,
-		// Never log interpolated SQL containing tenant or search values.
+		// Never log interpolated SQL containing organization scope or search values.
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {

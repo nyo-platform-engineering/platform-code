@@ -9,15 +9,15 @@ import (
 )
 
 func List(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("logs", slots, handler(store), common.WriteResponse)
+	return common.Endpoint(query.SignalLogs, query.OperationRecords, slots, handler(store), common.WriteResponse)
 }
 
 func Volume(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("logs-volume", slots, handler(store), writeBuckets)
+	return common.Endpoint(query.SignalLogs, query.OperationMetrics, slots, handler(store), writeBuckets)
 }
 
 func Attributes(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("logs-keys", slots, handler(store), common.WriteResponse)
+	return common.Endpoint(query.SignalLogs, query.OperationAttributes, slots, handler(store), common.WriteResponse)
 }
 
 func handler(store query.QueryStore) common.RequestHandler {

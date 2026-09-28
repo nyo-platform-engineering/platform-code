@@ -21,13 +21,13 @@ type selection struct {
 }
 
 func selectionFor(r Request) selection {
-	switch r.Kind {
-	case "traces":
+	switch {
+	case r.Signal == SignalTraces && r.Operation == OperationRecords:
 		return selection{
 			columns: "Timestamp AS timestamp, TraceId AS traceId, SpanId AS spanId, ServiceName AS service, SpanName AS name, Duration/1000000 AS durationMs, StatusCode AS status",
 			order:   "Timestamp DESC, TraceId, SpanId",
 		}
-	case "detail":
+	case r.Signal == SignalTraces && r.Operation == OperationDetail:
 		return selection{
 			columns: "Timestamp AS timestamp, TraceId AS traceId, SpanId AS spanId, " +
 				"ParentSpanId AS parentSpanId, ServiceName AS service, " +
@@ -35,24 +35,24 @@ func selectionFor(r Request) selection {
 				"StatusMessage AS message, SpanAttributes AS attributes",
 			order: "Timestamp, SpanId",
 		}
-	case "logs":
+	case r.Signal == SignalLogs && r.Operation == OperationRecords:
 		return selection{
 			columns: "Timestamp AS timestamp, TraceId AS traceId, SpanId AS spanId, ServiceName AS service, " + severitySQL + " AS severity, Body AS body, LogAttributes AS attributes, ResourceAttributes AS resourceAttributes",
 			order:   "Timestamp DESC, TraceId, SpanId, Body",
 		}
-	case "red":
+	case r.Signal == SignalTraces && r.Operation == OperationMetrics:
 		return selection{
 			columns: "toStartOfMinute(Timestamp) AS bucket, " + redFields,
 			group:   "bucket",
 			order:   "bucket",
 		}
-	case "logs-volume":
+	case r.Signal == SignalLogs && r.Operation == OperationMetrics:
 		return selection{
 			columns: "toStartOfMinute(Timestamp) AS bucket, " + severitySQL + " AS severity, count() AS records",
 			group:   "bucket,severity",
 			order:   "bucket,severity",
 		}
-	case "traces-keys", "logs-keys":
+	case r.Operation == OperationAttributes:
 		columns := "DISTINCT arrayJoin(mapKeys(ResourceAttributes)) AS key"
 		switch r.Filter.DiscoveryScope {
 		case "span":
@@ -64,7 +64,7 @@ func selectionFor(r Request) selection {
 			columns: columns,
 			order:   "key",
 		}
-	case "trace-services", "log-services":
+	case r.Operation == OperationServices:
 		return selection{
 			columns: "DISTINCT ServiceName AS service",
 			order:   "service",
@@ -79,57 +79,36 @@ func Compile(request Request) ([]CompiledQuery, error) {
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	if request.Kind == "services" {
-		if request.Signal == "traces" {
-			request.Kind = "trace-services"
-			return Compile(request)
-		}
-		if request.Signal == "logs" {
-			request.Kind = "log-services"
-			return Compile(request)
-		}
-		request.Kind = "trace-services"
-		traces, err := Compile(request)
-		if err != nil {
-			return nil, err
-		}
-		request.Kind = "log-services"
-		logs, err := Compile(request)
-		if err != nil {
-			return nil, err
-		}
-		return append(traces, logs...), nil
-	}
-	services := request.Kind == "trace-services" || request.Kind == "log-services"
+	services := request.Operation == OperationServices
 	if services {
 		request.Filter = ServiceFilter(request.Filter)
 	}
 	f := request.Filter
 	spec := selectionFor(request)
-	builder, err := selectQuery(request.Table(), spec.columns, f, request.Scope(), request.ServerOnly())
+	builder, err := selectQuery(request.Table(), spec.columns, f, request.OrganizationScope, request.ServerOnly())
 	if err != nil {
 		return nil, err
 	}
 	builder.groupBy(spec.group).orderBy(spec.order)
 	switch {
-	case request.Kind == "traces-keys" || request.Kind == "logs-keys":
+	case request.Operation == OperationAttributes:
 		builder.containsKey(f.KeySearch).page(51, 0).withSearchBudget()
 	case services:
 		builder.page(500, 0)
 	case request.List():
 		builder.page(f.Limit+1, f.Offset)
 	}
-	compiled, err := builder.compile(request.Kind)
+	compiled, err := builder.compile(request.Name())
 	if err != nil {
 		return nil, err
 	}
 	result := []CompiledQuery{compiled}
-	if request.Kind == "red" {
-		summary, err := selectQuery(Traces, redFields, f, request.Scope(), true)
+	if request.Signal == SignalTraces && request.Operation == OperationMetrics {
+		summary, err := selectQuery(Traces, redFields, f, request.OrganizationScope, true)
 		if err != nil {
 			return nil, err
 		}
-		compiled, err := summary.compile("red-summary")
+		compiled, err := summary.compile(request.Name() + ".summary")
 		if err != nil {
 			return nil, err
 		}

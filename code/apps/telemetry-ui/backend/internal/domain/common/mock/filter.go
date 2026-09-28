@@ -9,7 +9,7 @@ import (
 
 func matches(record Record, plan query.Request) bool {
 	filter := plan.Filter
-	if record.ResourceAttributes["tenant.id"] != plan.Tenant {
+	if record.ResourceAttributes["tenant.id"] != plan.OrganizationScope {
 		return false
 	}
 	if record.Timestamp.Before(filter.From) || !record.Timestamp.Before(filter.To) {

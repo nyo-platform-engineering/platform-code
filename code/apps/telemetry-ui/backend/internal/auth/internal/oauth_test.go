@@ -193,7 +193,7 @@ func TestOAuthLoginLogout(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if actor.Subject != name+":42" || actor.Tenant != "tenant-a" || !HasPermission(actor, TracesRead) || HasPermission(actor, LogsRead) {
+			if actor.Subject != name+":42" || actor.OrganizationScope != "tenant-a" || !HasPermission(actor, TracesRead) || HasPermission(actor, LogsRead) {
 				t.Fatalf("incorrect authorization: %+v", actor)
 			}
 			if callback(r, name, state, cookie).Header().Get("Location") != "/?auth_error=invalid_login" {
@@ -311,10 +311,10 @@ func TestAccessGrants(t *testing.T) {
 		{Provider: "google", GoogleDomain: "example.com", OrganizationID: "domain", Permissions: []string{LogsRead}},
 		{Provider: "google", Subject: "42", OrganizationID: "specific", Permissions: []string{TracesRead}},
 	}}
-	if got := cfg.principal(providerIdentity{Provider: "google", Subject: "42", GoogleDomain: "example.com"}); got.Tenant != "specific" || HasPermission(got, LogsRead) {
+	if got := cfg.principal(providerIdentity{Provider: "google", Subject: "42", GoogleDomain: "example.com"}); got.OrganizationScope != "specific" || HasPermission(got, LogsRead) {
 		t.Fatal("subject override merged domain access")
 	}
-	if cfg.principal(providerIdentity{Provider: "google", Subject: "43", GoogleDomain: "example.com"}).Tenant != "domain" {
+	if cfg.principal(providerIdentity{Provider: "google", Subject: "43", GoogleDomain: "example.com"}).OrganizationScope != "domain" {
 		t.Fatal("domain grant missing")
 	}
 	if cfg.principal(providerIdentity{Provider: "github", Subject: "43", GoogleDomain: "example.com"}).Subject != "" {

@@ -2,7 +2,7 @@
   {
     "provider": "google",
     "subject": "replace-with-google-sub",
-    "tenant": "local",
+    "organizationId": "local",
     "permissions": [
       "observability:traces:read",
       "observability:logs:read",
@@ -12,7 +12,7 @@
   {
     "provider": "google",
     "googleDomain": "your-company.example",
-    "tenant": "local",
+    "organizationId": "local",
     "permissions": [
       "observability:traces:read",
       "observability:logs:read"
@@ -21,7 +21,7 @@
   {
     "provider": "github",
     "subject": "replace-with-numeric-github-id",
-    "tenant": "local",
+    "organizationId": "local",
     "permissions": [
       "observability:traces:read"
     ]

@@ -17,15 +17,26 @@ type (
 	Compiler        = queryinternal.Compiler
 	Filter          = queryinternal.Filter
 	MockExecutor    = queryinternal.MockExecutor
+	Operation       = queryinternal.Operation
 	QueryStore      = queryinternal.QueryStore
 	Request         = queryinternal.Request
 	Result          = queryinternal.Result
 	RoutedStore     = queryinternal.RoutedStore
+	Signal          = queryinternal.Signal
 	Store           = queryinternal.Store
 	Table           = queryinternal.Table
 )
 
 const (
+	SignalTraces = queryinternal.SignalTraces
+	SignalLogs   = queryinternal.SignalLogs
+
+	OperationRecords    = queryinternal.OperationRecords
+	OperationMetrics    = queryinternal.OperationMetrics
+	OperationAttributes = queryinternal.OperationAttributes
+	OperationServices   = queryinternal.OperationServices
+	OperationDetail     = queryinternal.OperationDetail
+
 	Traces         = queryinternal.Traces
 	Logs           = queryinternal.Logs
 	SearchSettings = queryinternal.SearchSettings

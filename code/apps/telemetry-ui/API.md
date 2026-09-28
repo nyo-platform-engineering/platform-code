@@ -2,7 +2,7 @@
 
 All routes are under `/api/v1`. The API enforces its principal's PostgreSQL-resolved
 organization scope and permission on every query. Local mode uses scope `local`;
-passing identity or tenant headers does not change it. Unsupported authentication modes fail closed.
+passing identity or scope headers does not change it. Unsupported authentication modes fail closed.
 The browser never receives database credentials or submits SQL.
 
 ## Filters
@@ -19,7 +19,7 @@ The browser never receives database credentials or submits SQL.
 | `limit` | Lists: 1–500, default 100 |
 | `offset` | Lists: 0–5000, default 0 |
 | `dataSource` | Assigned datasource ID selected for this signal; required when more than one is assigned |
-| `signal` | `/services` only: `traces` or `logs`, paired with `dataSource` |
+| `signal` | `/services` only: required `traces` or `logs`; selects the backend paired with `dataSource` |
 
 Time range defaults to the last 30 minutes and cannot exceed 24 hours. Time
 parameters retain nanosecond precision in SQL. Queries have five-second context
@@ -32,7 +32,7 @@ deadlines and cancellation, `MAX_CONCURRENT_QUERIES` execution slots (default 4 
 | --- | --- |
 | `GET /meta` | Service version, authenticated actor, available capabilities |
 | `GET /data-sources` | Datasource choices assigned to the active organization, grouped by signal; no credentials |
-| `GET /services` | `service` values found in traces or logs (maximum 500) |
+| `GET /services` | `service` values found in the selected `signal` (maximum 500) |
 | `GET /traces/red` | `bucket`, `requests`, `errors`, `errorRate`, `p50Ms`, `p95Ms`, `p99Ms`, `partial` |
 | `GET /traces` | `timestamp`, `traceId`, `spanId`, `service`, `name`, `durationMs`, `status` for server spans |
 | `GET /traces/:traceId` | Ordered spans including `parentSpanId`, `message`, `attributes` |
@@ -60,7 +60,7 @@ ClickHouse's nanoseconds to milliseconds. Severity 0 remains `unspecified`.
 
 - `400`: malformed or out-of-bounds filters (`invalid_query`).
 - `401`: missing or expired login session (`unauthenticated`).
-- `403`: missing tenant scope or permission (`forbidden`).
+- `403`: missing organization scope or permission (`forbidden`).
 - `429`: query concurrency exhausted (`too_many_queries`).
 - `503`: storage/query failure (`query_unavailable`); never substituted with empty data.
 
@@ -75,7 +75,7 @@ returned to the browser.
 
 Repeat query parameters to select multiple values:
 `?service=api&service=worker&severity=warn&severity=error`.
-Values are ORed within a filter and ANDed across filters. Tenant and time bounds
+Values are ORed within a filter and ANDed across filters. Organization scope and time bounds
 always apply. Service accepts up to 20 values (128 characters each), severity up
 to 7, and status up to 2 (`ok`, `error`). Duplicate values are deduplicated.
 An absent or single empty parameter means no restriction; mixing an empty value
@@ -117,7 +117,7 @@ Repeat the `attr` query parameter with JSON objects, for example:
 {"scope":"span","key":"http.response.status_code","op":"gte","value":"500"}
 ```
 
-All conditions are ANDed with each other and the existing tenant, environment,
+All conditions are ANDed with each other and the organization scope, environment,
 time, service, and text filters, before pagination and aggregation. Resource
 attributes work on both signals; use `span` on traces and `log` on logs. Trace
 list and RED filters match server spans. Detail and correlated-log requests
@@ -167,14 +167,14 @@ with the existing text search.
 
 Extraction uses bound arguments with ClickHouse's
 [JSON functions](https://clickhouse.com/docs/sql-reference/functions/json-functions).
-The existing tenant/time boundaries, query budgets, URL persistence, and consistent
+The existing organization/time boundaries, query budgets, URL persistence, and consistent
 list/chart filtering also apply. This supports field extraction and filtering, not
 arbitrary scripts or an ingestion transformation pipeline.
 
 ### SQL preview and query planning
 
 Add `preview=1` to an existing analytics GET endpoint to compile its SQL without
-executing it. The same permissions, tenant scope, and filter validation apply.
+executing it. The same permissions, organization scope, and filter validation apply.
 The response contains `queries` with `name`, `sql`, and ordered `parameters`
 (`position`, Go `type`, string `value`), plus the exact `from`/`to` range. String
 parameter values preserve Int64 timestamp precision in browsers. RED returns both
@@ -186,7 +186,7 @@ unsubmitted form edits. The displayed range is captured on opening/refreshing;
 with live data it is a prospective query, not a query-history record. Row pagination
 and chart queries share the range. Copy SQL and parameters separately.
 
-The shared compiler places tenant, time, service, exact trace ID, and applicable
+The shared compiler places organization scope, time, service, exact trace ID, and applicable
 basic signal filters in `PREWHERE`, leaving text/JSON predicates in `WHERE`.
 Log queries also constrain `toStartOfFiveMinutes(Timestamp)` to match the leading
 sorting key, while retaining exact nanosecond bounds. The exclusive upper bound
@@ -206,7 +206,7 @@ See [ClickHouse PREWHERE](https://clickhouse.com/docs/sql-reference/statements/s
 values in the standard data envelope. `scope` accepts `resource` or the endpoint's
 signal (`log`/`span`, the default). `keySearch` is a case-insensitive literal
 substring, at most 128 characters without controls. The same signal permissions,
-tenant, environment, time, service and basic signal filters apply. Text and field
+organization scope, environment, time, service and basic signal filters apply. Text and field
 conditions are ignored so suggestions can help build a new condition. Trace keys
 come from server spans, matching the request-list semantics.
 
@@ -234,11 +234,11 @@ signal to a datasource. Datasource rows store only the password environment
 variable name; Kubernetes injects its value from a Secret. Identical resolved
 settings share a connection pool.
 
-`/services` runs one tenant-scoped query on each backend, merges distinct names,
-sorts them, and retains the first 500. If either query fails, it returns 503 rather
-than a partial service list. `preview=1` returns `trace-services` and `log-services`
-queries without connecting to storage. The shared query concurrency budget and
-five-second deadline still cover the complete operation.
+`/services` runs one organization-scoped query on the backend selected by its
+required `signal` parameter, sorts distinct names, and retains the first 500. A
+query failure returns 503. `preview=1` returns either a `traces.services` or
+`logs.services` query without connecting to storage. The shared query concurrency
+budget and five-second deadline cover the operation.
 
 ## Login
 

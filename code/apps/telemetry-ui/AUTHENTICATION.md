@@ -60,7 +60,7 @@ decisions auditable and prevent accidental wildcard access.
 `AUTH_ORGANIZATIONS_FILE` selects the organization-list format and takes
 precedence when both variables are present.
 
-Each grant has a provider, tenant, permissions, and exactly one selector:
+Each grant has a provider, `organizationId`, permissions, and exactly one selector:
 
 - `subject`: Google's stable `sub` or GitHub's numeric user ID, stored as a string.
   Usernames and email addresses are not identity keys.

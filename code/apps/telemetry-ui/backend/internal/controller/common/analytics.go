@@ -20,9 +20,9 @@ func Handler(isMock bool, mockHandler, queryHandler RequestHandler) RequestHandl
 }
 
 // Endpoint handles HTTP parsing, previews, and resource limits.
-func Endpoint(kind string, slots chan struct{}, execute RequestHandler, respond Responder) gin.HandlerFunc {
+func Endpoint(signal model.Signal, operation model.Operation, slots chan struct{}, execute RequestHandler, respond Responder) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		request, ok := ParseRequest(c, kind)
+		request, ok := ParseRequest(c, signal, operation)
 		if !ok {
 			return
 		}

@@ -9,19 +9,19 @@ import (
 )
 
 func List(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("traces", slots, handler(store), common.WriteResponse)
+	return common.Endpoint(query.SignalTraces, query.OperationRecords, slots, handler(store), common.WriteResponse)
 }
 
 func Detail(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("detail", slots, handler(store), common.WriteResponse)
+	return common.Endpoint(query.SignalTraces, query.OperationDetail, slots, handler(store), common.WriteResponse)
 }
 
 func RED(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("red", slots, handler(store), writeBuckets)
+	return common.Endpoint(query.SignalTraces, query.OperationMetrics, slots, handler(store), writeBuckets)
 }
 
 func Attributes(store query.QueryStore, slots chan struct{}) gin.HandlerFunc {
-	return common.Endpoint("traces-keys", slots, handler(store), common.WriteResponse)
+	return common.Endpoint(query.SignalTraces, query.OperationAttributes, slots, handler(store), common.WriteResponse)
 }
 
 func handler(store query.QueryStore) common.RequestHandler {

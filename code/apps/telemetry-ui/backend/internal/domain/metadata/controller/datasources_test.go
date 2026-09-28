@@ -39,7 +39,7 @@ func TestDataSourcesAreOrganizationScopedAndDoNotExposeCredentialReferences(t *t
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		principal := auth.Principal{Subject: "reader", OrganizationID: "acme", Tenant: "acme"}
+		principal := auth.Principal{Subject: "reader", OrganizationID: "acme", OrganizationScope: "acme"}
 		c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), principal))
 		c.Next()
 	})

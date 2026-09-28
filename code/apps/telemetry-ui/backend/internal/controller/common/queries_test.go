@@ -35,14 +35,25 @@ func (s *captureStore) Query(_ context.Context, q string, args ...any) ([]map[st
 	return []map[string]any{}, nil
 }
 func TestEveryQueryIncludesTenant(t *testing.T) {
-	for _, kind := range []string{"services", "red", "traces", "detail", "logs-volume", "logs"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, request := range []struct {
+		name      string
+		signal    model.Signal
+		operation model.Operation
+	}{
+		{"trace services", model.SignalTraces, model.OperationServices},
+		{"trace metrics", model.SignalTraces, model.OperationMetrics},
+		{"trace records", model.SignalTraces, model.OperationRecords},
+		{"trace detail", model.SignalTraces, model.OperationDetail},
+		{"log metrics", model.SignalLogs, model.OperationMetrics},
+		{"log records", model.SignalLogs, model.OperationRecords},
+	} {
+		t.Run(request.name, func(t *testing.T) {
 			store := &captureStore{}
 			out := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(out)
 			c.Request = httptest.NewRequest("GET", "/?traceId="+strings.Repeat("a", 32), nil)
-			c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: "test-scope"}))
-			analyticsHandler(store, kind, make(chan struct{}, 1))(c)
+			c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{OrganizationScope: "test-scope"}))
+			analyticsHandler(store, request.signal, request.operation, make(chan struct{}, 1))(c)
 			if out.Code != 200 {
 				t.Fatalf("%d %s", out.Code, out.Body)
 			}
@@ -59,7 +70,7 @@ func TestMissingPrincipalCannotQuery(t *testing.T) {
 	out := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(out)
 	c.Request = httptest.NewRequest("GET", "/", nil)
-	analyticsHandler(store, "traces", make(chan struct{}, 1))(c)
+	analyticsHandler(store, model.SignalTraces, model.OperationRecords, make(chan struct{}, 1))(c)
 	if out.Code != 403 || len(store.queries) != 0 {
 		t.Fatal("missing scope must fail closed")
 	}

@@ -11,7 +11,6 @@ type Principal struct {
 	OrganizationID    string   `json:"organizationId"`
 	OrganizationName  string   `json:"organizationName"`
 	OrganizationScope string   `json:"organizationScope"`
-	Tenant            string   `json:"tenant"` // Backward-compatible API alias for OrganizationScope.
 	Permissions       []string `json:"permissions"`
 }
 
@@ -35,7 +34,6 @@ func (LocalAuthenticator) Authenticate(_ *http.Request) (Principal, error) {
 		OrganizationID:    "local",
 		OrganizationName:  "Local",
 		OrganizationScope: "local",
-		Tenant:            "local",
 		Permissions:       []string{MetadataRead, TracesRead, LogsRead, AdminRead},
 	}, nil
 }

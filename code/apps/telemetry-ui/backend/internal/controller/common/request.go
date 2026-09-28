@@ -13,20 +13,20 @@ import (
 
 var dataSourceIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
-func ParseRequest(c *gin.Context, kind string) (model.Request, bool) {
-	signal := "span"
-	if kind == "logs" || kind == "logs-volume" || kind == "logs-keys" {
-		signal = "log"
+func ParseRequest(c *gin.Context, signal model.Signal, operation model.Operation) (model.Request, bool) {
+	signalScope := "span"
+	if signal == model.SignalLogs {
+		signalScope = "log"
 	}
 	f, err := parseFilter(c)
 	if err != nil {
 		c.JSON(400, gin.H{"error": "invalid_query", "message": err.Error()})
 		return model.Request{}, false
 	}
-	if kind == "logs-keys" || kind == "traces-keys" {
-		f.DiscoveryScope = c.DefaultQuery("scope", signal)
+	if operation == model.OperationAttributes {
+		f.DiscoveryScope = c.DefaultQuery("scope", signalScope)
 		f.KeySearch = c.Query("keySearch")
-		if (f.DiscoveryScope != "resource" && f.DiscoveryScope != signal) ||
+		if (f.DiscoveryScope != "resource" && f.DiscoveryScope != signalScope) ||
 			!utf8.ValidString(f.KeySearch) ||
 			utf8.RuneCountInString(f.KeySearch) > 128 ||
 			strings.ContainsFunc(f.KeySearch, unicode.IsControl) {
@@ -38,7 +38,7 @@ func ParseRequest(c *gin.Context, kind string) (model.Request, bool) {
 		f.Limit = 50
 		f.Offset = 0
 	}
-	if kind == "services" {
+	if operation == model.OperationServices {
 		f.Attributes = nil
 	}
 	dataSourceID := c.Query("dataSource")
@@ -46,24 +46,19 @@ func ParseRequest(c *gin.Context, kind string) (model.Request, bool) {
 		c.JSON(400, gin.H{"error": "invalid_query", "message": "Invalid datasource selection"})
 		return model.Request{}, false
 	}
-	signalSelection := c.Query("signal")
-	if kind == "services" && signalSelection != "" && signalSelection != "traces" && signalSelection != "logs" {
-		c.JSON(400, gin.H{"error": "invalid_query", "message": "Invalid signal selection"})
-		return model.Request{}, false
-	}
 	for _, attribute := range f.Attributes {
-		logs := signal == "log"
+		logs := signal == model.SignalLogs
 		if (logs && attribute.Scope == "span") || (!logs && (attribute.Scope == "log" || attribute.Scope == "body")) {
 			c.JSON(400, gin.H{"error": "invalid_query", "message": "attribute scope does not match this signal"})
 			return model.Request{}, false
 		}
 	}
 	actor, ok := auth.FromContext(c.Request.Context())
-	if !ok || actor.Tenant == "" {
+	if !ok || actor.OrganizationScope == "" {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return model.Request{}, false
 	}
-	request := model.Request{Filter: f, Kind: kind, Signal: signalSelection, DataSourceID: dataSourceID, OrganizationScope: actor.OrganizationScope, Tenant: actor.Tenant}
+	request := model.Request{Filter: f, Signal: signal, Operation: operation, DataSourceID: dataSourceID, OrganizationScope: actor.OrganizationScope}
 	if err := request.Validate(); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_query", "message": err.Error()})
 		return model.Request{}, false

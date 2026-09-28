@@ -13,7 +13,7 @@ func TestMockServiceLatencyHasDistinctPercentiles(t *testing.T) {
 	for _, service := range []string{"api-gateway", "checkout", "payments"} {
 		t.Run(service, func(t *testing.T) {
 			filter := query.Filter{From: end.Add(-5 * time.Minute), To: end, Services: []string{service}}
-			result, err := (MockStore{}).Execute(context.Background(), query.Request{Filter: filter, Kind: "red", Tenant: "local"})
+			result, err := (MockStore{}).Execute(context.Background(), query.Request{Filter: filter, Signal: query.SignalTraces, Operation: query.OperationMetrics, OrganizationScope: "local"})
 			if err != nil {
 				t.Fatal(err)
 			}

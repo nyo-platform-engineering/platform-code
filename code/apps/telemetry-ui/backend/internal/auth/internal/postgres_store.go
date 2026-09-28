@@ -115,7 +115,6 @@ func (s *postgresStore) principalForGrant(ctx context.Context, identity provider
 		OrganizationID:    organization.ID,
 		OrganizationName:  organization.Name,
 		OrganizationScope: organization.TelemetryScope,
-		Tenant:            organization.TelemetryScope,
 		Permissions:       permissions,
 	}, nil
 }

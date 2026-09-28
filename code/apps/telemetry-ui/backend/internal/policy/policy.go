@@ -10,7 +10,7 @@ import (
 )
 
 // Policy is the complete access requirement for a registered HTTP endpoint.
-// Public access must be explicit; protected endpoints always require tenant scope.
+// Public access must be explicit; protected endpoints always require organization scope.
 type Policy struct {
 	Public     bool
 	Permission string
@@ -96,7 +96,7 @@ func Enforce(authenticator auth.Authenticator) gin.HandlerFunc {
 			c.AbortWithStatusJSON(401, gin.H{"error": "unauthenticated"})
 			return
 		}
-		if actor.Subject == "" || actor.Tenant == "" || !auth.HasPermission(actor, rule.Permission) {
+		if actor.Subject == "" || actor.OrganizationScope == "" || !auth.HasPermission(actor, rule.Permission) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}

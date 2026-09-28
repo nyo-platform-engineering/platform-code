@@ -16,9 +16,9 @@ func TestAttributeScopeMismatchRejected(t *testing.T) {
 	out := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(out)
 	c.Request = httptest.NewRequest("GET", "/?attr="+url.QueryEscape(string(raw)), nil)
-	c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{Tenant: "local"}))
+	c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{OrganizationScope: "local"}))
 	store := &captureStore{}
-	analyticsHandler(store, "logs", make(chan struct{}, 1))(c)
+	analyticsHandler(store, model.SignalLogs, model.OperationRecords, make(chan struct{}, 1))(c)
 	if out.Code != 400 || len(store.queries) != 0 {
 		t.Fatal("wrong signal scope must fail before query")
 	}
