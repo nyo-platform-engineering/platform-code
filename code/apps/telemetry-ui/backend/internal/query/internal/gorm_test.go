@@ -1,4 +1,4 @@
-package query
+package queryinternal
 
 import (
 	"context"
@@ -80,7 +80,7 @@ func TestGORMExecutionBindsValuesAndScansClickHouseTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &clickHouseStore{db: pool, orm: orm}
+	store := &Store{db: pool, orm: orm}
 	attack := "x' OR 1=1; -- ?"
 	compiled, err := Compile(Request{Kind: "traces", Tenant: attack, Filter: Filter{From: timestamp.Add(-time.Hour), To: timestamp, Search: attack, Limit: 2}})
 	if err != nil {

@@ -1,4 +1,4 @@
-package query
+package queryinternal
 
 import (
 	"context"
@@ -16,17 +16,17 @@ import (
 type QueryStore interface {
 	Query(context.Context, string, ...any) ([]map[string]any, error)
 }
-type clickHouseStore struct {
+type Store struct {
 	db      *sql.DB
 	orm     *gorm.DB
 	initErr error
 }
 
 // OpenStore retains the shared connection settings for integration tools.
-func OpenStore() *clickHouseStore { return openStore("") }
+func OpenStore() *Store { return openStore("") }
 
 // OpenStores shares a pool when both signals resolve to the same connection.
-func OpenStores() (*clickHouseStore, *clickHouseStore) {
+func OpenStores() (*Store, *Store) {
 	traceOptions, logOptions := connectionOptions("TRACES_"), connectionOptions("LOGS_")
 	traces := openOptions(traceOptions)
 	if traceOptions.Addr[0] == logOptions.Addr[0] && traceOptions.Auth == logOptions.Auth && (traceOptions.TLS != nil) == (logOptions.TLS != nil) {
@@ -66,18 +66,18 @@ func connectionOptions(signal string) *clickhouse.Options {
 	}
 	return options
 }
-func openStore(signal string) *clickHouseStore {
+func openStore(signal string) *Store {
 	return openOptions(connectionOptions(signal))
 }
-func openOptions(options *clickhouse.Options) *clickHouseStore {
+func openOptions(options *clickhouse.Options) *Store {
 	db := clickhouse.OpenDB(options)
 
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(2)
 	orm, err := openGORM(db, false)
-	return &clickHouseStore{db: db, orm: orm, initErr: err}
+	return &Store{db: db, orm: orm, initErr: err}
 }
-func (s *clickHouseStore) Query(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
+func (s *Store) Query(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
 	if s.initErr != nil {
 		return nil, s.initErr
 	}
@@ -86,7 +86,7 @@ func (s *clickHouseStore) Query(ctx context.Context, query string, args ...any) 
 	return result, err
 }
 
-func (s *clickHouseStore) Close() error { return s.db.Close() }
+func (s *Store) Close() error { return s.db.Close() }
 func envOr(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -94,7 +94,7 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-func (s *clickHouseStore) Ping(ctx context.Context) error {
+func (s *Store) Ping(ctx context.Context) error {
 	if s.initErr != nil {
 		return s.initErr
 	}

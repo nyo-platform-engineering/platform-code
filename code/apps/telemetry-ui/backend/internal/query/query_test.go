@@ -1,11 +1,12 @@
 package query_test
 
 import (
+	"testing"
+
 	logs "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/logs/model"
 	metadata "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/metadata/model"
 	traces "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/traces/model"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
-	"testing"
 )
 
 func TestCompilersRejectUnscopedOrInvalidQueries(t *testing.T) {

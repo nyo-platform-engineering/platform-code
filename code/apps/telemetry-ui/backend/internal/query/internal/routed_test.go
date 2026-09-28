@@ -1,4 +1,4 @@
-package query
+package queryinternal
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestRoutedPoolRequiresSecretEnvironmentReference(t *testing.T) {
-	store := &RoutedStore{signal: "traces", pools: map[string]*clickHouseStore{}, mu: &sync.Mutex{}}
+	store := &RoutedStore{signal: "traces", pools: map[string]*Store{}, mu: &sync.Mutex{}}
 	base := database.DataSource{ID: "test", Address: "clickhouse:9000", Database: "otel", Username: "reader"}
 
 	invalid := base
@@ -139,7 +139,7 @@ func TestRoutedStoreRequiresSelectionWhenSignalHasMultipleSources(t *testing.T) 
 	if err := db.Create(&assignments).Error; err != nil {
 		t.Fatal(err)
 	}
-	store := &RoutedStore{control: db, signal: "traces", pools: map[string]*clickHouseStore{}, mu: &sync.Mutex{}}
+	store := &RoutedStore{control: db, signal: "traces", pools: map[string]*Store{}, mu: &sync.Mutex{}}
 	if _, err := store.resolve(context.Background(), "acme", ""); err == nil {
 		t.Fatal("ambiguous datasource routing was accepted")
 	}

@@ -1,4 +1,4 @@
-package query
+package queryinternal
 
 // Keep SQL expressions here. Request values belong in bound parameters.
 const severitySQL = "multiIf(" +

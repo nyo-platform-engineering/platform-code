@@ -1,4 +1,4 @@
-package query
+package queryinternal
 
 import (
 	"context"
@@ -56,11 +56,11 @@ type RoutedStore struct {
 	control *gorm.DB
 	signal  string
 	mu      *sync.Mutex
-	pools   map[string]*clickHouseStore
+	pools   map[string]*Store
 }
 
 func NewRoutedStores(control *gorm.DB) (*RoutedStore, *RoutedStore) {
-	pools := make(map[string]*clickHouseStore)
+	pools := make(map[string]*Store)
 	mu := &sync.Mutex{}
 	return &RoutedStore{control: control, signal: "traces", pools: pools, mu: mu},
 		&RoutedStore{control: control, signal: "logs", pools: pools, mu: mu}
@@ -78,7 +78,7 @@ func (s *RoutedStore) Query(ctx context.Context, statement string, args ...any) 
 	return store.Query(ctx, statement, args...)
 }
 
-func (s *RoutedStore) resolve(ctx context.Context, organizationID, selectedID string) (*clickHouseStore, error) {
+func (s *RoutedStore) resolve(ctx context.Context, organizationID, selectedID string) (*Store, error) {
 	sources := []database.DataSource{}
 	query := s.control.WithContext(ctx).Table(database.DataSource{}.TableName()+" AS source").
 		Select("source.*").
@@ -102,7 +102,7 @@ func (s *RoutedStore) resolve(ctx context.Context, organizationID, selectedID st
 	return s.pool(sources[0])
 }
 
-func (s *RoutedStore) pool(source database.DataSource) (*clickHouseStore, error) {
+func (s *RoutedStore) pool(source database.DataSource) (*Store, error) {
 	if !strings.HasPrefix(source.PasswordEnv, "CLICKHOUSE_") {
 		return nil, errors.New("datasource password environment variable must start with CLICKHOUSE_")
 	}
@@ -133,17 +133,17 @@ func (s *RoutedStore) pool(source database.DataSource) (*clickHouseStore, error)
 }
 
 func (s *RoutedStore) Ping(ctx context.Context) error {
-	return s.eachStore(ctx, func(store *clickHouseStore) error { return store.Ping(ctx) })
+	return s.eachStore(ctx, func(store *Store) error { return store.Ping(ctx) })
 }
 
 func (s *RoutedStore) Probe(ctx context.Context, statement string) error {
-	return s.eachStore(ctx, func(store *clickHouseStore) error {
+	return s.eachStore(ctx, func(store *Store) error {
 		_, err := store.Query(ctx, statement)
 		return err
 	})
 }
 
-func (s *RoutedStore) eachStore(ctx context.Context, check func(*clickHouseStore) error) error {
+func (s *RoutedStore) eachStore(ctx context.Context, check func(*Store) error) error {
 	sources := []database.DataSource{}
 	if err := s.control.WithContext(ctx).Table(database.DataSource{}.TableName()+" AS source").
 		Distinct("source.*").
