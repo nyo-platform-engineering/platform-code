@@ -46,6 +46,9 @@ spec:
             - {name: WEB_DIST_DIR, value: /web}
             - name: AUTH_MODE
               value: {{ .Values.authMode | quote }}
+            {{- if eq .Values.authMode "oauth" }}
+            - {name: AUTH_GRANTS_FILE, value: /etc/telemetry-auth/auth.grants.json}
+            {{- end }}
             {{- if eq .Values.clickhouse.type "unified" }}
             {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_" "config" .Values.clickhouse.unified) | nindent 12 }}
             {{- else if eq .Values.clickhouse.type "split" }}
@@ -55,7 +58,7 @@ spec:
             {{- fail "clickhouse.type must be unified or split" }}
             {{- end }}
             {{- range .Values.extraEnv }}
-            {{- if or (hasPrefix "CLICKHOUSE_" .name) (has .name (list "MOCK" "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE")) }}
+            {{- if or (hasPrefix "CLICKHOUSE_" .name) (has .name (list "MOCK" "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE" "AUTH_GRANTS_FILE")) }}
             {{- fail (printf "extraEnv cannot override managed variable %s" .name) }}
             {{- end }}
             {{- toYaml (list .) | nindent 12 }}
@@ -70,9 +73,17 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            {{- if eq .Values.authMode "oauth" }}
+            - {name: auth-grants, mountPath: /etc/telemetry-auth, readOnly: true}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if eq .Values.authMode "oauth" }}
+        - name: auth-grants
+          secret:
+            secretName: {{ required "authGrantsSecret is required for oauth" .Values.authGrantsSecret | quote }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -5,4 +5,8 @@ Telemetry UI: {{ include "telemetry-ui.fullname" . }}
 Open http://localhost:8080
 ClickHouse connection type: {{ .Values.clickhouse.type }}
 Readiness requires database connectivity and read access to both signal tables.
-AUTH_MODE=local grants the local identity read permissions; secure access at your gateway.
+{{- if eq .Values.authMode "local" }}
+AUTH_MODE=local bypasses login. Use authMode=oauth for Google/GitHub sign-in.
+{{- else }}
+OAuth login is enabled. Configure AUTH_ORIGIN, PostgreSQL, access grants, and provider credentials.
+{{- end }}

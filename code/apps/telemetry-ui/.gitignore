@@ -4,3 +4,7 @@ frontend/*.tsbuildinfo
 backend/telemetry-ui
 *.tar
 backend/.air/
+.env
+.env.*
+!.env.example
+auth.grants.json

@@ -2,8 +2,9 @@ package query
 
 import (
 	"errors"
-	"fmt"
-	"strings"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Table is a closed allowlist. Request values cannot select arbitrary tables.
@@ -14,14 +15,11 @@ const (
 	Logs
 )
 
-// selectBuilder keeps predicates and their parameters together. SQL expressions
-// (projection, grouping, ordering) are code-owned constants, never request input.
-// User values enter through Filter, containsKey, and pagination arguments only.
+// SQL expressions passed to this private builder are fixed in compile.go.
+// Request values enter GORM only as arguments, never Select/Order/Group strings.
 type selectBuilder struct {
-	table, columns, pre, where, group, order string
-	preArgs, whereArgs                       []any
-	limit, offset                            int
-	paginated, searchBudget                  bool
+	db  *gorm.DB
+	err error
 }
 
 func selectQuery(table Table, columns string, f Filter, tenant string, serverOnly bool) (*selectBuilder, error) {
@@ -37,54 +35,63 @@ func selectQuery(table Table, columns string, f Filter, tenant string, serverOnl
 	if err := f.ValidateScope(tenant, signal, false); err != nil {
 		return nil, err
 	}
+	base, err := compilerDB()
+	if err != nil {
+		return nil, err
+	}
 	pre, preArgs, where, whereArgs := f.conditions(tenant, table == Logs, serverOnly)
-	return &selectBuilder{table: name, columns: columns, pre: pre, preArgs: preArgs, where: where, whereArgs: whereArgs, searchBudget: f.Settings() != ""}, nil
+	db := base.Session(&gorm.Session{NewDB: true}).Table(name).Select(columns).
+		Clauses(prewhere{expression: clause.Expr{SQL: pre, Vars: preArgs}})
+	if where != "" {
+		db = db.Where(where, whereArgs...)
+	}
+	if f.Settings() != "" {
+		db = db.Clauses(searchSettings{})
+	}
+	return &selectBuilder{db: db}, nil
 }
 
 func (b *selectBuilder) containsKey(value string) *selectBuilder {
 	if value != "" {
-		if b.where != "" {
-			b.where += " AND "
-		}
-		b.where += "positionCaseInsensitiveUTF8(key, ?) > 0"
-		b.whereArgs = append(b.whereArgs, value)
+		b.db = b.db.Where("positionCaseInsensitiveUTF8(key, ?) > 0", value)
 	}
 	return b
 }
-func (b *selectBuilder) groupBy(expression string) *selectBuilder { b.group = expression; return b }
-func (b *selectBuilder) orderBy(expression string) *selectBuilder { b.order = expression; return b }
-func (b *selectBuilder) page(limit, offset int) *selectBuilder {
-	b.limit, b.offset, b.paginated = limit, offset, true
+func (b *selectBuilder) groupBy(expression string) *selectBuilder {
+	if expression != "" {
+		b.db = b.db.Group(expression)
+	}
 	return b
 }
-func (b *selectBuilder) withSearchBudget() *selectBuilder { b.searchBudget = true; return b }
-
+func (b *selectBuilder) orderBy(expression string) *selectBuilder {
+	if expression != "" {
+		b.db = b.db.Order(expression)
+	}
+	return b
+}
+func (b *selectBuilder) page(limit, offset int) *selectBuilder {
+	if limit < 1 || limit > 501 || offset < 0 || offset > 5000 {
+		b.err = errors.New("invalid pagination")
+		return b
+	}
+	b.db = b.db.Limit(limit).Offset(offset)
+	return b
+}
+func (b *selectBuilder) withSearchBudget() *selectBuilder {
+	b.db = b.db.Clauses(searchSettings{})
+	return b
+}
 func (b *selectBuilder) compile(name string) (CompiledQuery, error) {
-	if b.table == "" || b.pre == "" {
+	if b.err != nil {
+		return CompiledQuery{}, b.err
+	}
+	if b.db == nil {
 		return CompiledQuery{}, errors.New("unscoped query builder")
 	}
-	if b.paginated && (b.limit < 1 || b.limit > 501 || b.offset < 0 || b.offset > 5000) {
-		return CompiledQuery{}, errors.New("invalid pagination")
+	var rows []map[string]any
+	result := b.db.Find(&rows)
+	if result.Error != nil {
+		return CompiledQuery{}, result.Error
 	}
-	var sql strings.Builder
-	fmt.Fprintf(&sql, "SELECT %s FROM %s PREWHERE %s", b.columns, b.table, b.pre)
-	args := append([]any{}, b.preArgs...)
-	if b.where != "" {
-		sql.WriteString(" WHERE " + b.where)
-		args = append(args, b.whereArgs...)
-	}
-	if b.group != "" {
-		sql.WriteString(" GROUP BY " + b.group)
-	}
-	if b.order != "" {
-		sql.WriteString(" ORDER BY " + b.order)
-	}
-	if b.paginated {
-		sql.WriteString(" LIMIT ? OFFSET ?")
-		args = append(args, b.limit, b.offset)
-	}
-	if b.searchBudget {
-		sql.WriteString(SearchSettings)
-	}
-	return CompiledQuery{Name: name, SQL: sql.String(), Args: args}, nil
+	return CompiledQuery{Name: name, SQL: result.Statement.SQL.String(), Args: append([]any(nil), result.Statement.Vars...)}, nil
 }

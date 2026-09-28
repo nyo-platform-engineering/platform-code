@@ -36,6 +36,7 @@ export function MetadataProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController()
     fetch('/api/v1/meta', { signal: controller.signal })
       .then(async (response) => {
+        if (response.status === 401) window.dispatchEvent(new Event('session-expired'))
         if (!response.ok) throw new Error(`Metadata unavailable (${response.status})`)
         return response.json() as Promise<Metadata>
       })

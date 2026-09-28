@@ -22,7 +22,7 @@ The backend uses domain-first MVC packages for traces, logs, and metadata.
 Each domain owns its controllers, SQL queries, and response presentation.
 Shared HTTP helpers live in `internal/controller/common`; shared filters,
 attribute conditions, tenant predicates, and storage live in `internal/query`.
-Domain models use a parameterized ClickHouse query builder with mandatory tenant
+Domain models use GORM with its ClickHouse driver and mandatory tenant
 scope and allowlisted tables. Routes and access policies remain separate for auditing.
 See [the access-control audit](ACCESS_CONTROL.md).
 
@@ -121,6 +121,10 @@ For split frontend development, install the pinned package manager with
 `frontend`. Start the Go server from `backend` on port 8080; Vite proxies
 `/api` to Go. The frontend enforces pnpm 12.6 and asks pnpm to download the
 pinned Node 24 runtime when it is not already available.
+
+For Google/GitHub login, PostgreSQL sessions, and access grants, follow
+[authentication setup](AUTHENTICATION.md). Local development without login remains
+available with `AUTH_MODE=local`.
 
 Set `MAX_CONCURRENT_QUERIES` to control how many analytics requests each backend
 instance can execute at once (default `4`, positive integers only). The limit is

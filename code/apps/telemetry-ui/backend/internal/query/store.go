@@ -7,12 +7,17 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"gorm.io/gorm"
 )
 
 type QueryStore interface {
 	Query(context.Context, string, ...any) ([]map[string]any, error)
 }
-type clickHouseStore struct{ db *sql.DB }
+type clickHouseStore struct {
+	db      *sql.DB
+	orm     *gorm.DB
+	initErr error
+}
 
 // OpenStore retains the shared connection settings for integration tools.
 func OpenStore() *clickHouseStore { return openStore("") }
@@ -57,35 +62,16 @@ func openOptions(options *clickhouse.Options) *clickHouseStore {
 
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(2)
-	return &clickHouseStore{db}
+	orm, err := openGORM(db, false)
+	return &clickHouseStore{db: db, orm: orm, initErr: err}
 }
 func (s *clickHouseStore) Query(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
+	if s.initErr != nil {
+		return nil, s.initErr
 	}
 	result := make([]map[string]any, 0)
-	for rows.Next() {
-		values := make([]any, len(columns))
-		dest := make([]any, len(columns))
-		for i := range values {
-			dest[i] = &values[i]
-		}
-		if err := rows.Scan(dest...); err != nil {
-			return nil, err
-		}
-		row := map[string]any{}
-		for i, col := range columns {
-			row[col] = values[i]
-		}
-		result = append(result, row)
-	}
-	return result, rows.Err()
+	err := s.orm.WithContext(ctx).Raw(query, args...).Scan(&result).Error
+	return result, err
 }
 
 func (s *clickHouseStore) Close() error { return s.db.Close() }
@@ -96,7 +82,12 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-func (s *clickHouseStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+func (s *clickHouseStore) Ping(ctx context.Context) error {
+	if s.initErr != nil {
+		return s.initErr
+	}
+	return s.db.PingContext(ctx)
+}
 
 // CheckConnection probes real database pools; QueryStore fakes still exercise the
 // table probes in readiness without needing to implement driver-specific behavior.

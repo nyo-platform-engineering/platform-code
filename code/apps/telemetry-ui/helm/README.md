@@ -54,9 +54,15 @@ in unified or split mode. Its five-second probe timeout exceeds the backend's
 three-second readiness deadline. Either database failing removes the pod from
 Service endpoints. Service discovery queries and merges both backends.
 
-The application currently supports only `AUTH_MODE=local`, granting the fixed local
-identity read permissions. For external access, enforce authentication at your
-existing gateway. Enable HTTPRoute with `-f ./helm/examples/gateway.yaml` after
+Set `authMode: oauth` for Google/GitHub login. Set `authGrantsSecret` to an existing
+Secret containing `auth.grants.json`; the chart mounts it read-only. Provide
+`AUTH_ORIGIN`, `AUTH_DATABASE_URL`, and provider client IDs/secrets through
+`extraEnv` (use `valueFrom.secretKeyRef` for secrets). OAuth startup runs GORM AutoMigrate for PostgreSQL auth tables; the database role
+needs schema creation and alteration permissions. The chart does not provision
+PostgreSQL. ClickHouse schemas remain externally managed.
+See [authentication setup](../AUTHENTICATION.md) for grant format and callback URLs.
+
+The default `authMode: local` bypasses login for development. Enable HTTPRoute with `-f ./helm/examples/gateway.yaml` after
 configuring its parent Gateway and hostname. Gateway API CRDs must already exist;
 TLS and access control are configured on the Gateway, outside this chart.
 

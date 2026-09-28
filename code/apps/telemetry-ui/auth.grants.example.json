@@ -1,0 +1,28 @@
+[
+  {
+    "provider": "google",
+    "subject": "replace-with-google-sub",
+    "tenant": "local",
+    "permissions": [
+      "observability:traces:read",
+      "observability:logs:read"
+    ]
+  },
+  {
+    "provider": "google",
+    "googleDomain": "your-company.example",
+    "tenant": "local",
+    "permissions": [
+      "observability:traces:read",
+      "observability:logs:read"
+    ]
+  },
+  {
+    "provider": "github",
+    "subject": "replace-with-numeric-github-id",
+    "tenant": "local",
+    "permissions": [
+      "observability:traces:read"
+    ]
+  }
+]

@@ -96,3 +96,14 @@ func TestMaxConcurrentQueriesConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestOAuthNeverFallsBackToLocalIdentity(t *testing.T) {
+	if _, err := newHandler(config{AuthMode: "oauth"}, slog.Default()); err == nil {
+		t.Fatal("oauth started without session storage")
+	}
+	t.Setenv("AUTH_MODE", "oauth")
+	t.Setenv("AUTH_GRANTS_FILE", t.TempDir()+"/missing.json")
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("oauth accepted missing grants")
+	}
+}

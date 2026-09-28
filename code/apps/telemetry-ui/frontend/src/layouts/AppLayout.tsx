@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet } from '@tanstack/react-router'
 import { LuMoon, LuSun } from 'react-icons/lu'
 import { Button } from '../components/Button'
+import { AuthGate, SignOut } from './AuthGate'
 import { MetadataProvider, useMetadata } from './MetadataProvider'
 
 type Theme = 'light' | 'dark'
@@ -67,6 +68,7 @@ function Shell() {
             {theme === 'dark' ? <LuMoon aria-hidden size={13} /> : <LuSun aria-hidden size={13} />}
             <span className="max-sm:hidden">{theme === 'dark' ? 'Dark' : 'Light'}</span>
           </Button>
+          <SignOut />
           <div className="grid gap-0.5 border-t border-border p-2.5 max-md:hidden">
             <span className="font-mono text-[9px] font-semibold tracking-widest text-muted uppercase">
               Active scope
@@ -92,8 +94,10 @@ function Shell() {
 }
 export default function AppLayout() {
   return (
-    <MetadataProvider>
-      <Shell />
-    </MetadataProvider>
+    <AuthGate>
+      <MetadataProvider>
+        <Shell />
+      </MetadataProvider>
+    </AuthGate>
   )
 }

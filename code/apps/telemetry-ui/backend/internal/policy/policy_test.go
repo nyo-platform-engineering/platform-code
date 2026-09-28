@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -31,5 +33,21 @@ func TestUnclassifiedRouteDeniedAtRuntime(t *testing.T) {
 	r.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/new", nil))
 	if out.Code != 403 {
 		t.Fatalf("got %d", out.Code)
+	}
+}
+
+type failingAuthenticator struct{}
+
+func (failingAuthenticator) Authenticate(*http.Request) (auth.Principal, error) {
+	return auth.Principal{}, errors.New("private storage failure")
+}
+func TestAuthStorageFailureDeniesRequest(t *testing.T) {
+	r := gin.New()
+	r.Use(Enforce(failingAuthenticator{}))
+	r.GET("/api/v1/meta", func(c *gin.Context) { t.Error("handler ran without authenticated identity") })
+	out := httptest.NewRecorder()
+	r.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/meta", nil))
+	if out.Code != 503 || out.Body.String() != `{"error":"auth_unavailable"}` {
+		t.Fatalf("unexpected error response: %d %s", out.Code, out.Body)
 	}
 }

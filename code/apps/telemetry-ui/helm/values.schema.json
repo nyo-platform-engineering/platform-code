@@ -8,7 +8,8 @@
     },
     "authMode": {
       "enum": [
-        "local"
+        "local",
+        "oauth"
       ]
     },
     "image": {
@@ -311,6 +312,9 @@
     "terminationGracePeriodSeconds": {
       "type": "integer",
       "minimum": 15
+    },
+    "authGrantsSecret": {
+      "type": "string"
     }
   }
 }

@@ -16,7 +16,7 @@ import (
 
 type fixedAuthenticator struct{ actor auth.Principal }
 
-func (a fixedAuthenticator) Authenticate(*http.Request) auth.Principal { return a.actor }
+func (a fixedAuthenticator) Authenticate(*http.Request) (auth.Principal, error) { return a.actor, nil }
 
 type auditStore struct {
 	calls   int
@@ -91,7 +91,11 @@ func TestMissingIdentityOrTenantDenied(t *testing.T) {
 		for _, path := range []string{"/api/v1/meta", "/api/v1/services", "/api/v1/traces?preview=1", "/api/v1/logs"} {
 			out := httptest.NewRecorder()
 			h.ServeHTTP(out, httptest.NewRequest("GET", path, nil))
-			if out.Code != 403 {
+			want := 403
+			if actor.Subject == "" {
+				want = 401
+			}
+			if out.Code != want {
 				t.Fatalf("%s: got %d", path, out.Code)
 			}
 		}

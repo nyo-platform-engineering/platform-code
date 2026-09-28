@@ -10,14 +10,18 @@ registered endpoint also fails closed with 403 at runtime.
 | --- | --- |
 | GET `/healthz`, `/readyz` | Public liveness/storage readiness |
 | GET `/`, `/assets/*filepath` | Public frontend files |
+| GET `/api/v1/auth/providers`, `/api/v1/auth/session` | Public provider/session status; session endpoint returns 401 when signed out |
+| GET `/api/v1/auth/:provider/login`, `/api/v1/auth/:provider/callback` | Public OAuth entry points; callback requires one-use state and PKCE |
+| POST `/api/v1/auth/logout` | Session revocation with explicit Origin/header CSRF checks |
 | GET `/api/v1/meta`, `/api/v1/services` | `observability:metadata:read` |
 | GET `/api/v1/traces`, `/api/v1/traces/:traceId` | `observability:traces:read` |
 | GET `/api/v1/traces/red`, `/api/v1/traces/attributes` | `observability:traces:read` |
 | GET `/api/v1/logs`, `/api/v1/logs/volume`, `/api/v1/logs/attributes` | `observability:logs:read` |
 
 All protected endpoints require a nonempty authenticated subject and tenant as
-well as the listed permission. Missing identity, tenant, or permission returns
-403 before parsing queries, generating SQL previews, or calling storage.
+well as the listed permission. Missing identity returns 401; missing tenant or
+permission returns 403 before parsing queries, generating SQL previews, or calling
+storage. Authentication storage failures return 503.
 `preview=1` uses the same endpoint policy as execution.
 
 The policy also bounds the public SPA fallback: unmatched GET/HEAD requests
@@ -30,9 +34,10 @@ probes against both signal tables without returning telemetry data.
 
 [identity.go](backend/internal/auth/identity.go) implements the current local
 identity: subject `local-development`, tenant `local`, all three read permissions.
-It ignores client identity/tenant headers. `AUTH_MODE=local` is the only supported
-mode; other configured modes fail startup. Local mode is a development identity,
-not production authentication.
+It ignores client identity/tenant headers. `AUTH_MODE=oauth` enables Google/GitHub
+login with PostgreSQL sessions and configurable access grants. See
+[authentication setup](AUTHENTICATION.md). Local mode bypasses login and is for
+development. Other configured modes fail startup.
 
 Controllers read the trusted principal from request context and reject absent
 tenant scope. Models bind that tenant into every telemetry SQL query, including
@@ -43,7 +48,7 @@ trace/log permission. Trace and log data still require their own permissions.
 
 ## SQL construction
 
-Domain models compile through `internal/query/builder.go`. The builder allowlists
+Domain models compile through the GORM adapter in `internal/query/builder.go`. It allowlists
 trace/log tables and requires a nonempty tenant before generating either execution
 SQL or a preview. Filter values, attribute keys/values, JSON path segments,
 discovery search, and pagination use bound arguments. Compiler errors stop both
@@ -56,8 +61,10 @@ as during HTTP parsing. PREWHERE and WHERE are built independently with their
 arguments, rather than inferred by subtracting SQL strings. ClickHouse aggregates,
 JSON expressions, query budgets, and the shared preview compiler are preserved.
 
-This is a focused ClickHouse query builder, not an ORM migration. An ORM would
-still require safe binding and allowlisting for raw expressions and identifiers;
+GORM and its ClickHouse driver now assemble and execute these queries. Small custom
+clauses preserve PREWHERE and SETTINGS. Dry-run statement SQL and Vars feed both
+previews and execution; interpolated debug SQL is never executed. GORM still
+requires safe binding and allowlisting for raw expressions and identifiers;
 see [GORM's security guidance](https://gorm.io/docs/security.html).
 
 ## Structure and verification

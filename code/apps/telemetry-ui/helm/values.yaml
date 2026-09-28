@@ -7,8 +7,11 @@ image:
   digest: "" # Optional sha256 digest takes precedence over tag.
   pullPolicy: IfNotPresent
 imagePullSecrets: []
-# Only local auth is implemented. Secure external access at your gateway.
+# Use oauth for Google/GitHub login; configure AUTH_* and provider secrets through extraEnv.
+# local bypasses login and is intended for development.
 authMode: local
+# Existing Secret with an auth.grants.json key; required for oauth.
+authGrantsSecret: ""
 clickhouse:
   type: unified # unified | split
   # Used only when type=unified.

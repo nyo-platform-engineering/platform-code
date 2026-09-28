@@ -24,13 +24,13 @@ const (
 
 type LocalAuthenticator struct{}
 
-func (LocalAuthenticator) Authenticate(_ *http.Request) Principal {
+func (LocalAuthenticator) Authenticate(_ *http.Request) (Principal, error) {
 	return Principal{
 		Subject:     "local-development",
 		DisplayName: "Local developer",
 		Tenant:      "local",
 		Permissions: []string{MetadataRead, TracesRead, LogsRead},
-	}
+	}, nil
 }
 
 func HasPermission(actor Principal, expected string) bool {
@@ -42,7 +42,9 @@ func HasPermission(actor Principal, expected string) bool {
 	return false
 }
 
-type Authenticator interface{ Authenticate(*http.Request) Principal }
+type Authenticator interface {
+	Authenticate(*http.Request) (Principal, error)
+}
 
 func WithPrincipal(ctx context.Context, actor Principal) context.Context {
 	return context.WithValue(ctx, principalKey, actor)

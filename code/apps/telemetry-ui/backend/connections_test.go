@@ -91,7 +91,7 @@ func TestServicesMergeAcrossConnectionsAndPreviewBoth(t *testing.T) {
 	if out.Code != 200 || len(body.Data) != 3 || body.Data[0].Service != "api" || body.Data[1].Service != "shared" || body.Data[2].Service != "worker" {
 		t.Fatalf("bad merge: %s", out.Body)
 	}
-	if len(traces.queries) != 1 || len(logs.queries) != 1 || !strings.Contains(traces.queries[0], "FROM otel.otel_traces") || !strings.Contains(logs.queries[0], "FROM otel.otel_logs") {
+	if len(traces.queries) != 1 || len(logs.queries) != 1 || !strings.Contains(traces.queries[0], "FROM `otel`.`otel_traces`") || !strings.Contains(logs.queries[0], "FROM `otel`.`otel_logs`") {
 		t.Fatal("services used wrong connection")
 	}
 	if traces.args[0][2] != "local" || logs.args[0][2] != "local" {

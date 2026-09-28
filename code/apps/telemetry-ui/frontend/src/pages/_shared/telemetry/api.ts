@@ -21,6 +21,8 @@ async function query<T>(
   const response = await fetch(`/api/v1/${path}?${params}`, {
     signal: AbortSignal.any([signal, AbortSignal.timeout(8_000)]),
   })
+  if (response.status === 401 && typeof window !== 'undefined')
+    window.dispatchEvent(new Event('session-expired'))
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as { message?: string; error?: string }
     throw new Error(error.message ?? error.error ?? `Query failed (${response.status})`)
@@ -174,6 +176,8 @@ export async function fetchSQLPreview(
         signal: AbortSignal.any([signal, AbortSignal.timeout(8_000)]),
         cache: 'no-store',
       })
+      if (response.status === 401 && typeof window !== 'undefined')
+        window.dispatchEvent(new Event('session-expired'))
       const body = await response.json()
       if (!response.ok) throw new Error(body.message ?? body.error ?? 'SQL preview unavailable')
       return body as { queries: SQLPreviewQuery[]; from: string; to: string }

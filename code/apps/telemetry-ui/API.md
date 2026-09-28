@@ -28,7 +28,7 @@ deadlines and cancellation, `MAX_CONCURRENT_QUERIES` execution slots (default 4 
 
 | Route | Data fields |
 | --- | --- |
-| `GET /meta` | Service version, local actor, available capabilities |
+| `GET /meta` | Service version, authenticated actor, available capabilities |
 | `GET /services` | `service` values found in traces or logs (maximum 500) |
 | `GET /traces/red` | `bucket`, `requests`, `errors`, `errorRate`, `p50Ms`, `p95Ms`, `p99Ms`, `partial` |
 | `GET /traces` | `timestamp`, `traceId`, `spanId`, `service`, `name`, `durationMs`, `status` for server spans |
@@ -55,6 +55,7 @@ ClickHouse's nanoseconds to milliseconds. Severity 0 remains `unspecified`.
 ## Errors and readiness
 
 - `400`: malformed or out-of-bounds filters (`invalid_query`).
+- `401`: missing or expired login session (`unauthenticated`).
 - `403`: missing tenant scope or permission (`forbidden`).
 - `429`: query concurrency exhausted (`too_many_queries`).
 - `503`: storage/query failure (`query_unavailable`); never substituted with empty data.
@@ -231,3 +232,11 @@ sorts them, and retains the first 500. If either query fails, it returns 503 rat
 than a partial service list. `preview=1` returns `trace-services` and `log-services`
 queries without connecting to storage. The shared query concurrency budget and
 five-second deadline still cover the complete operation.
+
+## Login
+
+OAuth endpoints are under `/api/v1/auth`: `GET /providers`, `GET /session`,
+`GET /:provider/login`, `GET /:provider/callback`, and `POST /logout`.
+Providers are `google` and `github`; only configured providers appear in the UI.
+Logout requires an Origin matching `AUTH_ORIGIN` and `X-Telemetry-CSRF: 1`.
+See [authentication setup](AUTHENTICATION.md) for session and grant configuration.

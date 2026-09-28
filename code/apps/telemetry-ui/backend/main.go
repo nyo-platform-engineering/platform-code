@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
+	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/database"
 	logmodel "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/logs/model"
 	tracemodel "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/domain/traces/model"
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/policy"
@@ -38,6 +40,8 @@ const version = "0.1.0"
 const defaultMaxConcurrentQueries = 4
 
 type config struct {
+	OAuthConfig             auth.OAuthConfig
+	OAuth                   *auth.OAuth
 	MaxConcurrentQueries    int
 	Mock                    bool
 	Port                    int
@@ -72,11 +76,19 @@ func loadConfig() (config, error) {
 	}
 
 	authMode := envOr("AUTH_MODE", "local")
-	if authMode != "local" {
-		return config{}, fmt.Errorf("unsupported AUTH_MODE %q: only local is available in the scaffold", authMode)
+	if authMode != "local" && authMode != "oauth" {
+		return config{}, fmt.Errorf("unsupported AUTH_MODE %q: expected local or oauth", authMode)
 	}
 
+	var oauthConfig auth.OAuthConfig
+	if authMode == "oauth" {
+		oauthConfig, err = auth.LoadOAuthConfig()
+		if err != nil {
+			return config{}, err
+		}
+	}
 	return config{
+		OAuthConfig:             oauthConfig,
 		Mock:                    mockEnabled,
 		MaxConcurrentQueries:    maxConcurrentQueries,
 		Port:                    port,
@@ -126,6 +138,9 @@ func securityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 		c.Header("Referrer-Policy", "no-referrer")
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.Header("Cache-Control", "no-store")
+		}
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Next()
@@ -191,8 +206,14 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 		return nil, fmt.Errorf("MaxConcurrentQueries must be positive")
 	}
 	slots := make(chan struct{}, cfg.MaxConcurrentQueries)
-	if cfg.AuthMode != "" && cfg.AuthMode != "local" {
+	if cfg.AuthMode != "" && cfg.AuthMode != "local" && cfg.AuthMode != "oauth" {
 		return nil, fmt.Errorf("unsupported AUTH_MODE %q", cfg.AuthMode)
+	}
+	if cfg.AuthMode == "oauth" {
+		if cfg.OAuth == nil {
+			return nil, fmt.Errorf("OAuth must be initialized before serving requests")
+		}
+		cfg.Authenticator = cfg.OAuth
 	}
 	if cfg.Authenticator == nil {
 		cfg.Authenticator = auth.LocalAuthenticator{}
@@ -211,14 +232,14 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 			// Restore trusted propagation only after an authenticated boundary exists.
 			otelgin.WithPropagators(propagation.NewCompositeTextMapPropagator()),
 			otelgin.WithFilter(func(r *http.Request) bool {
-				return strings.HasPrefix(r.URL.Path, "/api/")
+				return strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/api/v1/auth/")
 			}),
 		),
 		requestLogger(logger),
 	)
 
 	router.Use(policy.Enforce(cfg.Authenticator))
-	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version, slots)
+	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version, slots, cfg.OAuth)
 	if err := policy.ValidateRoutes(router.Routes()); err != nil {
 		return nil, err
 	}
@@ -226,6 +247,14 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 }
 
 func run(ctx context.Context, cfg config, logger *slog.Logger) error {
+	if cfg.AuthMode == "oauth" {
+		oauth, closeAuth, err := startAuth(ctx, cfg.OAuthConfig, logger)
+		if err != nil {
+			return err
+		}
+		defer closeAuth()
+		cfg.OAuth = oauth
+	}
 	if cfg.Mock {
 		cfg.TraceStore, cfg.LogStore = tracemodel.MockStore{}, logmodel.MockStore{}
 		cfg.BackendOTLPEnabled = false
@@ -288,6 +317,23 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	migrate := flag.Bool("migrate", false, "synchronize PostgreSQL auth schema and exit")
+	flag.Parse()
+	if *migrate {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		db, err := database.Open(ctx, os.Getenv("AUTH_DATABASE_URL"))
+		if err == nil {
+			defer database.Close(db)
+			err = database.Migrate(ctx, db)
+		}
+		if err != nil {
+			logger.Error("database migration failed", "error", err)
+			os.Exit(1)
+		}
+		logger.Info("database migrations applied")
+		return
+	}
 	cfg, err := loadConfig()
 	if err != nil {
 		logger.Error("invalid configuration", "error", err)
