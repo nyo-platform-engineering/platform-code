@@ -13,6 +13,14 @@ func Services(traceStore, logStore query.QueryStore, slots chan struct{}) gin.Ha
 	traces, logs := handler(traceStore), handler(logStore)
 	execute := func(ctx context.Context, request query.Request) (query.Result, error) {
 		request.Filter = query.ServiceFilter(request.Filter)
+		if request.Signal == "traces" {
+			request.Kind = "trace-services"
+			return traces(ctx, request)
+		}
+		if request.Signal == "logs" {
+			request.Kind = "log-services"
+			return logs(ctx, request)
+		}
 		request.Kind = "trace-services"
 		traceResult, err := traces(ctx, request)
 		if err != nil {

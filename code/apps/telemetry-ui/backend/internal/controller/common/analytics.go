@@ -60,6 +60,7 @@ func Endpoint(kind string, slots chan struct{}, execute RequestHandler, respond 
 
 func QueryHandler(store model.QueryStore, compile model.Compiler) RequestHandler {
 	return func(ctx context.Context, request model.Request) (model.Result, error) {
+		ctx = model.WithDataSource(ctx, request.DataSourceID)
 		queries, err := compile(request)
 		if err != nil {
 			return model.Result{}, err

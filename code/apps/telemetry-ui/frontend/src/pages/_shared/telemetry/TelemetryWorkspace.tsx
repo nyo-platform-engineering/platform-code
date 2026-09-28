@@ -2,8 +2,9 @@ import { Button } from '../../../components/Button'
 import { SQLPreview } from './SQLPreview'
 import { TelemetrySearch } from './TelemetrySearch'
 import { filterValues } from './filters'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../../layouts/PageHeader'
+import { useMetadata } from '../../../layouts/MetadataProvider'
 import { useTelemetryData, useTelemetryFilters } from './hooks'
 import { preferredRefreshInterval, refreshInterval } from './refresh'
 import { TimeControls } from './TimeControls'
@@ -32,6 +33,22 @@ export function TelemetryWorkspace({
   renderSelection,
 }: Props) {
   const { search, setFilter, setSearchQuery, setTimeWindow } = useTelemetryFilters()
+  const { dataSources } = useMetadata()
+  const sourceKey = mode === 'traces' ? 'traceSource' : 'logSource'
+  const sourceOptions = dataSources[mode]
+  const selectedSource = search.get(sourceKey) ?? ''
+  const sourceReady = sourceOptions.some((source) => source.id === selectedSource)
+
+  useEffect(() => {
+    for (const [key, options] of [
+      ['traceSource', dataSources.traces],
+      ['logSource', dataSources.logs],
+    ] as const) {
+      const selected = new URLSearchParams(window.location.search).get(key)
+      if (options.length && !options.some((source) => source.id === selected))
+        setFilter(key, options[0].id)
+    }
+  }, [dataSources, setFilter])
   const [refreshSeconds, setRefreshSeconds] = useState(preferredRefreshInterval)
   const [paused, setPaused] = useState(
     () =>
@@ -46,11 +63,16 @@ export function TelemetryWorkspace({
     paused,
     setFilter,
     refreshSeconds,
+    sourceReady,
   )
   const [showCharts, setShowCharts] = useState(false)
   const traceId = search.get('traceId') ?? ''
   const link: TraceLink = (id, target) => {
     const params = new URLSearchParams({ traceId: id, minutes: String(windowMinutes(search)) })
+    for (const key of ['traceSource', 'logSource']) {
+      const value = search.get(key)
+      if (value) params.set(key, value)
+    }
     const services = filterValues(search, 'service')
     for (const service of services) params.append('service', service)
     for (const key of ['from', 'to']) {
@@ -135,6 +157,7 @@ export function TelemetryWorkspace({
                   mode={mode}
                   search={search}
                   services={services}
+                  dataSources={sourceOptions}
                   setFilter={setFilter}
                 />
               }

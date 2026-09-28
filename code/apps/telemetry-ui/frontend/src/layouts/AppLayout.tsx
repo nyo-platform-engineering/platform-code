@@ -20,9 +20,13 @@ const navigation = [
   { to: '/traces', label: 'Traces' },
   { to: '/logs', label: 'Logs' },
 ] as const
+const adminPermission = 'observability:admin:read'
 
 function Shell() {
   const { metadata } = useMetadata()
+  const items = metadata?.actor.permissions.includes(adminPermission)
+    ? [...navigation, { to: '/admin' as const, label: 'Admin' }]
+    : navigation
   const [theme, setTheme] = useState<Theme>(initialTheme)
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -46,7 +50,7 @@ function Shell() {
           <span className="max-sm:hidden">Signal Deck</span>
         </Link>
         <nav aria-label="Primary navigation" className="mt-7 grid gap-0.5 max-md:mt-0 max-md:flex">
-          {navigation.map((item, index) => (
+          {items.map((item, index) => (
             <Link
               key={item.to}
               to={item.to}
@@ -74,10 +78,12 @@ function Shell() {
               Active scope
             </span>
             <strong className="text-[11px] font-semibold">
-              {metadata?.actor.tenant ?? 'connecting'}
+              {metadata?.actor.organizationName ?? metadata?.actor.tenant ?? 'connecting'}
             </strong>
             <small className="truncate text-[10px] text-dim">
-              {metadata?.actor.displayName ?? 'Resolving access…'}
+              {metadata
+                ? `${metadata.actor.displayName} · ${metadata.actor.organizationScope}`
+                : 'Resolving access…'}
             </small>
           </div>
         </div>

@@ -34,6 +34,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"gorm.io/gorm"
 )
 
 const version = "0.1.0"
@@ -51,6 +52,7 @@ type config struct {
 	WebDistDir              string
 	AuthMode                string
 	Authenticator           auth.Authenticator
+	ControlDB               *gorm.DB
 	BackendOTLPEnabled      bool
 	TelemetryShutdownPeriod time.Duration
 }
@@ -134,10 +136,14 @@ func newFrontendHandler(root string) http.Handler {
 	})
 }
 
-func securityHeaders() gin.HandlerFunc {
+func securityHeaders(httpsOrigin bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+		if httpsOrigin {
+			c.Header("Strict-Transport-Security", "max-age=31536000")
+		}
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.Header("Cache-Control", "no-store")
 		}
@@ -225,7 +231,7 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 			logger.ErrorContext(c.Request.Context(), "panic recovered", "error", recovered)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal_server_error"})
 		}),
-		securityHeaders(),
+		securityHeaders(strings.HasPrefix(cfg.OAuthConfig.Origin, "https://")),
 		otelgin.Middleware(
 			"telemetry-ui-api",
 			// Public clients must not choose trace IDs, parent spans, or baggage.
@@ -239,7 +245,7 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 	)
 
 	router.Use(policy.Enforce(cfg.Authenticator))
-	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version, slots, cfg.OAuth)
+	routes.Register(router, cfg.TraceStore, cfg.LogStore, newFrontendHandler(cfg.WebDistDir), version, slots, cfg.OAuth, cfg.ControlDB)
 	if err := policy.ValidateRoutes(router.Routes()); err != nil {
 		return nil, err
 	}
@@ -247,18 +253,38 @@ func newHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 }
 
 func run(ctx context.Context, cfg config, logger *slog.Logger) error {
+	var controlDB *gorm.DB
 	if cfg.AuthMode == "oauth" {
-		oauth, closeAuth, err := startAuth(ctx, cfg.OAuthConfig, logger)
+		oauth, db, closeAuth, err := startAuth(ctx, cfg.OAuthConfig, logger)
 		if err != nil {
 			return err
 		}
 		defer closeAuth()
 		cfg.OAuth = oauth
+		controlDB = db
+		cfg.ControlDB = db
 	}
 	if cfg.Mock {
 		cfg.TraceStore, cfg.LogStore = tracemodel.MockStore{}, logmodel.MockStore{}
 		cfg.BackendOTLPEnabled = false
 		logger.Warn("MOCK enabled: serving synthetic telemetry without database connections")
+	} else if controlDB != nil {
+		organizations := make([]string, 0, len(cfg.OAuthConfig.Organizations))
+		for _, organization := range cfg.OAuthConfig.Organizations {
+			organizations = append(organizations, organization.ID)
+		}
+		if len(organizations) == 0 {
+			for _, grant := range cfg.OAuthConfig.Grants {
+				organizations = append(organizations, grant.OrganizationID)
+			}
+		}
+		if err := model.BootstrapDataSources(ctx, controlDB, organizations); err != nil {
+			return fmt.Errorf("bootstrap telemetry datasources: %w", err)
+		}
+		traceStore, logStore := model.NewRoutedStores(controlDB)
+		defer traceStore.Close()
+		defer logStore.Close()
+		cfg.TraceStore, cfg.LogStore = traceStore, logStore
 	} else {
 		traceStore, logStore := model.OpenStores()
 		defer traceStore.Close()
@@ -317,12 +343,12 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	migrate := flag.Bool("migrate", false, "synchronize PostgreSQL auth schema and exit")
+	migrate := flag.Bool("migrate", false, "synchronize PostgreSQL control-plane schema and exit")
 	flag.Parse()
 	if *migrate {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		db, err := database.Open(ctx, os.Getenv("AUTH_DATABASE_URL"))
+		db, err := database.Open(ctx, database.URLFromEnv())
 		if err == nil {
 			defer database.Close(db)
 			err = database.Migrate(ctx, db)

@@ -29,6 +29,7 @@ var policies = map[Endpoint]Policy{
 	{"GET", "/"}:                               {Public: true},
 	{"GET", "/assets/*filepath"}:               {Public: true},
 	{"GET", "/api/v1/meta"}:                    {Permission: auth.MetadataRead},
+	{"GET", "/api/v1/data-sources"}:            {Permission: auth.MetadataRead},
 	{"GET", "/api/v1/services"}:                {Permission: auth.MetadataRead},
 	{"GET", "/api/v1/traces"}:                  {Permission: auth.TracesRead},
 	{"GET", "/api/v1/traces/:traceId"}:         {Permission: auth.TracesRead},
@@ -37,6 +38,7 @@ var policies = map[Endpoint]Policy{
 	{"GET", "/api/v1/logs"}:                    {Permission: auth.LogsRead},
 	{"GET", "/api/v1/logs/volume"}:             {Permission: auth.LogsRead},
 	{"GET", "/api/v1/logs/attributes"}:         {Permission: auth.LogsRead},
+	{"GET", "/api/v1/admin/summary"}:           {Permission: auth.AdminRead},
 }
 
 // ValidateRoutes prevents both unclassified routes and stale audit entries.
@@ -79,7 +81,13 @@ func Enforce(authenticator auth.Authenticator) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		actor, err := authenticator.Authenticate(c.Request)
+		var actor auth.Principal
+		var err error
+		if renewing, ok := authenticator.(auth.RenewingAuthenticator); ok {
+			actor, err = renewing.AuthenticateAndRenew(c.Writer, c.Request)
+		} else {
+			actor, err = authenticator.Authenticate(c.Request)
+		}
 		if err != nil {
 			c.AbortWithStatusJSON(503, gin.H{"error": "auth_unavailable"})
 			return

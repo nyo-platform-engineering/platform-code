@@ -5,10 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func randomToken() (string, error) {
@@ -25,16 +26,28 @@ func tokenHash(token string) string {
 }
 
 func (o *OAuth) cookieName(kind string) string {
-	if strings.HasPrefix(o.cfg.Origin, "https://") {
+	if strings.HasPrefix(o.config.Origin, "https://") {
 		return "__Host-telemetry_" + kind
 	}
 	return "telemetry_" + kind
 }
 
 func (o *OAuth) cookie(c *gin.Context, kind, value string, age int) {
-	cookie := &http.Cookie{Name: o.cookieName(kind), Value: value, Path: "/", MaxAge: age, HttpOnly: true, Secure: strings.HasPrefix(o.cfg.Origin, "https://"), SameSite: http.SameSiteLaxMode}
+	o.setCookie(c.Writer, kind, value, age)
+}
+
+func (o *OAuth) setCookie(w http.ResponseWriter, kind, value string, age int) {
+	cookie := &http.Cookie{
+		Name:     o.cookieName(kind),
+		Value:    value,
+		Path:     "/",
+		MaxAge:   age,
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(o.config.Origin, "https://"),
+		SameSite: http.SameSiteLaxMode,
+	}
 	if age < 0 {
 		cookie.Expires = time.Unix(1, 0)
 	}
-	http.SetCookie(c.Writer, cookie)
+	http.SetCookie(w, cookie)
 }

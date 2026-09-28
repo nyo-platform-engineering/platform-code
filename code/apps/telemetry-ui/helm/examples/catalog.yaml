@@ -1,0 +1,35 @@
+authMode: oauth
+organizations:
+  - id: local
+    name: Local
+    telemetryScope: local
+    identityMappings:
+      - provider: google
+        match: {domain: your-company.example}
+        permissions:
+          - observability:traces:read
+          - observability:logs:read
+          - observability:admin:read
+    dataSources:
+      unified: []
+      traces: [primary, archive]
+      logs: [primary]
+clickhouse:
+  dataSources:
+    unified:
+      - id: primary
+        address: clickhouse-primary:9000
+        database: otel
+        username: reader
+        secure: false
+        passwordEnv: CLICKHOUSE_DATASOURCE_PRIMARY_PASSWORD
+        passwordSecret: {name: telemetry-ui-clickhouse-primary, key: password}
+    traces:
+      - id: archive
+        address: clickhouse-archive:9440
+        database: otel_archive
+        username: reader
+        secure: true
+        passwordEnv: CLICKHOUSE_DATASOURCE_ARCHIVE_PASSWORD
+        passwordSecret: {name: telemetry-ui-clickhouse-archive, key: password}
+    logs: []

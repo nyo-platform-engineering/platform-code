@@ -16,9 +16,14 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
+      {{- if or .Values.podAnnotations (eq .Values.authMode "oauth") }}
       annotations:
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if eq .Values.authMode "oauth" }}
+        checksum/organizations: {{ toJson .Values.organizations | sha256sum }}
+        {{- end }}
       {{- end }}
     spec:
       automountServiceAccountToken: false
@@ -47,18 +52,60 @@ spec:
             - name: AUTH_MODE
               value: {{ .Values.authMode | quote }}
             {{- if eq .Values.authMode "oauth" }}
-            - {name: AUTH_GRANTS_FILE, value: /etc/telemetry-auth/auth.grants.json}
+            - {name: AUTH_ORGANIZATIONS_FILE, value: /etc/telemetry-auth/organizations.json}
+            - {name: AUTH_SESSION_LIFETIME, value: {{ .Values.authSessionLifetime | quote }}}
+            - {name: AUTH_IDLE_TIMEOUT, value: {{ .Values.authIdleTimeout | quote }}}
+            - {name: AUTH_RENEWAL_INTERVAL, value: {{ .Values.authRenewalInterval | quote }}}
             {{- end }}
-            {{- if eq .Values.clickhouse.type "unified" }}
-            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_" "config" .Values.clickhouse.unified) | nindent 12 }}
-            {{- else if eq .Values.clickhouse.type "split" }}
-            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_TRACES_" "config" .Values.clickhouse.traces) | nindent 12 }}
-            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_LOGS_" "config" .Values.clickhouse.logs) | nindent 12 }}
+            {{- if eq .Values.authMode "oauth" }}
+            {{- $catalogUnified := list }}
+            {{- range .Values.clickhouse.dataSources.unified }}
+            {{- $catalogUnified = append $catalogUnified (dict "id" .id "address" .address "database" .database "username" .username "secure" .secure "passwordEnv" .passwordEnv) }}
+            {{- end }}
+            {{- $catalogTraces := list }}
+            {{- range .Values.clickhouse.dataSources.traces }}
+            {{- $catalogTraces = append $catalogTraces (dict "id" .id "address" .address "database" .database "username" .username "secure" .secure "passwordEnv" .passwordEnv) }}
+            {{- end }}
+            {{- $catalogLogs := list }}
+            {{- range .Values.clickhouse.dataSources.logs }}
+            {{- $catalogLogs = append $catalogLogs (dict "id" .id "address" .address "database" .database "username" .username "secure" .secure "passwordEnv" .passwordEnv) }}
+            {{- end }}
+            {{- $assignmentUnified := list }}
+            {{- $assignmentTraces := list }}
+            {{- $assignmentLogs := list }}
+            {{- range .Values.organizations }}
+            {{- if gt (len .dataSources.unified) 0 }}{{- $assignmentUnified = append $assignmentUnified (dict "organizationId" .id "dataSourceIds" .dataSources.unified) }}{{- end }}
+            {{- if gt (len .dataSources.traces) 0 }}{{- $assignmentTraces = append $assignmentTraces (dict "organizationId" .id "dataSourceIds" .dataSources.traces) }}{{- end }}
+            {{- if gt (len .dataSources.logs) 0 }}{{- $assignmentLogs = append $assignmentLogs (dict "organizationId" .id "dataSourceIds" .dataSources.logs) }}{{- end }}
+            {{- end }}
+            - name: CLICKHOUSE_CATALOG_JSON
+              value: {{ toJson (dict "dataSources" (dict "unified" $catalogUnified "traces" $catalogTraces "logs" $catalogLogs) "assignments" (dict "unified" $assignmentUnified "traces" $assignmentTraces "logs" $assignmentLogs)) | quote }}
+            {{- range concat .Values.clickhouse.dataSources.unified .Values.clickhouse.dataSources.traces .Values.clickhouse.dataSources.logs }}
+            {{- $source := . }}
+            {{- range $.Values.extraEnv }}
+            {{- if eq .name $source.passwordEnv }}
+            {{- fail (printf "extraEnv cannot override catalog password variable %s" .name) }}
+            {{- end }}
+            {{- end }}
+            - name: {{ .passwordEnv | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .passwordSecret.name | quote }}
+                  key: {{ .passwordSecret.key | quote }}
+            {{- end }}
             {{- else }}
-            {{- fail "clickhouse.type must be unified or split" }}
+            {{- $traceSources := .Values.clickhouse.dataSources.traces }}
+            {{- if eq (len $traceSources) 0 }}{{- $traceSources = .Values.clickhouse.dataSources.unified }}{{- end }}
+            {{- $logSources := .Values.clickhouse.dataSources.logs }}
+            {{- if eq (len $logSources) 0 }}{{- $logSources = .Values.clickhouse.dataSources.unified }}{{- end }}
+            {{- if or (eq (len $traceSources) 0) (eq (len $logSources) 0) }}
+            {{- fail "local auth requires at least one applicable trace and log datasource" }}
+            {{- end }}
+            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_TRACES_" "config" (first $traceSources)) | nindent 12 }}
+            {{- include "telemetry-ui.connectionEnv" (dict "prefix" "CLICKHOUSE_LOGS_" "config" (first $logSources)) | nindent 12 }}
             {{- end }}
             {{- range .Values.extraEnv }}
-            {{- if or (hasPrefix "CLICKHOUSE_" .name) (has .name (list "MOCK" "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE" "AUTH_GRANTS_FILE")) }}
+            {{- if has .name (list "CLICKHOUSE_ADDR" "CLICKHOUSE_USER" "CLICKHOUSE_PASSWORD" "CLICKHOUSE_TRACES_ADDR" "CLICKHOUSE_TRACES_DATABASE" "CLICKHOUSE_TRACES_USER" "CLICKHOUSE_TRACES_PASSWORD" "CLICKHOUSE_TRACES_SECURE" "CLICKHOUSE_LOGS_ADDR" "CLICKHOUSE_LOGS_DATABASE" "CLICKHOUSE_LOGS_USER" "CLICKHOUSE_LOGS_PASSWORD" "CLICKHOUSE_LOGS_SECURE" "CLICKHOUSE_CATALOG_JSON" "MOCK" "PORT" "LISTEN_HOST" "WEB_DIST_DIR" "AUTH_MODE" "AUTH_ORGANIZATIONS_FILE" "AUTH_GRANTS_FILE" "AUTH_SESSION_LIFETIME" "AUTH_IDLE_TIMEOUT" "AUTH_RENEWAL_INTERVAL") }}
             {{- fail (printf "extraEnv cannot override managed variable %s" .name) }}
             {{- end }}
             {{- toYaml (list .) | nindent 12 }}
@@ -74,15 +121,15 @@ spec:
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             {{- if eq .Values.authMode "oauth" }}
-            - {name: auth-grants, mountPath: /etc/telemetry-auth, readOnly: true}
+            - {name: organizations, mountPath: /etc/telemetry-auth, readOnly: true}
             {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
         {{- if eq .Values.authMode "oauth" }}
-        - name: auth-grants
-          secret:
-            secretName: {{ required "authGrantsSecret is required for oauth" .Values.authGrantsSecret | quote }}
+        - name: organizations
+          configMap:
+            name: {{ include "telemetry-ui.fullname" . }}-organizations
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

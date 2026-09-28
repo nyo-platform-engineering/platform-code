@@ -9,9 +9,9 @@ import (
 )
 
 type OAuth struct {
-	cfg       OAuthConfig
+	config    OAuthConfig
 	store     sessionStore
-	providers map[string]provider
+	providers map[string]oauthProvider
 	client    *http.Client
 	// Bound unauthenticated login starts per process without retaining IP addresses.
 	mu     sync.Mutex
@@ -19,10 +19,8 @@ type OAuth struct {
 	starts int
 }
 
-func newOAuth(cfg OAuthConfig, store sessionStore) *OAuth {
-	o := &OAuth{cfg: cfg, store: store, providers: configuredProviders(cfg), client: &http.Client{Timeout: 10 * time.Second}}
-
-	return o
+func newOAuth(config OAuthConfig, store sessionStore) *OAuth {
+	return &OAuth{config: config, store: store, providers: configuredProviders(config), client: &http.Client{Timeout: 10 * time.Second}}
 }
 
 // Expiry is checked on every read; cleanup only reclaims old rows.

@@ -1,14 +1,28 @@
+organizations:
+  - id: local
+    name: Local
+    telemetryScope: local
+    identityMappings: []
+    dataSources:
+      unified: []
+      traces: [traces-primary]
+      logs: [logs-primary]
 clickhouse:
-  type: split
-  traces:
-    address: clickhouse-traces.monitoring.svc.cluster.local:9000
-    username: trace-reader
-    passwordSecret:
-      name: telemetry-ui-traces
-      key: password
-  logs:
-    address: clickhouse-logs.monitoring.svc.cluster.local:9000
-    username: log-reader
-    passwordSecret:
-      name: telemetry-ui-logs
-      key: password
+  dataSources:
+    unified: []
+    traces:
+      - id: traces-primary
+        address: clickhouse-traces.monitoring.svc.cluster.local:9000
+        database: otel
+        username: trace-reader
+        secure: false
+        passwordEnv: CLICKHOUSE_DATASOURCE_TRACES_PASSWORD
+        passwordSecret: {name: telemetry-ui-traces, key: password}
+    logs:
+      - id: logs-primary
+        address: clickhouse-logs.monitoring.svc.cluster.local:9000
+        database: otel
+        username: log-reader
+        secure: false
+        passwordEnv: CLICKHOUSE_DATASOURCE_LOGS_PASSWORD
+        passwordSecret: {name: telemetry-ui-logs, key: password}

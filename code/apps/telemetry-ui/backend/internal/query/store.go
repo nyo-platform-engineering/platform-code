@@ -2,8 +2,11 @@ package query
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
+	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -26,7 +29,7 @@ func OpenStore() *clickHouseStore { return openStore("") }
 func OpenStores() (*clickHouseStore, *clickHouseStore) {
 	traceOptions, logOptions := connectionOptions("TRACES_"), connectionOptions("LOGS_")
 	traces := openOptions(traceOptions)
-	if traceOptions.Addr[0] == logOptions.Addr[0] && traceOptions.Auth == logOptions.Auth {
+	if traceOptions.Addr[0] == logOptions.Addr[0] && traceOptions.Auth == logOptions.Auth && (traceOptions.TLS != nil) == (logOptions.TLS != nil) {
 		return traces, traces
 	}
 	return traces, openOptions(logOptions)
@@ -48,11 +51,20 @@ func connectionOptions(signal string) *clickhouse.Options {
 		}
 		return shared
 	}
-	return &clickhouse.Options{
+	options := &clickhouse.Options{
 		Addr:        []string{value("ADDR", "127.0.0.1:9000")},
-		Auth:        clickhouse.Auth{Database: "otel", Username: value("USER", "app"), Password: value("PASSWORD", "local-clickhouse-app")},
+		Auth:        clickhouse.Auth{Database: value("DATABASE", "otel"), Username: value("USER", "app"), Password: value("PASSWORD", "local-clickhouse-app")},
 		DialTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second,
 	}
+	secure, _ := strconv.ParseBool(value("SECURE", "false"))
+	if secure {
+		host, _, err := net.SplitHostPort(options.Addr[0])
+		if err != nil {
+			host = options.Addr[0]
+		}
+		options.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host}
+	}
+	return options
 }
 func openStore(signal string) *clickHouseStore {
 	return openOptions(connectionOptions(signal))
@@ -96,6 +108,16 @@ func CheckConnection(ctx context.Context, store QueryStore) error {
 		return connection.Ping(ctx)
 	}
 	return nil
+}
+
+func CheckTable(ctx context.Context, store QueryStore, statement string) error {
+	if probe, ok := store.(interface {
+		Probe(context.Context, string) error
+	}); ok {
+		return probe.Probe(ctx, statement)
+	}
+	_, err := store.Query(ctx, statement)
+	return err
 }
 
 // Execute runs bound SQL against a database store.

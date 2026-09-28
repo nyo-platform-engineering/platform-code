@@ -122,8 +122,9 @@ For split frontend development, install the pinned package manager with
 `/api` to Go. The frontend enforces pnpm 12.6 and asks pnpm to download the
 pinned Node 24 runtime when it is not already available.
 
-For Google/GitHub login, PostgreSQL sessions, and access grants, follow
-[authentication setup](AUTHENTICATION.md). Local development without login remains
+For Google/GitHub login and the PostgreSQL control plane, follow
+[authentication setup](AUTHENTICATION.md) and the [control-plane schema](CONTROL_PLANE.md).
+Local development without login remains
 available only when explicitly enabled with `AUTH_MODE=local`. OAuth sign-in is the default.
 
 Set `MAX_CONCURRENT_QUERIES` to control how many analytics requests each backend
@@ -151,15 +152,21 @@ CLICKHOUSE_LOGS_USER=log-reader
 CLICKHOUSE_LOGS_PASSWORD=log-secret
 ```
 
-Each unset signal setting inherits its shared setting. Empty address/user settings
-also inherit; an explicitly empty password is preserved. Identical resolved
-settings reuse one pool; different settings open separate pools. The schema stays
+Each unset signal setting inherits its shared setting. On OAuth startup these
+settings bootstrap datasource records and per-organization signal assignments in
+PostgreSQL; database-managed assignments override bootstrap rows. Password values
+remain Kubernetes-injected environment variables and are never stored in
+PostgreSQL. Identical resolved settings reuse one pool. The schema stays
 `otel.otel_traces` on the trace backend and `otel.otel_logs` on the log backend.
+Helm groups reusable datasources under `unified`, `traces`, and `logs`. Each entry
+in the organization list keeps its identity mappings, telemetry scope, permissions,
+and grouped datasource IDs together. Unified IDs serve both signals;
+signal-specific IDs cannot cross signals.
 
-`/readyz` checks database connectivity and read access to both signal tables under
-a three-second deadline. Either failure returns 503; `/healthz` remains process
-liveness only. Service discovery queries both stores, deduplicates and sorts names,
-and returns at most 500 services. Its SQL preview describes both queries.
+`/readyz` checks database connectivity and read access on every assigned datasource
+under a three-second deadline. Any failure returns 503; `/healthz` remains process
+liveness only. Service discovery queries the selected signal datasource and returns
+at most 500 services.
 
 Standard Go OTLP variables enable backend export:
 
@@ -178,8 +185,8 @@ are deliberately ignored until a trusted authentication boundary exists.
 See [PLAN.md](PLAN.md) for the implementation sequence, access-control rules,
 API contracts, and production follow-up work. See [API.md](API.md) for implemented query contracts.
 
-For Kubernetes deployment, use the [Helm chart](helm/README.md), including unified
-and separate ClickHouse connection examples and readiness probes.
+For Kubernetes deployment, use the [Helm chart](helm/README.md), including unified,
+separate, and multi-datasource examples and readiness probes.
 
 ## Local GitLab and k3d deployment
 

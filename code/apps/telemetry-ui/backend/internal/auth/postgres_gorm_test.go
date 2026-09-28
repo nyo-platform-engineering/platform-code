@@ -19,6 +19,7 @@ import (
 // Run GORM's execution and row scanning against a controlled SQL connection.
 type authConnector struct {
 	query   string
+	queries []string
 	args    []driver.NamedValue
 	columns []string
 	rows    [][]driver.Value
@@ -49,10 +50,23 @@ func (c *authConnection) QueryContext(ctx context.Context, query string, args []
 		return nil, err
 	}
 	c.c.query, c.c.args = query, args
+	c.c.queries = append(c.c.queries, query)
 	if c.c.err != nil {
 		return nil, c.c.err
 	}
 	return &authRows{columns: c.c.columns, rows: c.c.rows}, nil
+}
+
+func (c *authConnection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	c.c.query, c.c.args = query, args
+	c.c.queries = append(c.c.queries, query)
+	if c.c.err != nil {
+		return nil, c.c.err
+	}
+	return driver.RowsAffected(1), nil
 }
 
 type authRows struct {
@@ -102,21 +116,22 @@ func TestPostgresGORMReads(t *testing.T) {
 	if _, err := store.ConsumeAttempt(ctx, hash, "google"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("missing state must be rejected", err)
 	}
-	capture.columns = []string{"provider", "subject", "display_name", "google_domain"}
-	capture.rows = [][]driver.Value{{"google", "42", "Test", "example.com"}}
-	a, err := store.Session(ctx, hash)
-	if err != nil || !reflect.DeepEqual(a, account{Provider: "google", Subject: "42", Name: "Test", GoogleDomain: "example.com"}) {
+	capture.columns = []string{"provider", "subject", "display_name", "google_domain", "expires_at", "idle_expires_at", "renew_after"}
+	capture.rows = [][]driver.Value{{"google", "42", "Test", "example.com", expires, expires, expires}}
+	capture.queries = nil
+	a, _, err := store.UseSession(ctx, hash, "", time.Now(), time.Minute, time.Minute)
+	if err != nil || !reflect.DeepEqual(a, providerIdentity{Provider: "google", Subject: "42", Name: "Test", GoogleDomain: "example.com"}) {
 		t.Fatal("session mapping changed", a, err)
 	}
-	if strings.Contains(capture.query, hash) || !strings.Contains(capture.query, "expires_at > now()") || capture.args[0].Value != hash {
-		t.Fatal("session lookup must bind hash and enforce expiry", capture.query)
+	if len(capture.queries) < 2 || strings.Contains(capture.queries[0], hash) || !strings.Contains(capture.queries[0], "idle_expires_at") {
+		t.Fatal("session lookup must bind hash and enforce expiry", capture.queries)
 	}
 	capture.rows = nil
-	if _, err := store.Session(ctx, hash); !errors.Is(err, sql.ErrNoRows) {
+	if _, _, err := store.UseSession(ctx, hash, "", time.Now(), time.Minute, time.Minute); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("missing session must retain store error contract", err)
 	}
 	capture.err = errors.New("database unavailable")
-	if _, err := store.Session(ctx, hash); !errors.Is(err, capture.err) {
+	if _, _, err := store.UseSession(ctx, hash, "", time.Now(), time.Minute, time.Minute); !errors.Is(err, capture.err) {
 		t.Fatal("storage error lost", err)
 	}
 	if _, err := store.ConsumeAttempt(ctx, hash, "google"); !errors.Is(err, capture.err) {

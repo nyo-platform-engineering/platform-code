@@ -42,17 +42,18 @@ func auditHandler(t *testing.T, actor auth.Principal, store *auditStore) http.Ha
 // Independent expectations catch permission mixups in the production policy table.
 func TestAccessMatrix(t *testing.T) {
 	routes := []struct{ path, permission string }{
-		{"/meta", auth.MetadataRead}, {"/services", auth.MetadataRead},
+		{"/meta", auth.MetadataRead}, {"/data-sources", auth.MetadataRead}, {"/services", auth.MetadataRead},
 		{"/traces", auth.TracesRead}, {"/traces/" + strings.Repeat("a", 32), auth.TracesRead},
 		{"/traces/red", auth.TracesRead}, {"/traces/attributes", auth.TracesRead},
 		{"/logs", auth.LogsRead}, {"/logs/volume", auth.LogsRead}, {"/logs/attributes", auth.LogsRead},
+		{"/admin/summary", auth.AdminRead},
 	}
 	for _, route := range routes {
-		for _, permission := range []string{"", auth.MetadataRead, auth.TracesRead, auth.LogsRead} {
+		for _, permission := range []string{"", auth.MetadataRead, auth.TracesRead, auth.LogsRead, auth.AdminRead} {
 			for _, preview := range []string{"", "?preview=1"} {
 				t.Run(route.path+"/"+permission+preview, func(t *testing.T) {
 					store := &auditStore{}
-					h := auditHandler(t, auth.Principal{Subject: "reader", Tenant: "tenant-a", Permissions: []string{permission}}, store)
+					h := auditHandler(t, auth.Principal{Subject: "reader", OrganizationID: "tenant-a", Tenant: "tenant-a", Permissions: []string{permission}}, store)
 					req := httptest.NewRequest("GET", "/api/v1"+route.path+preview, nil)
 					req.Header.Set("X-Tenant-ID", "tenant-b")
 					out := httptest.NewRecorder()
@@ -72,7 +73,7 @@ func TestAccessMatrix(t *testing.T) {
 							t.Fatalf("untrusted tenant: %q", tenant)
 						}
 					}
-					if expected == http.StatusOK && preview != "" && route.path != "/meta" && !strings.Contains(out.Body.String(), "tenant-a") {
+					if expected == http.StatusOK && preview != "" && route.path != "/meta" && route.path != "/data-sources" && route.path != "/admin/summary" && !strings.Contains(out.Body.String(), "tenant-a") {
 						t.Fatal("preview missing trusted tenant")
 					}
 				})

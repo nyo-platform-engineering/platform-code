@@ -9,10 +9,10 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-// CheckSchema verifies the auth schema without changing it.
+// CheckSchema verifies the control-plane schema without changing it.
 func CheckSchema(ctx context.Context, db *gorm.DB) error {
 	db = db.WithContext(ctx)
-	for _, model := range []any{&LoginAttempt{}, &Session{}} {
+	for _, model := range Models() {
 		stmt := &gorm.Statement{DB: db}
 		if err := stmt.Parse(model); err != nil {
 			return err
@@ -34,6 +34,13 @@ func CheckSchema(ctx context.Context, db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func Models() []any {
+	return []any{
+		&LoginAttempt{}, &Session{}, &Organization{}, &AccessGrant{},
+		&AccessGrantPermission{}, &DataSource{}, &OrganizationDataSource{},
+	}
 }
 
 type schemaIndex struct {
@@ -78,14 +85,14 @@ func checkColumns(expected *schema.Schema, columns []gorm.ColumnType) error {
 	for _, field := range expected.Fields {
 		column, ok := columnsByName[field.DBName]
 		if !ok {
-			return fmt.Errorf("auth schema: %s.%s is missing", expected.Table, field.DBName)
+			return fmt.Errorf("control-plane schema: %s.%s is missing", expected.Table, field.DBName)
 		}
 		if column.DatabaseTypeName() != string(field.DataType) {
-			return fmt.Errorf("auth schema: %s.%s must have type %s", expected.Table, field.DBName, field.DataType)
+			return fmt.Errorf("control-plane schema: %s.%s must have type %s", expected.Table, field.DBName, field.DataType)
 		}
 		nullable, known := column.Nullable()
 		if field.NotNull && (!known || nullable) {
-			return fmt.Errorf("auth schema: %s.%s must be NOT NULL", expected.Table, field.DBName)
+			return fmt.Errorf("control-plane schema: %s.%s must be NOT NULL", expected.Table, field.DBName)
 		}
 	}
 	return nil
@@ -101,7 +108,7 @@ func checkIndexes(expected *schema.Schema, indexes []schemaIndex) error {
 		}
 	}
 	if !primaryKeyFound {
-		return fmt.Errorf("auth schema: %s requires a primary key on %v", expected.Table, expected.PrimaryFieldDBNames)
+		return fmt.Errorf("control-plane schema: %s requires a primary key on %v", expected.Table, expected.PrimaryFieldDBNames)
 	}
 
 	for _, required := range expected.ParseIndexes() {
@@ -111,7 +118,7 @@ func checkIndexes(expected *schema.Schema, indexes []schemaIndex) error {
 		}
 		index, found := indexesByName[required.Name]
 		if !found || !index.Usable || !slices.Equal(index.Columns, columns) {
-			return fmt.Errorf("auth schema: %s requires usable index %s on %v", expected.Table, required.Name, columns)
+			return fmt.Errorf("control-plane schema: %s requires usable index %s on %v", expected.Table, required.Name, columns)
 		}
 	}
 	return nil

@@ -1,9 +1,23 @@
 # Create telemetry-ui-clickhouse with a password key in the release namespace.
+organizations:
+  - id: local
+    name: Local
+    telemetryScope: local
+    identityMappings:
+      - provider: google
+        match: {domain: your-company.example}
+        permissions: [observability:traces:read, observability:logs:read]
+    # Unified assigns primary to both signals.
+    dataSources: {unified: [primary], traces: [], logs: []}
 clickhouse:
-  type: unified
-  unified:
-    address: clickhouse.monitoring.svc.cluster.local:9000
-    username: app
-    passwordSecret:
-      name: telemetry-ui-clickhouse
-      key: password
+  dataSources:
+    unified:
+      - id: primary
+        address: clickhouse.monitoring.svc.cluster.local:9000
+        database: otel
+        username: app
+        secure: false
+        passwordEnv: CLICKHOUSE_DATASOURCE_PRIMARY_PASSWORD
+        passwordSecret: {name: telemetry-ui-clickhouse, key: password}
+    traces: []
+    logs: []

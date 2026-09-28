@@ -20,6 +20,7 @@ export function useTelemetryFilters() {
     const next = new URLSearchParams(window.location.search)
     next.delete(key)
     for (const item of [...new Set(values)].filter(Boolean)) next.append(key, item)
+    if (key === 'traceSource' || key === 'logSource') next.delete('service')
 
     if (resetPagination && (key !== 'offset' || value === '0')) {
       next.delete('offset')
@@ -71,6 +72,7 @@ export function useTelemetryData(
   paused: boolean,
   setFilter: SetFilter,
   refreshSeconds: number,
+  enabled = true,
 ) {
   const overviewSearch = new URLSearchParams(search)
   if (mode === 'traces') overviewSearch.delete('traceId')
@@ -83,6 +85,7 @@ export function useTelemetryData(
   const refresh = () => setRevision((current) => current + 1)
 
   useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
     const params = new URLSearchParams(queryKey.slice(queryKey.indexOf('?') + 1))
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -136,7 +139,7 @@ export function useTelemetryData(
       clearTimeout(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [mode, queryKey, paused, revision, setFilter, refreshSeconds])
+  }, [mode, queryKey, paused, revision, setFilter, refreshSeconds, enabled])
 
   // Keep charts mounted during refresh/pause, but never show data for old filters.
   return {

@@ -37,6 +37,10 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 - name: {{ $prefix }}USER
   value: {{ . | quote }}
 {{- end }}
+- name: {{ $prefix }}DATABASE
+  value: {{ default "otel" .config.database | quote }}
+- name: {{ $prefix }}SECURE
+  value: {{ default false .config.secure | quote }}
 {{- with $secret }}
 - name: {{ $prefix }}PASSWORD
   valueFrom:

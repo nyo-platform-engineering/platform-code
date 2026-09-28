@@ -2,21 +2,24 @@ import { Controller, useForm } from 'react-hook-form'
 import { SearchableSelect } from '../../../components/SearchableSelect'
 import { filterValues, type SetFilter } from './filters'
 import { SEVERITIES, type TelemetryMode } from './types'
+import type { DataSourceOption } from '../../../layouts/MetadataProvider'
 
 type Props = {
   mode: TelemetryMode
   search: URLSearchParams
   services: string[]
+  dataSources: DataSourceOption[]
   setFilter: SetFilter
 }
 
-export function QueryControls({ mode, search, services, setFilter }: Props) {
+export function QueryControls({ mode, search, services, dataSources, setFilter }: Props) {
   const service = filterValues(search, 'service')
   const serviceNames = [...new Set([...service, ...services])].filter(Boolean)
 
   const { control } = useForm({
     values: {
       service,
+      dataSource: [search.get(mode === 'traces' ? 'traceSource' : 'logSource') ?? ''],
       severity: filterValues(search, 'severity'),
       status: filterValues(search, 'status'),
       minDurationMs: [search.get('minDurationMs') ?? ''],
@@ -26,8 +29,29 @@ export function QueryControls({ mode, search, services, setFilter }: Props) {
   return (
     <div className="grid gap-4">
       <div
-        className={`grid grid-cols-2 gap-x-2 gap-y-3 ${mode === 'traces' ? 'min-[700px]:grid-cols-3' : ''}`}
+        className={`grid grid-cols-2 gap-x-2 gap-y-3 ${mode === 'traces' ? 'min-[700px]:grid-cols-4' : 'min-[700px]:grid-cols-3'}`}
       >
+        <Controller
+          control={control}
+          name="dataSource"
+          render={({ field }) => (
+            <SearchableSelect
+              label="Datasource"
+              options={dataSources.map((source) => ({
+                value: source.id,
+                label: `${source.id} · ${source.address}`,
+              }))}
+              values={field.value}
+              placeholder="Waiting for datasource"
+              minSelected={1}
+              onChange={(values) => {
+                if (!values[0]) return
+                field.onChange(values)
+                setFilter(mode === 'traces' ? 'traceSource' : 'logSource', values[0])
+              }}
+            />
+          )}
+        />
         <Controller
           control={control}
           name="service"

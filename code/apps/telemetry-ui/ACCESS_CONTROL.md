@@ -14,12 +14,14 @@ registered endpoint also fails closed with 403 at runtime.
 | GET `/api/v1/auth/:provider/login`, `/api/v1/auth/:provider/callback` | Public OAuth entry points; callback requires one-use state and PKCE |
 | POST `/api/v1/auth/logout` | Session revocation with explicit Origin/header CSRF checks |
 | GET `/api/v1/meta`, `/api/v1/services` | `observability:metadata:read` |
+| GET `/api/v1/data-sources` | `observability:metadata:read`; active-organization choices without credentials |
 | GET `/api/v1/traces`, `/api/v1/traces/:traceId` | `observability:traces:read` |
 | GET `/api/v1/traces/red`, `/api/v1/traces/attributes` | `observability:traces:read` |
 | GET `/api/v1/logs`, `/api/v1/logs/volume`, `/api/v1/logs/attributes` | `observability:logs:read` |
+| GET `/api/v1/admin/summary` | `observability:admin:read`; non-secret inventory for the active organization |
 
-All protected endpoints require a nonempty authenticated subject and tenant as
-well as the listed permission. Missing identity returns 401; missing tenant or
+All protected endpoints require a nonempty authenticated subject and organization scope as
+well as the listed permission. Missing identity returns 401; missing scope or
 permission returns 403 before parsing queries, generating SQL previews, or calling
 storage. Authentication storage failures return 503.
 `preview=1` uses the same endpoint policy as execution.
@@ -32,15 +34,16 @@ probes against both signal tables without returning telemetry data.
 
 ## Identity and data scope
 
-[identity.go](backend/internal/auth/identity.go) implements the current local
-identity: subject `local-development`, tenant `local`, all three read permissions.
+[principal.go](backend/internal/auth/principal.go) implements the current local
+identity: subject `local-development`, tenant `local`, all read permissions, including admin.
 It ignores client identity/tenant headers. `AUTH_MODE=oauth` enables Google/GitHub
 login with PostgreSQL sessions and configurable access grants. See
 [authentication setup](AUTHENTICATION.md). Local mode bypasses login and is for
 development. Other configured modes fail startup.
 
-Controllers read the trusted principal from request context and reject absent
-tenant scope. Models bind that tenant into every telemetry SQL query, including
+OAuth principals are resolved from PostgreSQL access grants and organizations on
+every request. Controllers read the trusted principal from request context and reject absent
+organization scope. Models bind that scope into every telemetry SQL query, including
 service discovery, attribute discovery, RED summaries, and previews. Client
 filters do not select a tenant. Metadata access exposes service names from both
 signals; this is intentionally granted by metadata permission independently of
@@ -98,11 +101,13 @@ matrix tests. Update this audit table when the access contract changes.
 
 ## Connection boundaries
 
-Trace routes use only the trace connection; log routes use only the log connection.
-Shared `CLICKHOUSE_*` settings remain the default, with optional per-field
-`CLICKHOUSE_TRACES_*` and `CLICKHOUSE_LOGS_*` overrides. Equal resolved settings reuse
-one pool. Metadata service discovery requires metadata permission and queries both
-connections with the same trusted tenant. It merges results in the application;
+Trace routes resolve the active organization's `traces` assignment; log routes
+resolve its `logs` assignment. PostgreSQL stores non-secret connection metadata
+and the name of a `CLICKHOUSE_*` password environment variable populated from a
+Kubernetes Secret. Bootstrap imports the existing shared or split environment
+configuration, while database-managed assignments override it. Equal resolved
+settings reuse one pool. Metadata service discovery requires metadata permission and queries both
+connections with the same trusted organization scope. It merges results in the application;
 there is no cross-server SQL union. A failure on either side rejects the whole
 response. Preview returns both named queries and never opens a database query.
-Readiness checks connectivity and both tables in unified and split modes.
+Readiness checks connectivity and the expected table on every assigned datasource.

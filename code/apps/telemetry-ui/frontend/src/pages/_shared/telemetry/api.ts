@@ -53,6 +53,8 @@ function queryParameters(mode: TelemetryMode, search: URLSearchParams, requireSe
     ...bounds,
     limit: '100',
   })
+  const dataSource = search.get(mode === 'traces' ? 'traceSource' : 'logSource')
+  if (dataSource) params.set('dataSource', dataSource)
   for (const service of filterValues(search, 'service')) params.append('service', service)
   const filters =
     mode === 'logs'
@@ -79,6 +81,7 @@ export async function fetchServices(
     'q',
     'attr',
   )
+  params.set('signal', mode)
   const result = await query<{ service: string }>('services', params, signal)
   return result.data.map((row) => row.service)
 }
@@ -101,6 +104,7 @@ export async function fetchTelemetry(
     'q',
     'attr',
   )
+  serviceParams.set('signal', mode)
   const serviceRequest = query<{ service: string }>('services', serviceParams, signal)
 
   if (mode === 'logs') {
@@ -149,8 +153,10 @@ export async function fetchTraceDetail(search: URLSearchParams, signal: AbortSig
   params.set('limit', '500')
   // One detail request at a time leaves room for the three overview requests.
   const detail = await query<SpanRecord>(`traces/${encodeURIComponent(traceId)}`, params, signal)
-  params.set('traceId', traceId)
-  const correlatedLogs = await query<LogRecord>('logs', params, signal)
+  const logParams = without(queryParameters('logs', search), 'status', 'minDurationMs', 'q', 'attr')
+  logParams.set('limit', '500')
+  logParams.set('traceId', traceId)
+  const correlatedLogs = await query<LogRecord>('logs', logParams, signal)
   return { detail, correlatedLogs }
 }
 

@@ -5,8 +5,9 @@
 `MOCK` selects telemetry data independently of authentication.
 
 The backend uses `golang.org/x/oauth2` for provider exchanges and GORM with its PostgreSQL driver (backed by `pgx`) for
-PostgreSQL storage and AutoMigrate. Session tokens, cookies, and access grants use
-Go's standard library. There is no JWT session layer or auth framework.
+the PostgreSQL control plane and AutoMigrate. PostgreSQL owns sessions,
+organizations, access grants, permissions, and per-signal datasource assignments.
+There is no JWT session layer or auth framework.
 
 ## Local setup
 
@@ -23,7 +24,7 @@ From the app directory:
 4. Edit `auth.grants.json` using `auth.grants.example.json` as the format reference.
    Replace the placeholder IDs/domains; only add accounts or domains you trust.
 5. Start your container runtime (Docker Desktop, Rancher Desktop, or Podman),
-   then start PostgreSQL and the backend (auth tables are synchronized on startup):
+   then start PostgreSQL and the backend (control-plane tables are synchronized on startup):
 
 ```sh
 task auth:db
@@ -47,6 +48,18 @@ needs a separately provisioned PostgreSQL database and appropriate TLS settings.
 
 ## Access grants
 
+The Helm chart expresses access as an `organizations` list. Each organization has
+an ID, display name, telemetry scope, grouped datasource IDs, and
+`identityMappings`. The chart generates and mounts `organizations.json`; a values
+change rolls the Deployment. Each mapping uses a provider plus exactly one
+structured match (`subject`, `email`, or `domain`) and its permissions. Structured
+exact matches are used instead of a free-form expression language to keep identity
+decisions auditable and prevent accidental wildcard access.
+
+`AUTH_GRANTS_FILE` and the format below remain supported for non-Helm development.
+`AUTH_ORGANIZATIONS_FILE` selects the organization-list format and takes
+precedence when both variables are present.
+
 Each grant has a provider, tenant, permissions, and exactly one selector:
 
 - `subject`: Google's stable `sub` or GitHub's numeric user ID, stored as a string.
@@ -58,12 +71,17 @@ Each grant has a provider, tenant, permissions, and exactly one selector:
   supplied by the browser. It does not grant access to GitHub accounts.
 
 Subject grants take priority over email grants, which take priority over domain grants. Grants are never merged across
-tenants. Valid permissions are `observability:traces:read`,
+organizations. Valid permissions are `observability:traces:read`,
 `observability:logs:read`, and `observability:metadata:read`; metadata access is
 included automatically for every allowed account, including service discovery.
-An empty grant list denies everyone. Changing grants requires restarting all
-backend replicas; existing sessions are evaluated against the loaded grants on
-every request. A Google email or domain membership change takes effect on the next login
+Grant `observability:admin:read` only to control-plane administrators; it exposes
+the non-secret organization, datasource, assignment, and grant-count inventory.
+Admin inventory is restricted to the grant's active organization.
+The grant file is bootstrap input: startup replaces only `managed_by=config`
+rows and preserves database-managed grants. Authorization reads PostgreSQL on
+every request, so database-managed permission or organization changes take effect
+without restarting. An empty grant file denies everyone unless database-managed
+grants exist. A Google email or domain membership change takes effect on the next login
 or session expiration, not by polling Google on each API call.
 
 ## Sessions and request flow
@@ -74,11 +92,20 @@ or session expiration, not by polling Google on each API call.
    the authorization code using PKCE. It fetches the account through the provider's
    authenticated profile API; provider tokens are not persisted or sent to JavaScript.
 3. A matching access grant creates a new random session cookie. PostgreSQL stores
-   only its SHA-256 hash, provider identity, display name, domain, and expiration.
-4. Sessions expire after 12 hours. They have no automatic refresh or sliding
-   expiry; login creates a new session. Reauthentication revokes the previous
-   browser session. Google/GitHub may reuse their own login session.
-5. Logout requires POST, the exact configured Origin, and `X-Telemetry-CSRF: 1`.
+   only its SHA-256 hash, rotation-family hash, provider identity, display name,
+   domain, and server-enforced session timestamps.
+4. Sessions have an eight-hour absolute lifetime and a 30-minute server-side
+   idle timeout by default. `AUTH_SESSION_LIFETIME` may be 15 minutes through
+   12 hours, while `AUTH_IDLE_TIMEOUT` must be at least five minutes and no
+   longer than the absolute lifetime.
+5. Authenticated requests rotate the opaque session identifier every 15 minutes
+   by default (`AUTH_RENEWAL_INTERVAL`). Rotation keeps the original absolute
+   expiry, allows 30 seconds for concurrent requests carrying the old identifier,
+   and never stores an OAuth provider refresh token. Logout and reauthentication
+   revoke the complete rotation family.
+6. Google/GitHub may reuse their own login session when absolute expiry requires
+   a new authorization flow.
+7. Logout requires POST, the exact configured Origin, and `X-Telemetry-CSRF: 1`.
    It deletes the server session before clearing the cookie.
 
 Cookies are HttpOnly and SameSite=Lax, with Secure and `__Host-` names on HTTPS.
@@ -90,9 +117,9 @@ session-store failures return 503. Client tenant headers never grant access.
 ## Database lifecycle
 
 [database/](backend/internal/database/README.md) owns connections and GORM models.
-OAuth startup runs AutoMigrate for the PostgreSQL auth tables and expiry indexes.
+OAuth startup runs AutoMigrate for the PostgreSQL control-plane tables and indexes.
 The database role needs table/index creation and alteration permissions, plus
-SELECT/INSERT/DELETE on the auth tables. A transaction and advisory lock serialize
+SELECT/INSERT/UPDATE/DELETE on the control-plane tables. A transaction and advisory lock serialize
 concurrent replica startup. After AutoMigrate, required column types, NOT NULL constraints, primary keys, and
 valid expiry indexes are checked against the models. Any migration, inspection,
 or validation error prevents the HTTP server from starting.
@@ -102,9 +129,10 @@ There are no versioned SQL files or ledger checks. An existing
 `telemetry_schema_migrations` table is left unused. ClickHouse schemas remain
 externally managed and never use AutoMigrate.
 
-All replicas must share PostgreSQL, the same origin, provider credentials, and
-grant configuration. Expired rows are removed periodically. The app does not
+All replicas must share PostgreSQL, the same origin, provider credentials, and session settings.
+Expired rows are removed periodically. The app does not
 store passwords, provider refresh tokens, or a separate user-management database.
+When `AUTH_ORIGIN` uses HTTPS, the PostgreSQL URL must use `sslmode=verify-full`.
 
 ## Verification
 
@@ -113,7 +141,7 @@ expiry, grant selection, authorization, and logout. To also check real PostgreSQ
 use a disposable test database (the test runs AutoMigrate):
 
 ```sh
-AUTH_TEST_DATABASE_URL="$AUTH_DATABASE_URL" go test ./internal/auth -run TestPostgresSessions
+AUTH_TEST_DATABASE_URL="$DATABASE_URL" go test ./internal/auth -run TestPostgresSessions
 ```
 
 Real Google/GitHub sign-in requires your registered OAuth client credentials.

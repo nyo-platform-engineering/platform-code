@@ -11,7 +11,7 @@ import (
 )
 
 func TestSchemaRequirements(t *testing.T) {
-	for _, model := range []any{&LoginAttempt{}, &Session{}} {
+	for _, model := range Models() {
 		expected, err := schema.Parse(model, &sync.Map{}, schema.NamingStrategy{})
 		if err != nil {
 			t.Fatal(err)
@@ -24,9 +24,13 @@ func TestSchemaRequirements(t *testing.T) {
 				NullableValue: sql.NullBool{Bool: false, Valid: true},
 			})
 		}
-		indexes := []schemaIndex{{Name: "primary", PrimaryKey: true, Usable: true, Columns: []string{"token_hash"}}}
+		indexes := []schemaIndex{{Name: "primary", PrimaryKey: true, Usable: true, Columns: expected.PrimaryFieldDBNames}}
 		for _, index := range expected.ParseIndexes() {
-			indexes = append(indexes, schemaIndex{Name: index.Name, Usable: true, Columns: []string{"expires_at"}})
+			fields := make([]string, len(index.Fields))
+			for i, field := range index.Fields {
+				fields[i] = field.DBName
+			}
+			indexes = append(indexes, schemaIndex{Name: index.Name, Usable: true, Columns: fields})
 		}
 		t.Run(expected.Table, func(t *testing.T) {
 			if err := checkColumns(expected, columns); err != nil {
@@ -54,21 +58,23 @@ func TestSchemaRequirements(t *testing.T) {
 			if err := checkIndexes(expected, indexes[1:]); err == nil {
 				t.Fatal("missing primary key accepted")
 			}
-			if err := checkIndexes(expected, indexes[:1]); err == nil {
-				t.Fatal("missing expiry index accepted")
+			if len(indexes) > 1 {
+				if err := checkIndexes(expected, indexes[:1]); err == nil {
+					t.Fatal("missing secondary index accepted")
+				}
+				changedIndexes := append([]schemaIndex(nil), indexes...)
+				changedIndexes[1].Columns = []string{"wrong"}
+				if err := checkIndexes(expected, changedIndexes); err == nil {
+					t.Fatal("wrong index columns accepted")
+				}
+				changedIndexes[1] = indexes[1]
+				changedIndexes[1].Usable = false
+				if err := checkIndexes(expected, changedIndexes); err == nil {
+					t.Fatal("invalid or partial index accepted")
+				}
 			}
 			changedIndexes := append([]schemaIndex(nil), indexes...)
-			changedIndexes[1].Columns = []string{"provider"}
-			if err := checkIndexes(expected, changedIndexes); err == nil {
-				t.Fatal("wrong index columns accepted")
-			}
-			changedIndexes[1] = indexes[1]
-			changedIndexes[1].Usable = false
-			if err := checkIndexes(expected, changedIndexes); err == nil {
-				t.Fatal("invalid or partial index accepted")
-			}
-			changedIndexes = append([]schemaIndex(nil), indexes...)
-			changedIndexes[0].Columns = []string{"token_hash", "provider"}
+			changedIndexes[0].Columns = append(append([]string(nil), expected.PrimaryFieldDBNames...), "wrong")
 			if err := checkIndexes(expected, changedIndexes); err == nil {
 				t.Fatal("composite primary key accepted")
 			}

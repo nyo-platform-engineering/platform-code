@@ -1,6 +1,7 @@
 package common
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -9,6 +10,8 @@ import (
 	"github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/auth"
 	model "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 )
+
+var dataSourceIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func ParseRequest(c *gin.Context, kind string) (model.Request, bool) {
 	signal := "span"
@@ -38,6 +41,16 @@ func ParseRequest(c *gin.Context, kind string) (model.Request, bool) {
 	if kind == "services" {
 		f.Attributes = nil
 	}
+	dataSourceID := c.Query("dataSource")
+	if dataSourceID != "" && !dataSourceIDPattern.MatchString(dataSourceID) {
+		c.JSON(400, gin.H{"error": "invalid_query", "message": "Invalid datasource selection"})
+		return model.Request{}, false
+	}
+	signalSelection := c.Query("signal")
+	if kind == "services" && signalSelection != "" && signalSelection != "traces" && signalSelection != "logs" {
+		c.JSON(400, gin.H{"error": "invalid_query", "message": "Invalid signal selection"})
+		return model.Request{}, false
+	}
 	for _, attribute := range f.Attributes {
 		logs := signal == "log"
 		if (logs && attribute.Scope == "span") || (!logs && (attribute.Scope == "log" || attribute.Scope == "body")) {
@@ -50,7 +63,7 @@ func ParseRequest(c *gin.Context, kind string) (model.Request, bool) {
 		c.JSON(403, gin.H{"error": "forbidden"})
 		return model.Request{}, false
 	}
-	request := model.Request{Filter: f, Kind: kind, Tenant: actor.Tenant}
+	request := model.Request{Filter: f, Kind: kind, Signal: signalSelection, DataSourceID: dataSourceID, OrganizationScope: actor.OrganizationScope, Tenant: actor.Tenant}
 	if err := request.Validate(); err != nil {
 		c.JSON(400, gin.H{"error": "invalid_query", "message": err.Error()})
 		return model.Request{}, false

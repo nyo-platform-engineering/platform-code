@@ -80,6 +80,14 @@ func Compile(request Request) ([]CompiledQuery, error) {
 		return nil, err
 	}
 	if request.Kind == "services" {
+		if request.Signal == "traces" {
+			request.Kind = "trace-services"
+			return Compile(request)
+		}
+		if request.Signal == "logs" {
+			request.Kind = "log-services"
+			return Compile(request)
+		}
 		request.Kind = "trace-services"
 		traces, err := Compile(request)
 		if err != nil {
@@ -98,7 +106,7 @@ func Compile(request Request) ([]CompiledQuery, error) {
 	}
 	f := request.Filter
 	spec := selectionFor(request)
-	builder, err := selectQuery(request.Table(), spec.columns, f, request.Tenant, request.ServerOnly())
+	builder, err := selectQuery(request.Table(), spec.columns, f, request.Scope(), request.ServerOnly())
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +125,7 @@ func Compile(request Request) ([]CompiledQuery, error) {
 	}
 	result := []CompiledQuery{compiled}
 	if request.Kind == "red" {
-		summary, err := selectQuery(Traces, redFields, f, request.Tenant, true)
+		summary, err := selectQuery(Traces, redFields, f, request.Scope(), true)
 		if err != nil {
 			return nil, err
 		}

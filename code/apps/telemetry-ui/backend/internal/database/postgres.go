@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -12,7 +13,7 @@ import (
 
 func Open(ctx context.Context, dsn string) (*gorm.DB, error) {
 	if dsn == "" {
-		return nil, errors.New("AUTH_DATABASE_URL is required")
+		return nil, errors.New("DATABASE_URL is required")
 	}
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		DisableAutomaticPing: true,
@@ -30,9 +31,16 @@ func Open(ctx context.Context, dsn string) (*gorm.DB, error) {
 	pool.SetConnMaxLifetime(30 * time.Minute)
 	if err := pool.PingContext(ctx); err != nil {
 		pool.Close()
-		return nil, errors.New("cannot connect to PostgreSQL; check AUTH_DATABASE_URL and database availability")
+		return nil, errors.New("cannot connect to PostgreSQL; check DATABASE_URL and database availability")
 	}
 	return db, nil
+}
+
+func URLFromEnv() string {
+	if value := os.Getenv("DATABASE_URL"); value != "" {
+		return value
+	}
+	return os.Getenv("AUTH_DATABASE_URL") // Deprecated compatibility alias.
 }
 
 func Close(db *gorm.DB) error {

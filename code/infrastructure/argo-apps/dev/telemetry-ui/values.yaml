@@ -1,4 +1,8 @@
 fullnameOverride: telemetry-ui
+# This cluster exposes telemetry.localhost over its HTTP-only development
+# Gateway. OAuth deliberately requires HTTPS except on loopback, so keep the
+# bypass explicit here rather than shipping a partially configured login.
+authMode: local
 podLabels:
   platform.local/owner: platform-team
 labels:
@@ -10,14 +14,24 @@ resources:
     memory: null
   limits:
     memory: null
+organizations:
+  - id: local
+    name: Local
+    telemetryScope: local
+    identityMappings: []
+    dataSources: {unified: [local], traces: [], logs: []}
 clickhouse:
-  type: unified
-  unified:
-    address: clickhouse.monitoring.svc.cluster.local:9000
-    username: app
-    passwordSecret:
-      name: telemetry-ui-clickhouse
-      key: password
+  dataSources:
+    unified:
+      - id: local
+        address: clickhouse.monitoring.svc.cluster.local:9000
+        database: otel
+        username: app
+        secure: false
+        passwordEnv: CLICKHOUSE_DATASOURCE_LOCAL_PASSWORD
+        passwordSecret: {name: telemetry-ui-clickhouse, key: password}
+    traces: []
+    logs: []
 httpRoute:
   enabled: true
   parentRefs:

@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	querymodel "github.com/nyo-platform-engineering/platform-code/code/apps/telemetry-ui/backend/internal/query"
 )
 
 type signalStore struct {
@@ -19,11 +21,13 @@ type signalStore struct {
 	fail     bool
 	pingFail bool
 	pings    int
+	selected []string
 }
 
-func (s *signalStore) Query(_ context.Context, sql string, args ...any) ([]map[string]any, error) {
+func (s *signalStore) Query(ctx context.Context, sql string, args ...any) ([]map[string]any, error) {
 	s.queries = append(s.queries, sql)
 	s.args = append(s.args, args)
+	s.selected = append(s.selected, querymodel.DataSourceFromContext(ctx))
 	if s.fail {
 		return nil, errors.New("offline")
 	}
@@ -32,6 +36,19 @@ func (s *signalStore) Query(_ context.Context, sql string, args ...any) ([]map[s
 		rows = append(rows, map[string]any{"service": service})
 	}
 	return rows, nil
+}
+
+func TestDatasourceSelectionReachesOnlyTheSelectedSignalStore(t *testing.T) {
+	traces, logs := &signalStore{services: []string{"api"}}, &signalStore{services: []string{"worker"}}
+	h := splitHandler(t, traces, logs)
+	out := httptest.NewRecorder()
+	h.ServeHTTP(out, httptest.NewRequest("GET", "/api/v1/services?signal=traces&dataSource=archive", nil))
+	if out.Code != http.StatusOK || len(traces.queries) != 1 || len(logs.queries) != 0 {
+		t.Fatalf("signal-scoped service discovery used the wrong store: %d %s", out.Code, out.Body)
+	}
+	if len(traces.selected) != 1 || traces.selected[0] != "archive" {
+		t.Fatalf("datasource selection was not propagated: %#v", traces.selected)
+	}
 }
 func splitHandler(t *testing.T, traces, logs *signalStore) http.Handler {
 	t.Helper()

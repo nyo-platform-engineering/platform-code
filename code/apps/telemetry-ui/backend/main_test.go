@@ -31,6 +31,27 @@ func TestHealthIsPublic(t *testing.T) {
 	}
 }
 
+func TestHTTPSOriginEnablesTransportSecurity(t *testing.T) {
+	cfg := config{
+		OAuthConfig: auth.OAuthConfig{Origin: "https://telemetry.example.com"},
+		WebDistDir:  t.TempDir(),
+		TraceStore:  failingStore{},
+		LogStore:    failingStore{},
+	}
+	handler, err := newHandler(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if response.Header().Get("Strict-Transport-Security") != "max-age=31536000" {
+		t.Fatal("HTTPS deployment omitted HSTS")
+	}
+	if response.Header().Get("Permissions-Policy") == "" {
+		t.Fatal("permissions policy omitted")
+	}
+}
+
 func TestMetaDescribesCapabilities(t *testing.T) {
 	response := httptest.NewRecorder()
 	testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/meta", nil))
@@ -49,6 +70,41 @@ func TestMetaDescribesCapabilities(t *testing.T) {
 	}
 	if body.Actor.Tenant != "local" {
 		t.Fatalf("unexpected local tenant: %q", body.Actor.Tenant)
+	}
+}
+
+func TestLocalAdminSummaryIsAvailableWithoutControlDatabase(t *testing.T) {
+	response := httptest.NewRecorder()
+	testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/admin/summary", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+	var body struct {
+		DatabaseConfigured bool `json:"databaseConfigured"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.DatabaseConfigured {
+		t.Fatal("local mode reported a configured control database")
+	}
+}
+
+func TestLocalDatasourceCatalogHasOneDefaultPerSignal(t *testing.T) {
+	response := httptest.NewRecorder()
+	testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+	var body struct {
+		Traces []struct{ ID string } `json:"traces"`
+		Logs   []struct{ ID string } `json:"logs"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Traces) != 1 || len(body.Logs) != 1 || body.Traces[0].ID != "default" || body.Logs[0].ID != "default" {
+		t.Fatalf("unexpected local catalog: %#v", body)
 	}
 }
 

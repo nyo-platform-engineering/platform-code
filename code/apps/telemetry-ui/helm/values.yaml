@@ -10,27 +10,39 @@ imagePullSecrets: []
 # Use oauth for Google/GitHub login; configure AUTH_* and provider secrets through extraEnv.
 # local bypasses login and is intended for development.
 authMode: oauth
-# Existing Secret with an auth.grants.json key; required for oauth.
-authGrantsSecret: ""
+# Absolute, non-sliding application session lifetime (15m-12h).
+authSessionLifetime: 8h
+# Inactivity deadline and opaque session-ID rotation interval.
+authIdleTimeout: 30m
+authRenewalInterval: 15m
+# Organizations own identity-to-organization rules and datasource assignments.
+organizations:
+  - id: local
+    name: Local
+    telemetryScope: local
+    # Each rule needs one exact match: subject, email, or domain.
+    identityMappings: []
+    # - provider: google
+    #   match: {domain: your-company.example}
+    #   permissions: [observability:traces:read, observability:logs:read]
+    dataSources:
+      unified: [default]
+      traces: []
+      logs: []
 clickhouse:
-  type: unified # unified | split
-  # Used only when type=unified.
-  unified:
-    address: clickhouse:9000
-    username: app
-    passwordSecret:
-      name: telemetry-ui-clickhouse
-      key: password
-  # Used only when type=split. Both connections must be complete.
-  # Passwords reference existing Secrets.
-  traces:
-    address: ""
-    username: ""
-    passwordSecret: {}
-  logs:
-    address: ""
-    username: ""
-    passwordSecret: {}
+  dataSources:
+    # Unified datasources are eligible for both signals. The first source is
+    # used by local mode; OAuth exposes all assigned choices.
+    unified:
+      - id: default
+        address: clickhouse:9000
+        database: otel
+        username: app
+        secure: false
+        passwordEnv: CLICKHOUSE_DATASOURCE_DEFAULT_PASSWORD
+        passwordSecret: {name: telemetry-ui-clickhouse, key: password}
+    traces: []
+    logs: []
 service:
   port: 8080
   annotations: {}
@@ -40,7 +52,8 @@ httpRoute:
   hostnames: []
   annotations: {}
 # Kubernetes EnvVar entries; use for OTEL_* settings and Secret references.
-# Managed PORT/LISTEN_HOST/WEB_DIST_DIR/AUTH_MODE/CLICKHOUSE_* names are rejected.
+# Managed runtime and generated ClickHouse names are rejected. Dedicated
+# CLICKHOUSE_DATASOURCE_* credentials may reference Secrets here.
 extraEnv: []
 labels: {}
 podLabels: {}

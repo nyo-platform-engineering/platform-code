@@ -6,10 +6,13 @@ import (
 )
 
 type Principal struct {
-	Subject     string   `json:"subject"`
-	DisplayName string   `json:"displayName"`
-	Tenant      string   `json:"tenant"`
-	Permissions []string `json:"permissions"`
+	Subject           string   `json:"subject"`
+	DisplayName       string   `json:"displayName"`
+	OrganizationID    string   `json:"organizationId"`
+	OrganizationName  string   `json:"organizationName"`
+	OrganizationScope string   `json:"organizationScope"`
+	Tenant            string   `json:"tenant"` // Backward-compatible API alias for OrganizationScope.
+	Permissions       []string `json:"permissions"`
 }
 
 type contextKey string
@@ -20,16 +23,20 @@ const (
 	MetadataRead = "observability:metadata:read"
 	TracesRead   = "observability:traces:read"
 	LogsRead     = "observability:logs:read"
+	AdminRead    = "observability:admin:read"
 )
 
 type LocalAuthenticator struct{}
 
 func (LocalAuthenticator) Authenticate(_ *http.Request) (Principal, error) {
 	return Principal{
-		Subject:     "local-development",
-		DisplayName: "Local developer",
-		Tenant:      "local",
-		Permissions: []string{MetadataRead, TracesRead, LogsRead},
+		Subject:           "local-development",
+		DisplayName:       "Local developer",
+		OrganizationID:    "local",
+		OrganizationName:  "Local",
+		OrganizationScope: "local",
+		Tenant:            "local",
+		Permissions:       []string{MetadataRead, TracesRead, LogsRead, AdminRead},
 	}, nil
 }
 
@@ -44,6 +51,10 @@ func HasPermission(actor Principal, expected string) bool {
 
 type Authenticator interface {
 	Authenticate(*http.Request) (Principal, error)
+}
+
+type RenewingAuthenticator interface {
+	AuthenticateAndRenew(http.ResponseWriter, *http.Request) (Principal, error)
 }
 
 func WithPrincipal(ctx context.Context, actor Principal) context.Context {

@@ -1,8 +1,8 @@
 # Local telemetry API
 
-All routes are under `/api/v1`. The API enforces its principal's tenant and
-permission on every query. Local mode uses tenant `local`; passing identity or
-tenant headers does not change it. Unsupported authentication modes fail closed.
+All routes are under `/api/v1`. The API enforces its principal's PostgreSQL-resolved
+organization scope and permission on every query. Local mode uses scope `local`;
+passing identity or tenant headers does not change it. Unsupported authentication modes fail closed.
 The browser never receives database credentials or submits SQL.
 
 ## Filters
@@ -18,6 +18,8 @@ The browser never receives database credentials or submits SQL.
 | `minDurationMs` | Traces: nonnegative milliseconds, maximum 86400000 |
 | `limit` | Lists: 1–500, default 100 |
 | `offset` | Lists: 0–5000, default 0 |
+| `dataSource` | Assigned datasource ID selected for this signal; required when more than one is assigned |
+| `signal` | `/services` only: `traces` or `logs`, paired with `dataSource` |
 
 Time range defaults to the last 30 minutes and cannot exceed 24 hours. Time
 parameters retain nanosecond precision in SQL. Queries have five-second context
@@ -29,12 +31,14 @@ deadlines and cancellation, `MAX_CONCURRENT_QUERIES` execution slots (default 4 
 | Route | Data fields |
 | --- | --- |
 | `GET /meta` | Service version, authenticated actor, available capabilities |
+| `GET /data-sources` | Datasource choices assigned to the active organization, grouped by signal; no credentials |
 | `GET /services` | `service` values found in traces or logs (maximum 500) |
 | `GET /traces/red` | `bucket`, `requests`, `errors`, `errorRate`, `p50Ms`, `p95Ms`, `p99Ms`, `partial` |
 | `GET /traces` | `timestamp`, `traceId`, `spanId`, `service`, `name`, `durationMs`, `status` for server spans |
 | `GET /traces/:traceId` | Ordered spans including `parentSpanId`, `message`, `attributes` |
 | `GET /logs/volume` | `bucket`, `severity`, `records`, `partial` |
 | `GET /logs` | `timestamp`, `traceId`, `spanId`, `service`, `severity`, `body` |
+| `GET /admin/summary` | Admin-only, active-organization scope, non-secret datasource metadata, assignments, and grant count |
 
 Query responses have `data`, `from`, `to`, and `truncated`. List responses add
 `nextOffset` when another page is available within the offset cap. Trace detail
@@ -61,8 +65,8 @@ ClickHouse's nanoseconds to milliseconds. Severity 0 remains `unspecified`.
 - `503`: storage/query failure (`query_unavailable`); never substituted with empty data.
 
 `/healthz` checks process liveness. `/readyz` checks database connectivity and
-read access to both trace and log tables, using either a shared connection or
-separate signal connections. Either backend failing returns 503.
+read access to every assigned trace and log datasource. Any assigned backend
+failing returns 503.
 An empty trace detail returns `200` with an empty data array, allowing the UI to
 poll while export is still in progress. SQL errors and credentials are not
 returned to the browser.
@@ -223,9 +227,12 @@ aggregate state. Error rate reflects server-span Error status, not log severity.
 
 ### Shared or separate database connections
 
-`CLICKHOUSE_ADDR`, `CLICKHOUSE_USER`, and `CLICKHOUSE_PASSWORD` configure the shared
-connection. Optional `CLICKHOUSE_TRACES_*` and `CLICKHOUSE_LOGS_*` overrides select
-separate backends. Identical resolved settings share a connection pool.
+`CLICKHOUSE_ADDR`, `CLICKHOUSE_USER`, and `CLICKHOUSE_PASSWORD` bootstrap the
+shared datasource. Optional `CLICKHOUSE_TRACES_*` and `CLICKHOUSE_LOGS_*`
+overrides bootstrap separate backends. PostgreSQL then maps each organization and
+signal to a datasource. Datasource rows store only the password environment
+variable name; Kubernetes injects its value from a Secret. Identical resolved
+settings share a connection pool.
 
 `/services` runs one tenant-scoped query on each backend, merges distinct names,
 sorts them, and retains the first 500. If either query fails, it returns 503 rather
