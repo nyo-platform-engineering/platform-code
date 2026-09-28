@@ -46,7 +46,8 @@ func TestAccessMatrix(t *testing.T) {
 		{"/traces", auth.TracesRead}, {"/traces/" + strings.Repeat("a", 32), auth.TracesRead},
 		{"/traces/red", auth.TracesRead}, {"/traces/attributes", auth.TracesRead},
 		{"/logs", auth.LogsRead}, {"/logs/volume", auth.LogsRead}, {"/logs/attributes", auth.LogsRead},
-		{"/admin/summary", auth.AdminRead},
+		{"/admin/organizations", auth.AdminRead}, {"/admin/data-sources", auth.AdminRead},
+		{"/admin/access-grants", auth.AdminRead},
 	}
 	for _, route := range routes {
 		for _, permission := range []string{"", auth.MetadataRead, auth.TracesRead, auth.LogsRead, auth.AdminRead} {
@@ -81,7 +82,7 @@ func TestAccessMatrix(t *testing.T) {
 							t.Fatalf("untrusted tenant: %q", tenant)
 						}
 					}
-					if expected == http.StatusOK && preview != "" && route.path != "/meta" && route.path != "/data-sources" && route.path != "/admin/summary" && !strings.Contains(out.Body.String(), "tenant-a") {
+					if expected == http.StatusOK && preview != "" && route.path != "/meta" && route.path != "/data-sources" && !strings.Contains(route.path, "/admin/") && !strings.Contains(out.Body.String(), "tenant-a") {
 						t.Fatal("preview missing trusted tenant")
 					}
 				})

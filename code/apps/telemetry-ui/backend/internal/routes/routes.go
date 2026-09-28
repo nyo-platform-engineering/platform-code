@@ -68,7 +68,9 @@ func Register(router *gin.Engine, traceStore, logStore model.QueryStore, fronten
 	api.GET("/logs/attributes", logs.Attributes(logStore, slots))
 	api.GET("/logs/volume", logs.Volume(logStore, slots))
 	api.GET("/logs", logs.List(logStore, slots))
-	api.GET("/admin/summary", admin.Summary(controlDB))
+	api.GET("/admin/organizations", admin.Organizations(controlDB))
+	api.GET("/admin/data-sources", admin.DataSources(controlDB))
+	api.GET("/admin/access-grants", admin.AccessGrants(controlDB))
 
 	router.GET("/", gin.WrapH(frontend))
 	router.GET("/assets/*filepath", gin.WrapH(frontend))

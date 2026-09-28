@@ -15,18 +15,21 @@ function initialTheme(): Theme {
   }
   return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
-const navigation = [
+const telemetryNavigation = [
   { to: '/', label: 'Overview' },
   { to: '/traces', label: 'Traces' },
   { to: '/logs', label: 'Logs' },
+] as const
+const adminNavigation = [
+  { to: '/admin/organizations', label: 'Organizations' },
+  { to: '/admin/data-sources', label: 'Data sources' },
+  { to: '/admin/access-grants', label: 'Access grants' },
 ] as const
 const adminPermission = 'observability:admin:read'
 
 function Shell() {
   const { metadata } = useMetadata()
-  const items = metadata?.actor.permissions.includes(adminPermission)
-    ? [...navigation, { to: '/admin' as const, label: 'Admin' }]
-    : navigation
+  const canViewAdmin = metadata?.actor.permissions.includes(adminPermission) ?? false
   const [theme, setTheme] = useState<Theme>(initialTheme)
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -42,27 +45,21 @@ function Shell() {
         <Link
           to="/"
           aria-label="Signal Deck home"
-          className="flex min-h-8 items-center gap-2 px-2 text-[13px] font-semibold text-ink"
+          className="flex min-h-8 shrink-0 items-center gap-2 px-2 text-[13px] font-semibold text-ink"
         >
           <span className="grid size-6 place-items-center rounded bg-accent text-[11px] text-accent-text">
             S
           </span>
           <span className="max-sm:hidden">Signal Deck</span>
         </Link>
-        <nav aria-label="Primary navigation" className="mt-7 grid gap-0.5 max-md:mt-0 max-md:flex">
-          {items.map((item, index) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              activeOptions={{ exact: item.to === '/' }}
-              className="rounded-ui px-2 py-2 text-xs text-muted hover:bg-hover hover:text-ink data-[status=active]:bg-accent-soft data-[status=active]:text-accent-strong"
-            >
-              <span className="mr-2 font-mono text-[9px] text-dim max-md:hidden">0{index + 1}</span>
-              {item.label}
-            </Link>
-          ))}
+        <nav
+          aria-label="Primary navigation"
+          className="mt-7 grid gap-5 max-md:mt-0 max-md:flex max-md:min-w-0 max-md:flex-1 max-md:items-center max-md:gap-2 max-md:overflow-x-auto"
+        >
+          <NavigationGroup label="Telemetry" items={telemetryNavigation} />
+          {canViewAdmin && <NavigationGroup label="Admin" items={adminNavigation} divided />}
         </nav>
-        <div className="mt-auto grid gap-2 max-md:mt-0 max-md:ml-auto max-md:flex">
+        <div className="mt-auto grid gap-2 max-md:mt-0 max-md:ml-auto max-md:flex max-md:shrink-0">
           <Button
             className="flex h-7 items-center gap-2 text-[10px] max-sm:w-7 max-sm:justify-center max-sm:p-0"
             aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
@@ -100,6 +97,51 @@ function Shell() {
     </div>
   )
 }
+
+function NavigationGroup({
+  label,
+  items,
+  divided = false,
+}: {
+  label: string
+  items: ReadonlyArray<{
+    to:
+      | '/'
+      | '/traces'
+      | '/logs'
+      | '/admin/organizations'
+      | '/admin/data-sources'
+      | '/admin/access-grants'
+    label: string
+  }>
+  divided?: boolean
+}) {
+  return (
+    <section
+      className={`grid gap-1 max-md:flex max-md:items-center ${divided ? 'max-md:border-l max-md:border-border max-md:pl-2' : ''}`}
+    >
+      <h2 className="px-2 font-mono text-[9px] font-semibold tracking-[0.16em] text-dim uppercase max-md:hidden">
+        {label}
+      </h2>
+      <div className="grid gap-0.5 max-md:flex">
+        {items.map((item, index) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            activeOptions={{ exact: item.to === '/' }}
+            className="rounded-ui px-2 py-2 text-xs whitespace-nowrap text-muted hover:bg-hover hover:text-ink data-[status=active]:bg-accent-soft data-[status=active]:text-accent-strong"
+          >
+            <span className="mr-2 font-mono text-[9px] text-dim max-md:hidden">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function AppLayout() {
   return (
     <AuthGate>

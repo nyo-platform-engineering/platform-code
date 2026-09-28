@@ -18,7 +18,7 @@ registered endpoint also fails closed with 403 at runtime.
 | GET `/api/v1/traces`, `/api/v1/traces/:traceId` | `observability:traces:read` |
 | GET `/api/v1/traces/red`, `/api/v1/traces/attributes` | `observability:traces:read` |
 | GET `/api/v1/logs`, `/api/v1/logs/volume`, `/api/v1/logs/attributes` | `observability:logs:read` |
-| GET `/api/v1/admin/summary` | `observability:admin:read`; non-secret inventory for the active organization |
+| GET `/api/v1/admin/organizations`, `/api/v1/admin/data-sources`, `/api/v1/admin/access-grants` | `observability:admin:read`; searchable, cursor-bounded control-plane records for the active organization |
 
 All protected endpoints require a nonempty authenticated subject and organization scope as
 well as the listed permission. Missing identity returns 401; missing scope or

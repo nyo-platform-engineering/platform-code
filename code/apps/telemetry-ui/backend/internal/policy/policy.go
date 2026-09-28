@@ -38,7 +38,9 @@ var policies = map[Endpoint]Policy{
 	{"GET", "/api/v1/logs"}:                    {Permission: auth.LogsRead},
 	{"GET", "/api/v1/logs/volume"}:             {Permission: auth.LogsRead},
 	{"GET", "/api/v1/logs/attributes"}:         {Permission: auth.LogsRead},
-	{"GET", "/api/v1/admin/summary"}:           {Permission: auth.AdminRead},
+	{"GET", "/api/v1/admin/organizations"}:     {Permission: auth.AdminRead},
+	{"GET", "/api/v1/admin/data-sources"}:      {Permission: auth.AdminRead},
+	{"GET", "/api/v1/admin/access-grants"}:     {Permission: auth.AdminRead},
 }
 
 // ValidateRoutes prevents both unclassified routes and stale audit entries.

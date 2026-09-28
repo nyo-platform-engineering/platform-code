@@ -11,6 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminAccessGrantsRouteImport } from './routes/admin/access-grants'
+import { Route as AdminDataSourcesRouteImport } from './routes/admin/data-sources'
+import { Route as AdminOrganizationsRouteImport } from './routes/admin/organizations'
 import { Route as LogsIndexRouteImport } from './routes/logs/index'
 import { Route as TracesIndexRouteImport } from './routes/traces/index'
 
@@ -22,6 +25,21 @@ const IndexRoute = IndexRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAccessGrantsRoute = AdminAccessGrantsRouteImport.update({
+  id: '/admin/access-grants',
+  path: '/admin/access-grants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDataSourcesRoute = AdminDataSourcesRouteImport.update({
+  id: '/admin/data-sources',
+  path: '/admin/data-sources',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminOrganizationsRoute = AdminOrganizationsRouteImport.update({
+  id: '/admin/organizations',
+  path: '/admin/organizations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogsIndexRoute = LogsIndexRouteImport.update({
@@ -37,12 +55,18 @@ const TracesIndexRoute = TracesIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin/access-grants': typeof AdminAccessGrantsRoute
+  '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/': typeof AdminIndexRoute
   '/logs/': typeof LogsIndexRoute
   '/traces/': typeof TracesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin/access-grants': typeof AdminAccessGrantsRoute
+  '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin': typeof AdminIndexRoute
   '/logs': typeof LogsIndexRoute
   '/traces': typeof TracesIndexRoute
@@ -50,20 +74,48 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin/access-grants': typeof AdminAccessGrantsRoute
+  '/admin/data-sources': typeof AdminDataSourcesRoute
+  '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/': typeof AdminIndexRoute
   '/logs/': typeof LogsIndexRoute
   '/traces/': typeof TracesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin/' | '/logs/' | '/traces/'
+  fullPaths:
+    | '/'
+    | '/admin/access-grants'
+    | '/admin/data-sources'
+    | '/admin/organizations'
+    | '/admin/'
+    | '/logs/'
+    | '/traces/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/logs' | '/traces'
-  id: '__root__' | '/' | '/admin/' | '/logs/' | '/traces/'
+  to:
+    | '/'
+    | '/admin/access-grants'
+    | '/admin/data-sources'
+    | '/admin/organizations'
+    | '/admin'
+    | '/logs'
+    | '/traces'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin/access-grants'
+    | '/admin/data-sources'
+    | '/admin/organizations'
+    | '/admin/'
+    | '/logs/'
+    | '/traces/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminAccessGrantsRoute: typeof AdminAccessGrantsRoute
+  AdminDataSourcesRoute: typeof AdminDataSourcesRoute
+  AdminOrganizationsRoute: typeof AdminOrganizationsRoute
   AdminIndexRoute: typeof AdminIndexRoute
   LogsIndexRoute: typeof LogsIndexRoute
   TracesIndexRoute: typeof TracesIndexRoute
@@ -85,6 +137,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/access-grants': {
+      id: '/admin/access-grants'
+      path: '/admin/access-grants'
+      fullPath: '/admin/access-grants'
+      preLoaderRoute: typeof AdminAccessGrantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/data-sources': {
+      id: '/admin/data-sources'
+      path: '/admin/data-sources'
+      fullPath: '/admin/data-sources'
+      preLoaderRoute: typeof AdminDataSourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/organizations': {
+      id: '/admin/organizations'
+      path: '/admin/organizations'
+      fullPath: '/admin/organizations'
+      preLoaderRoute: typeof AdminOrganizationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/logs/': {
       id: '/logs/'
       path: '/logs'
@@ -104,6 +177,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminAccessGrantsRoute: AdminAccessGrantsRoute,
+  AdminDataSourcesRoute: AdminDataSourcesRoute,
+  AdminOrganizationsRoute: AdminOrganizationsRoute,
   AdminIndexRoute: AdminIndexRoute,
   LogsIndexRoute: LogsIndexRoute,
   TracesIndexRoute: TracesIndexRoute,

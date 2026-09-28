@@ -77,20 +77,23 @@ func TestMetaDescribesCapabilities(t *testing.T) {
 	}
 }
 
-func TestLocalAdminSummaryIsAvailableWithoutControlDatabase(t *testing.T) {
-	response := httptest.NewRecorder()
-	testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/admin/summary", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", response.Code)
-	}
-	var body struct {
-		DatabaseConfigured bool `json:"databaseConfigured"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatal(err)
-	}
-	if body.DatabaseConfigured {
-		t.Fatal("local mode reported a configured control database")
+func TestLocalAdminListsAreAvailableWithoutControlDatabase(t *testing.T) {
+	for _, path := range []string{"organizations", "data-sources", "access-grants"} {
+		response := httptest.NewRecorder()
+		testHandler(t).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/admin/"+path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", path, response.Code)
+		}
+		var body struct {
+			DatabaseConfigured bool  `json:"databaseConfigured"`
+			Data               []any `json:"data"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.DatabaseConfigured || body.Data == nil {
+			t.Fatalf("%s reported an invalid local control plane", path)
+		}
 	}
 }
 

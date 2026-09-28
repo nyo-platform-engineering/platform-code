@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { LuX } from 'react-icons/lu'
 import { Button } from './Button'
@@ -12,15 +12,25 @@ export function DetailDrawer({
   eyebrow,
   onClose,
   children,
+  size = 'wide',
 }: {
   title: string
   eyebrow: string
   onClose: () => void
   children: ReactNode
+  size?: 'compact' | 'wide'
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
+  const closeTimer = useRef<number | undefined>(undefined)
   const titleId = useId()
+  const [closing, setClosing] = useState(false)
+  function requestClose() {
+    if (closing) return
+    setClosing(true)
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    closeTimer.current = window.setTimeout(onClose, reducedMotion ? 0 : 110)
+  }
   useEffect(() => {
     const element = dialog.current!
     const previousFocus = document.activeElement as HTMLElement | null
@@ -30,6 +40,7 @@ export function DetailDrawer({
     document.body.style.overflow = 'hidden'
     closeButton.current?.focus()
     return () => {
+      window.clearTimeout(closeTimer.current)
       element.close()
       openDrawers -= 1
       if (openDrawers === 0) document.body.style.overflow = originalOverflow
@@ -39,11 +50,12 @@ export function DetailDrawer({
   return createPortal(
     <dialog
       ref={dialog}
-      className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-[min(1040px,88vw)] max-w-full border-0 border-l border-border-strong bg-canvas p-0 text-ink shadow-2xl backdrop:bg-black/45 backdrop:backdrop-blur-xs max-sm:w-full"
+      data-drawer-state={closing ? 'closing' : 'open'}
+      className={`fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh max-w-full border-0 border-l border-border-strong bg-canvas p-0 text-ink shadow-2xl backdrop:bg-black/45 backdrop:backdrop-blur-xs max-sm:w-full ${size === 'compact' ? 'w-[min(560px,88vw)]' : 'w-[min(1040px,88vw)]'}`}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault()
-        onClose()
+        requestClose()
       }}
       onClick={(event) => {
         if (event.target !== event.currentTarget) return
@@ -54,7 +66,7 @@ export function DetailDrawer({
           event.clientY < rect.top ||
           event.clientY > rect.bottom
         )
-          onClose()
+          requestClose()
       }}
     >
       <div className="flex h-full min-w-0 flex-col">
@@ -65,7 +77,11 @@ export function DetailDrawer({
               {title}
             </h2>
           </div>
-          <Button ref={closeButton} aria-label={`Close ${eyebrow.toLowerCase()}`} onClick={onClose}>
+          <Button
+            ref={closeButton}
+            aria-label={`Close ${eyebrow.toLowerCase()}`}
+            onClick={requestClose}
+          >
             <LuX aria-hidden />
           </Button>
         </header>

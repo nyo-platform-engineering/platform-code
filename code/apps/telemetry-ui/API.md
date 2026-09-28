@@ -38,7 +38,32 @@ deadlines and cancellation, `MAX_CONCURRENT_QUERIES` execution slots (default 4 
 | `GET /traces/:traceId` | Ordered spans including `parentSpanId`, `message`, `attributes` |
 | `GET /logs/volume` | `bucket`, `severity`, `records`, `partial` |
 | `GET /logs` | `timestamp`, `traceId`, `spanId`, `service`, `severity`, `body` |
-| `GET /admin/summary` | Admin-only, active-organization scope, non-secret datasource metadata, assignments, and grant count |
+| `GET /admin/organizations` | Admin-only, searchable organization metadata for the active organization |
+| `GET /admin/data-sources` | Admin-only, searchable datasource assignments with their organization and non-secret connection metadata |
+| `GET /admin/access-grants` | Admin-only, searchable identity-to-organization grants and permissions |
+
+### Admin collection navigation
+
+Admin collections accept an optional `q` substring search of at most 128
+characters. Search applies only to non-secret fields displayed by that endpoint
+and always starts a new result sequence.
+
+Each response contains at most 25 records:
+
+```json
+{
+  "databaseConfigured": true,
+  "data": [],
+  "nextCursor": "opaque-value"
+}
+```
+
+Pass `nextCursor` back as `after` to read the next records. Omit `after` to return
+to the first records. The cursor is opaque and is valid only with the same endpoint
+and search. There are deliberately no page numbers, arbitrary offsets, caller-set
+limits, total counts, or previous-page queries. The UI exposes only **First** and
+**Next**, keeping database work bounded to one fixed-size keyset query. All three
+collections remain restricted to the authenticated active organization.
 
 Query responses have `data`, `from`, `to`, and `truncated`. List responses add
 `nextOffset` when another page is available within the offset cap. Trace detail
