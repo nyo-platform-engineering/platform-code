@@ -68,7 +68,7 @@ func TestPostgresSessions(t *testing.T) {
 	if _, err := first.store.ConsumeAttempt(ctx, hash, "google"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("state replay accepted", err)
 	}
-	a := account{Provider: "google", Subject: "42", Name: "Test"}
+	a := account{Provider: "google", Subject: "42", Name: "Test", GoogleEmail: "member@gmail.com"}
 	if err := first.store.SaveSession(ctx, hash, a, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}

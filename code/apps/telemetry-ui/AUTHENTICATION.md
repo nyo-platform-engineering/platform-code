@@ -1,7 +1,7 @@
 # Google and GitHub login
 
-`AUTH_MODE=oauth` enables app login. `AUTH_MODE=local` keeps the existing development
-identity and bypasses login; it remains the default for existing local workflows.
+`AUTH_MODE=oauth` is the default and requires sign-in before accessing the app.
+`AUTH_MODE=local` explicitly bypasses login for development.
 `MOCK` selects telemetry data independently of authentication.
 
 The backend uses `golang.org/x/oauth2` for provider exchanges and GORM with its PostgreSQL driver (backed by `pgx`) for
@@ -16,16 +16,17 @@ From the app directory:
    `auth.grants.json` are ignored by Git. The generated local grant file starts
    as `[]`, which denies everyone.
 2. Create a Google OAuth web client or GitHub OAuth app and fill its client ID and
-   secret into `.env`. Leave both fields blank to disable the other provider.
+   secret into `.env`. Start with Google; leave both GitHub fields blank to keep GitHub disabled.
 3. Register these callback URLs, matching `AUTH_ORIGIN` exactly:
    - Google: `http://127.0.0.1:5173/api/v1/auth/google/callback`
    - GitHub: `http://127.0.0.1:5173/api/v1/auth/github/callback`
 4. Edit `auth.grants.json` using `auth.grants.example.json` as the format reference.
    Replace the placeholder IDs/domains; only add accounts or domains you trust.
-5. Start PostgreSQL and the backend (auth tables are synchronized on startup):
+5. Start your container runtime (Docker Desktop, Rancher Desktop, or Podman),
+   then start PostgreSQL and the backend (auth tables are synchronized on startup):
 
 ```sh
-docker compose --env-file .env -f compose.auth.yaml up -d --wait
+task auth:db
 cd backend
 set -a
 . ../.env
@@ -35,7 +36,8 @@ go run .
 
 In a second terminal, run `task dev:web` from the app directory and open
 http://127.0.0.1:5173. Vite forwards `/api` to the backend, including OAuth callbacks.
-The Go binary does not parse `.env`; the shell commands above export its contents.
+Task commands load the app’s `.env` automatically. The Go binary does not parse
+`.env`; the shell commands above export its contents when running Go directly.
 `AUTH_GRANTS_FILE=../auth.grants.json` is relative to the backend working directory.
 For a built frontend served by Go, use origin/registered callbacks on port 8080
 and set `WEB_DIST_DIR=../frontend/dist` when starting from `backend/`.
@@ -49,17 +51,19 @@ Each grant has a provider, tenant, permissions, and exactly one selector:
 
 - `subject`: Google's stable `sub` or GitHub's numeric user ID, stored as a string.
   Usernames and email addresses are not identity keys.
+- `googleEmail`: an exact lowercase email, accepted only from a Google profile
+  with `email_verified=true`. The session identity remains Google’s stable `sub`.
 - `googleDomain`: an exact, lowercase Google Workspace hosted domain. This uses
   Google's authenticated `hd` claim and verified-email flag, not an email suffix
   supplied by the browser. It does not grant access to GitHub accounts.
 
-Subject grants take priority over domain grants. Grants are never merged across
+Subject grants take priority over email grants, which take priority over domain grants. Grants are never merged across
 tenants. Valid permissions are `observability:traces:read`,
 `observability:logs:read`, and `observability:metadata:read`; metadata access is
 included automatically for every allowed account, including service discovery.
 An empty grant list denies everyone. Changing grants requires restarting all
 backend replicas; existing sessions are evaluated against the loaded grants on
-every request. A Google domain membership change takes effect on the next login
+every request. A Google email or domain membership change takes effect on the next login
 or session expiration, not by polling Google on each API call.
 
 ## Sessions and request flow

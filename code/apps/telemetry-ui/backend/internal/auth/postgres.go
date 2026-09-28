@@ -75,6 +75,7 @@ func (s *postgresStore) SaveSession(ctx context.Context, hash string, identity a
 		Subject:      identity.Subject,
 		DisplayName:  identity.Name,
 		GoogleDomain: identity.GoogleDomain,
+		GoogleEmail:  identity.GoogleEmail,
 		ExpiresAt:    expires,
 	}
 	return s.db.WithContext(ctx).Create(&record).Error
@@ -96,6 +97,7 @@ func (s *postgresStore) Session(ctx context.Context, hash string) (account, erro
 		Subject:      record.Subject,
 		Name:         record.DisplayName,
 		GoogleDomain: record.GoogleDomain,
+		GoogleEmail:  record.GoogleEmail,
 	}, nil
 }
 

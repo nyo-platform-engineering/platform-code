@@ -75,7 +75,7 @@ func loadConfig() (config, error) {
 		return config{}, fmt.Errorf("invalid MOCK: expected a boolean")
 	}
 
-	authMode := envOr("AUTH_MODE", "local")
+	authMode := envOr("AUTH_MODE", "oauth")
 	if authMode != "local" && authMode != "oauth" {
 		return config{}, fmt.Errorf("unsupported AUTH_MODE %q: expected local or oauth", authMode)
 	}

@@ -68,6 +68,7 @@ func (o *OAuth) profile(ctx context.Context, name, endpoint, accessToken string)
 		Login         string `json:"login"`
 		Name          string `json:"name"`
 		Domain        string `json:"hd"`
+		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&profile); err != nil {
@@ -82,7 +83,8 @@ func (o *OAuth) profile(ctx context.Context, name, endpoint, accessToken string)
 		if a.Name == "" {
 			a.Name = profile.Login
 		}
-	} else if profile.EmailVerified {
+	} else if name == "google" && profile.EmailVerified {
+		a.GoogleEmail = strings.ToLower(profile.Email)
 		a.GoogleDomain = strings.ToLower(profile.Domain)
 	}
 	if a.Subject == "" {

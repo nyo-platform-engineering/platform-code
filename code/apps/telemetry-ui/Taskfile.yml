@@ -1,5 +1,7 @@
 version: '3'
 
+dotenv: ['.env']
+
 vars:
   # npm supplies cached, pinned tools without invoking a global Corepack shim.
   # Run from the app root so npm does not interpret frontend/devEngines.
@@ -18,7 +20,7 @@ tasks:
       - '{{.PNPM}} install --frozen-lockfile'
 
   dev:
-    desc: Run mock API and frontend with hot reload (no containers)
+    desc: Run mock telemetry and frontend with configured sign-in
     aliases: [dev:mock]
     deps: [setup]
     cmds:
@@ -27,6 +29,12 @@ tasks:
   dev:services:
     internal: true
     deps: [dev:api, dev:web]
+
+  auth:db:
+    desc: Start the local PostgreSQL database used by sign-in
+    dir: '{{.TASKFILE_DIR}}'
+    cmds:
+      - docker compose --env-file .env -f compose.auth.yaml up -d --wait
 
   dev:api:
     desc: Run the mock API on localhost:8080 with automatic Go reloads

@@ -62,7 +62,8 @@ needs schema creation and alteration permissions. The chart does not provision
 PostgreSQL. ClickHouse schemas remain externally managed.
 See [authentication setup](../AUTHENTICATION.md) for grant format and callback URLs.
 
-The default `authMode: local` bypasses login for development. Enable HTTPRoute with `-f ./helm/examples/gateway.yaml` after
+The default `authMode: oauth` requires sign-in and a configured grants Secret.
+Set `authMode: local` explicitly to bypass login for development. Enable HTTPRoute with `-f ./helm/examples/gateway.yaml` after
 configuring its parent Gateway and hostname. Gateway API CRDs must already exist;
 TLS and access control are configured on the Gateway, outside this chart.
 

@@ -9,7 +9,7 @@ image:
 imagePullSecrets: []
 # Use oauth for Google/GitHub login; configure AUTH_* and provider secrets through extraEnv.
 # local bypasses login and is intended for development.
-authMode: local
+authMode: oauth
 # Existing Secret with an auth.grants.json key; required for oauth.
 authGrantsSecret: ""
 clickhouse:

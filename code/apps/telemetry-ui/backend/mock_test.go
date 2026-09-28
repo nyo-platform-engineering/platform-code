@@ -57,6 +57,7 @@ func TestMockTimeFollowsQueryWindow(t *testing.T) {
 }
 
 func TestMockConfiguration(t *testing.T) {
+	t.Setenv("AUTH_MODE", "local")
 	t.Setenv("MOCK", "")
 	cfg, err := loadConfig()
 	if err != nil || cfg.Mock {

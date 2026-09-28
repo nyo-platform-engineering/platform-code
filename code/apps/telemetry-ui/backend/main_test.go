@@ -77,6 +77,7 @@ func (failingStore) Query(context.Context, string, ...any) ([]map[string]any, er
 }
 
 func TestMaxConcurrentQueriesConfig(t *testing.T) {
+	t.Setenv("AUTH_MODE", "local")
 	for _, tc := range []struct {
 		value string
 		want  int
@@ -105,5 +106,19 @@ func TestOAuthNeverFallsBackToLocalIdentity(t *testing.T) {
 	t.Setenv("AUTH_GRANTS_FILE", t.TempDir()+"/missing.json")
 	if _, err := loadConfig(); err == nil {
 		t.Fatal("oauth accepted missing grants")
+	}
+}
+
+// Missing OAuth configuration must never silently enable the local identity.
+func TestAuthDefaultsToOAuth(t *testing.T) {
+	t.Setenv("AUTH_MODE", "")
+	t.Setenv("AUTH_GRANTS_FILE", t.TempDir()+"/missing.json")
+	if _, err := loadConfig(); err == nil {
+		t.Fatal("default startup bypassed OAuth configuration")
+	}
+	t.Setenv("AUTH_MODE", "local")
+	cfg, err := loadConfig()
+	if err != nil || cfg.AuthMode != "local" {
+		t.Fatalf("explicit local mode: %v", err)
 	}
 }

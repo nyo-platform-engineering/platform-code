@@ -356,3 +356,42 @@ func TestLogoutRequiresCSRFHeaderAndOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestGoogleEmailGrantRequiresVerifiedProfile(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		profile string
+		allowed bool
+	}{
+		{"verified", `{"sub":"43","email":"Member@gmail.com","email_verified":true}`, true},
+		{"unverified", `{"sub":"43","email":"member@gmail.com","email_verified":false}`, false},
+		{"missing_verification", `{"sub":"43","email":"member@gmail.com"}`, false},
+		{"different_email", `{"sub":"43","email":"other@gmail.com","email_verified":true}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o, store, _ := testOAuth(t, "google")
+			o.cfg.Grants = []Grant{{Provider: "google", GoogleEmail: "member@gmail.com", Tenant: "local", Permissions: []string{TracesRead}}}
+			if err := o.cfg.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			o.client.Transport = handlerTransport{http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte(tc.profile))
+			})}
+			a, err := o.profile(context.Background(), "google", "https://provider.test/profile", "token")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := o.cfg.principal(a); (got.Subject != "") != tc.allowed {
+				t.Fatal("unexpected access", got)
+			}
+			token, _ := randomToken()
+			store.SaveSession(context.Background(), tokenHash(token), a, time.Now().Add(time.Hour))
+			request := httptest.NewRequest("GET", "/", nil)
+			request.AddCookie(&http.Cookie{Name: o.cookieName("session"), Value: token})
+			actor, err := o.Authenticate(request)
+			if err != nil || (actor.Subject != "") != tc.allowed {
+				t.Fatal("session lost email grant", actor, err)
+			}
+		})
+	}
+}

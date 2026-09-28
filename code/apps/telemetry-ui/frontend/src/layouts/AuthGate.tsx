@@ -3,7 +3,7 @@ import { Button } from '../components/Button'
 
 type Providers = { mode: 'local' | 'oauth'; providers: string[] }
 
-const AuthModeContext = createContext<'local' | 'oauth'>('local')
+const AuthModeContext = createContext<'local' | 'oauth'>('oauth')
 
 const loginErrors: Record<string, string> = {
   access_denied: 'Your account does not have access. Contact your administrator.',
@@ -60,6 +60,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (signedIn && !problem && providers)
     return <AuthModeContext.Provider value={providers.mode}>{children}</AuthModeContext.Provider>
 
+  const availableProviders = ['google', 'github'].filter((name) =>
+    providers?.providers.includes(name),
+  )
   const loginError = new URLSearchParams(window.location.search).get('auth_error')
   const message = problem ?? (loginError ? loginErrors[loginError] : null)
   return (
@@ -81,7 +84,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <Button onClick={() => setAttempt((value) => value + 1)}>Try again</Button>
         ) : (
           <div className="grid gap-3">
-            {providers?.providers.map((provider) => (
+            {availableProviders.length === 0 && (
+              <p role="alert" className="text-sm text-muted">
+                Sign-in is not configured. Contact your administrator.
+              </p>
+            )}
+            {availableProviders.map((provider) => (
               <a
                 key={provider}
                 href={`/api/v1/auth/${provider}/login`}

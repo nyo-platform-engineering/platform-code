@@ -18,6 +18,7 @@ type Session struct {
 	Provider     string    `gorm:"type:text;not null"`
 	Subject      string    `gorm:"type:text;not null"`
 	DisplayName  string    `gorm:"type:text;not null"`
+	GoogleEmail  string    `gorm:"type:text;not null;default:''"`
 	GoogleDomain string    `gorm:"type:text;not null;default:''"`
 	ExpiresAt    time.Time `gorm:"type:timestamptz;not null;index:telemetry_sessions_expiry"`
 }

@@ -124,7 +124,7 @@ pinned Node 24 runtime when it is not already available.
 
 For Google/GitHub login, PostgreSQL sessions, and access grants, follow
 [authentication setup](AUTHENTICATION.md). Local development without login remains
-available with `AUTH_MODE=local`.
+available only when explicitly enabled with `AUTH_MODE=local`. OAuth sign-in is the default.
 
 Set `MAX_CONCURRENT_QUERIES` to control how many analytics requests each backend
 instance can execute at once (default `4`, positive integers only). The limit is
