@@ -5,10 +5,18 @@ organizations:
     telemetryScope: local
     identityMappings:
       - provider: google
-        match: {domain: your-company.example}
-        permissions: [observability:traces:read, observability:logs:read]
+        match:
+          domain: your-company.example
+        permissions:
+          - observability:traces:read
+          - observability:logs:read
     # Unified assigns primary to both signals.
-    dataSources: {unified: [primary], traces: [], logs: []}
+    dataSources:
+      unified:
+        - primary
+      traces: []
+      logs: []
+
 clickhouse:
   dataSources:
     unified:
@@ -18,6 +26,8 @@ clickhouse:
         username: app
         secure: false
         passwordEnv: CLICKHOUSE_DATASOURCE_PRIMARY_PASSWORD
-        passwordSecret: {name: telemetry-ui-clickhouse, key: password}
+        passwordSecret:
+          name: telemetry-ui-clickhouse
+          key: password
     traces: []
     logs: []

@@ -1,12 +1,16 @@
 fullnameOverride: telemetry-ui
+
 # This cluster exposes telemetry.localhost over its HTTP-only development
 # Gateway. OAuth deliberately requires HTTPS except on loopback, so keep the
 # bypass explicit here rather than shipping a partially configured login.
 authMode: local
+
 podLabels:
   platform.local/owner: platform-team
+
 labels:
   platform.local/owner: platform-team
+
 # Match this local cluster's no CPU/memory sizing convention.
 resources:
   requests:
@@ -14,12 +18,18 @@ resources:
     memory: null
   limits:
     memory: null
+
 organizations:
   - id: local
     name: Local
     telemetryScope: local
     identityMappings: []
-    dataSources: {unified: [local], traces: [], logs: []}
+    dataSources:
+      unified:
+        - local
+      traces: []
+      logs: []
+
 clickhouse:
   dataSources:
     unified:
@@ -29,16 +39,21 @@ clickhouse:
         username: app
         secure: false
         passwordEnv: CLICKHOUSE_DATASOURCE_LOCAL_PASSWORD
-        passwordSecret: {name: telemetry-ui-clickhouse, key: password}
+        passwordSecret:
+          name: telemetry-ui-clickhouse
+          key: password
     traces: []
     logs: []
+
 httpRoute:
   enabled: true
   parentRefs:
     - name: local
       namespace: traefik
       sectionName: web
-  hostnames: [telemetry.localhost]
+  hostnames:
+    - telemetry.localhost
+
 extraEnv:
   - name: OTEL_EXPORTER_OTLP_ENDPOINT
     value: http://otel-collector-cluster.monitoring.svc.cluster.local:4318

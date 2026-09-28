@@ -1,20 +1,28 @@
 nameOverride: ""
 fullnameOverride: ""
 replicaCount: 1
+
 image:
   repository: telemetry-ui
-  tag: "" # Defaults to appVersion; set to your published image tag.
-  digest: "" # Optional sha256 digest takes precedence over tag.
+  # Defaults to appVersion; set to your published image tag.
+  tag: ""
+  # Optional sha256 digest takes precedence over tag.
+  digest: ""
   pullPolicy: IfNotPresent
+
 imagePullSecrets: []
+
 # Use oauth for Google/GitHub login; configure AUTH_* and provider secrets through extraEnv.
 # local bypasses login and is intended for development.
 authMode: oauth
+
 # Absolute, non-sliding application session lifetime (15m-12h).
 authSessionLifetime: 8h
+
 # Inactivity deadline and opaque session-ID rotation interval.
 authIdleTimeout: 30m
 authRenewalInterval: 15m
+
 # Organizations own identity-to-organization rules and datasource assignments.
 organizations:
   - id: local
@@ -23,12 +31,17 @@ organizations:
     # Each rule needs one exact match: subject, email, or domain.
     identityMappings: []
     # - provider: google
-    #   match: {domain: your-company.example}
-    #   permissions: [observability:traces:read, observability:logs:read]
+    #   match:
+    #     domain: your-company.example
+    #   permissions:
+    #     - observability:traces:read
+    #     - observability:logs:read
     dataSources:
-      unified: [default]
+      unified:
+        - default
       traces: []
       logs: []
+
 clickhouse:
   dataSources:
     # Unified datasources are eligible for both signals. The first source is
@@ -40,56 +53,78 @@ clickhouse:
         username: app
         secure: false
         passwordEnv: CLICKHOUSE_DATASOURCE_DEFAULT_PASSWORD
-        passwordSecret: {name: telemetry-ui-clickhouse, key: password}
+        passwordSecret:
+          name: telemetry-ui-clickhouse
+          key: password
     traces: []
     logs: []
+
 service:
   port: 8080
   annotations: {}
+
 httpRoute:
   enabled: false
   parentRefs: []
   hostnames: []
   annotations: {}
+
 # Kubernetes EnvVar entries; use for OTEL_* settings and Secret references.
 # Managed runtime and generated ClickHouse names are rejected. Dedicated
 # CLICKHOUSE_DATASOURCE_* credentials may reference Secrets here.
 extraEnv: []
+
 labels: {}
 podLabels: {}
 podAnnotations: {}
+
 resources:
   requests:
     cpu: 100m
     memory: 128Mi
   limits:
     memory: 512Mi
+
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65532
   runAsGroup: 65532
   seccompProfile:
     type: RuntimeDefault
+
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   capabilities:
-    drop: [ALL]
+    drop:
+      - ALL
+
 startupProbe:
-  httpGet: {path: /healthz, port: http}
+  httpGet:
+    path: /healthz
+    port: http
   periodSeconds: 2
   timeoutSeconds: 1
   failureThreshold: 30
+
 livenessProbe:
-  httpGet: {path: /healthz, port: http}
+  httpGet:
+    path: /healthz
+    port: http
   periodSeconds: 10
   timeoutSeconds: 2
+
 readinessProbe:
-  httpGet: {path: /readyz, port: http}
+  httpGet:
+    path: /readyz
+    port: http
   periodSeconds: 10
-  timeoutSeconds: 5 # Backend checks have a three-second deadline.
+  # Backend checks have a three-second deadline.
+  timeoutSeconds: 5
   failureThreshold: 3
+
 terminationGracePeriodSeconds: 30
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

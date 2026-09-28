@@ -1,4 +1,5 @@
 authMode: oauth
+
 organizations:
   - id: local
     name: Local
@@ -12,8 +13,12 @@ organizations:
           - observability:admin:read
     dataSources:
       unified: []
-      traces: [primary, archive]
-      logs: [primary]
+      traces:
+        - primary
+        - archive
+      logs:
+        - primary
+
 clickhouse:
   dataSources:
     unified:
@@ -23,7 +28,9 @@ clickhouse:
         username: reader
         secure: false
         passwordEnv: CLICKHOUSE_DATASOURCE_PRIMARY_PASSWORD
-        passwordSecret: {name: telemetry-ui-clickhouse-primary, key: password}
+        passwordSecret:
+          name: telemetry-ui-clickhouse-primary
+          key: password
     traces:
       - id: archive
         address: clickhouse-archive:9440
@@ -31,5 +38,7 @@ clickhouse:
         username: reader
         secure: true
         passwordEnv: CLICKHOUSE_DATASOURCE_ARCHIVE_PASSWORD
-        passwordSecret: {name: telemetry-ui-clickhouse-archive, key: password}
+        passwordSecret:
+          name: telemetry-ui-clickhouse-archive
+          key: password
     logs: []

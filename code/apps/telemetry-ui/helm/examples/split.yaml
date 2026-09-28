@@ -5,8 +5,11 @@ organizations:
     identityMappings: []
     dataSources:
       unified: []
-      traces: [traces-primary]
-      logs: [logs-primary]
+      traces:
+        - traces-primary
+      logs:
+        - logs-primary
+
 clickhouse:
   dataSources:
     unified: []
@@ -17,7 +20,9 @@ clickhouse:
         username: trace-reader
         secure: false
         passwordEnv: CLICKHOUSE_DATASOURCE_TRACES_PASSWORD
-        passwordSecret: {name: telemetry-ui-traces, key: password}
+        passwordSecret:
+          name: telemetry-ui-traces
+          key: password
     logs:
       - id: logs-primary
         address: clickhouse-logs.monitoring.svc.cluster.local:9000
@@ -25,4 +30,6 @@ clickhouse:
         username: log-reader
         secure: false
         passwordEnv: CLICKHOUSE_DATASOURCE_LOGS_PASSWORD
-        passwordSecret: {name: telemetry-ui-logs, key: password}
+        passwordSecret:
+          name: telemetry-ui-logs
+          key: password
