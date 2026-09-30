@@ -29,6 +29,7 @@ beserta seluruh isi dinamisnya hanya boleh diakses analyst.
 - Access token opaque berlaku 5 menit; refresh session maksimum 1 jam. Refresh
   merotasi kedua token dan membatalkan access token lama. Penggunaan ulang refresh
   token lama mencabut seluruh session, termasuk pasangan token hasil rotasi.
+  Maksimum 127 kali refresh per session; setelahnya client perlu login ulang.
 - Secret salah/token kedaluwarsa/tidak dikenal menghasilkan 401. Kapasitas session
   atau batas request bersamaan tercapai menghasilkan 429 dan `Retry-After: 1`.
 - Token acak disimpan sebagai hash. Session bersifat in-memory pada satu Auth
