@@ -1,0 +1,46 @@
+# Overlay for part 2; use together with compose.yaml.
+services:
+  auth:
+    build:
+      context: .
+      dockerfile: auth/Dockerfile
+    environment:
+      AUTH_INTERNAL_TOKEN: ${AUTH_INTERNAL_TOKEN:?required}
+      PUBLIC_CLIENT_SECRET: ${PUBLIC_CLIENT_SECRET:?required}
+      RESPONDER_CLIENT_SECRET: ${RESPONDER_CLIENT_SECRET:?required}
+      ANALYST_CLIENT_SECRET: ${ANALYST_CLIENT_SECRET:?required}
+      ACCESS_TTL_SECONDS: ${ACCESS_TTL_SECONDS:-60}
+      REFRESH_TTL_SECONDS: ${REFRESH_TTL_SECONDS:-3600}
+      AUTH_MAX_SESSIONS: ${AUTH_MAX_SESSIONS:-1000}
+      AUTH_MAX_CONCURRENT: ${AUTH_MAX_CONCURRENT:-32}
+    ports: ["127.0.0.1:${AUTH_PORT:-8084}:8084"]
+    networks: [services]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8084/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    environment:
+      AUTH_URL: http://auth:8084
+      AGGREGATOR_URL: http://aggregator:8083
+      AUTH_INTERNAL_TOKEN: ${AUTH_INTERNAL_TOKEN:?required}
+      AGGREGATOR_TOKEN: ${AGGREGATOR_TOKEN:?required}
+      CLIENT_MAX_CONCURRENT: ${CLIENT_MAX_CONCURRENT:-16}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-3000}
+      STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-60}
+    ports: ["127.0.0.1:${CLIENT_PORT:-8080}:8080"]
+    networks: [services]
+    depends_on:
+      auth:
+        condition: service_healthy
+      aggregator:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 10

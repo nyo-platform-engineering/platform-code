@@ -132,6 +132,7 @@ storage. For component configuration and operating details, continue with the
 | --- | --- |
 | Adjust the runtime, ports, or observability | [Infrastructure](code/infrastructure/README.md) |
 | Run or change the example app | [Go demo](code/apps/go-demo/README.md) |
+| Run the AAT hazard data and client security assignment | [AAT](code/apps/aat/README.md) |
 | Understand GitLab imports, CI, and registry access | [Local GitLab](code/infrastructure/argo-apps/platform/03-cd/gitlab/README.md) |
 | Find shared platform components | [Platform apps](code/infrastructure/argo-apps/platform/README.md) |
 | Register another development app | [Development apps](code/infrastructure/argo-apps/dev/README.md) |

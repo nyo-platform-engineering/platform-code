@@ -31,6 +31,8 @@ code/
 ```
 
 `apps/` defines what a service does and how its container is built.
+The [AAT assignment](apps/aat/README.md) also lives here and runs independently
+with Docker Compose, including hazard storage and client authentication.
 `infrastructure/` defines where it runs and how it connects to the platform.
 For example, Go demo source lives in `apps/go-demo/`, while its image reference,
 probes, and HTTPRoute settings live in `infrastructure/argo-apps/dev/go-demo/`.

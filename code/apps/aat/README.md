@@ -1,8 +1,9 @@
-# AAT — data dan penyimpanan
+# AAT — data, penyimpanan, dan akses client
 
 Go + Gin, PostgreSQL, dan pgx. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
-penyimpanan, dan API internal Aggregator. **Polling otomatis, Client-Facing API,
-Auth Service, broker/consumer, dan load test sistem belum tersedia.**
+penyimpanan, API internal Aggregator, Auth Service, dan Client-Facing API.
+**Polling otomatis, pencatatan kesehatan polling, broker/consumer, dan load test
+sistem belum tersedia.**
 Broker yang direncanakan untuk publikasi event adalah **NATS**.
 
 ## Alur data
@@ -35,6 +36,28 @@ Konfigurasi ada di [.env.example](.env.example). Port host default:
 BMKG `8081`, PVMBG `8082`, Aggregator `8083`; semuanya terikat localhost.
 Setiap service menyediakan `GET /health` tanpa autentikasi.
 
+### Menjalankan bagian 2
+
+Setelah `.env` bagian 1 diisi, tambahkan kredensial client dan jalankan overlay:
+
+```sh
+python3 scripts/setup-client-env.py
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build
+```
+
+Auth Service tersedia di `http://localhost:8084`, Client API di
+`http://localhost:8080`. Endpoint data client adalah `GET /hazards` dengan Bearer
+access token. Identitas demo: `public` (Media, tujuh field Ringkasan), `responder` (Tim Lapangan,
+seluruh field), dan `analyst` (BNPB Internal, seluruh field). Default TTL access
+token 60 detik. Permintaan field Mentah oleh Media menghasilkan 403. Ikuti **[demo orang 2](docs/demo-client.md)**
+untuk login, refresh, pengujian mock, dan perintah operasional.
+
+Client API menyajikan `sources[].status` dan `sources[].stale`. Sebelum orang 3
+menyediakan `/internal/source-status`, hasilnya `unknown` dan `stale: true`.
+[Kontrak integrasi](docs/client-contract.md) mendefinisikan format dan pembagian
+tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
+429 saat semua slot terpakai.
+
 | Konfigurasi | Default / ketentuan |
 |---|---|
 | `BMKG_API_KEY`, `PVMBG_TOKEN`, `AGGREGATOR_TOKEN` | Wajib, berbeda; token Aggregator hanya untuk internal |
@@ -65,6 +88,15 @@ Body maksimal 2 MiB; input tidak valid → 400, auth salah → 401, DB gagal →
 Batch gagal di-rollback. Log JSON menyertakan `X-Correlation-ID`.
 
 Contoh ingest, perubahan skema, outage, dan auth silang: **[panduan demo](docs/demo.md)**.
+Untuk verifikasi otomatis bagian 1 melalui HTTP (manual ingest, tanpa worker polling):
+
+```sh
+python3 scripts/demo-data.py
+python3 scripts/demo-client.py --wait-expiry
+```
+
+Script kedua menunggu kedaluwarsa alami token Tim Lapangan sesuai TTL sebelum refresh.
+Keduanya menerima `--env-file PATH` untuk konfigurasi stack tes terisolasi.
 
 ## Struktur dan penyimpanan
 
@@ -72,6 +104,8 @@ Contoh ingest, perubahan skema, outage, dan auth silang: **[panduan demo](docs/d
   Di dalam mock, `model/` menangani data/state, `controller/` menangani HTTP,
   dan `routes.go` mendaftarkan endpoint.
 - `aggregator/`: route/handler di `cmd/server`, pemetaan dan storage di `internal/aggregate`.
+- `auth/`: identitas client, token opaque, rotasi refresh, dan introspeksi internal.
+- `client/`: API client, allowlist field, timeout upstream, dan penyajian stale.
 - `internal/httpkit/`: helper transport/config/log bersama; business logic tetap per service.
 
 Field standar HazardEvent memakai kolom bertipe; atribut dinamis memakai `attributes`
@@ -108,7 +142,8 @@ Aggregator membutuhkan `DATABASE_URL` yang terjangkau; jangan bentrok dengan por
 Compose biasa cukup untuk satu Aggregator. `compose.scale.yaml` opsional untuk replica
 lokal, menghapus akses host Aggregator, dan belum menyediakan reverse proxy.
 
-Demo ini belum membuktikan polling, stale status, scope/refresh token client, atau
-publikasi event andal (outbox/delivery policy masih diperlukan). HTTP untuk demo lokal.
+Tes bagian 2 mencakup field sesuai identitas, refresh/replay, concurrency, dan
+penyajian stale dengan upstream simulasi. Status polling nyata dan publikasi event
+andal (outbox/delivery policy) masih memerlukan bagian 3. HTTP untuk demo lokal.
 Implementasi dibantu Codex; anggota perlu memahami, memverifikasi, dan mendeklarasikan
-penggunaannya dalam laporan. Pembagian kerja ada di `tasks.local.md` (lokal).
+penggunaannya dalam laporan.

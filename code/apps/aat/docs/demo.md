@@ -1,7 +1,8 @@
 # Demo manual AAT
 
 Jalankan stack mengikuti [README](../README.md), lalu jalankan perintah berikut
-**dari direktori `code/apps/aat`**. Memerlukan `curl` dan `jq`.
+**dari direktori `code/apps/aat`**. Memerlukan `curl` dan `jq`. Alternatif otomatis: `python3 scripts/demo-data.py`,
+yang memeriksa hasil mapping, idempotensi, schema change, dan outage melalui HTTP.
 
 ```sh
 set -a
