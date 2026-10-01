@@ -50,8 +50,23 @@ func Handler(config Config) (http.Handler, error) {
 		}
 		q, err := url.ParseQuery(c.Request.URL.RawQuery)
 		if err != nil || !validQuery(q) {
-			c.JSON(400, gin.H{"error": "invalid query; use source, limit (1..1000), and after"})
+			c.JSON(400, gin.H{"error": "invalid query; use source, limit (1..1000), after, and fields"})
 			return
+		}
+		requested := []string(nil)
+		if q.Has("fields") {
+			requested = strings.Split(q.Get("fields"), ",")
+			for _, field := range requested {
+				if field == "" {
+					c.JSON(400, gin.H{"error": "fields must be a comma-separated list"})
+					return
+				}
+				if !allowedField(identity.ID, field) {
+					c.JSON(403, gin.H{"error": "field access denied"})
+					return
+				}
+			}
+			q.Del("fields") // Projection belongs to this service, never to the store API.
 		}
 		var page struct {
 			Items []Hazard `json:"items"`
@@ -68,7 +83,15 @@ func Handler(config Config) (http.Handler, error) {
 				unavailable(c)
 				return
 			}
-			items = append(items, hazard.project(identity.ID))
+			item := hazard.project(identity.ID)
+			if requested != nil {
+				selected := make(map[string]any, len(requested))
+				for _, field := range requested {
+					selected[field] = item[field]
+				}
+				item = selected
+			}
+			items = append(items, item)
 		}
 		statuses := u.statuses(ctx, q.Get("source"), correlation)
 		c.JSON(200, gin.H{"items": items, "next_after": page.Next, "sources": statuses})
@@ -89,6 +112,10 @@ func validQuery(q url.Values) bool {
 		case "limit":
 			n, err := strconv.Atoi(values[0])
 			if err != nil || n < 1 || n > 1000 {
+				return false
+			}
+		case "fields":
+			if len(values[0]) > 1024 {
 				return false
 			}
 		case "after":

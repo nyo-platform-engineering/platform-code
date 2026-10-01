@@ -1,18 +1,24 @@
 """Exercise the running part-2 stack; no tokens/secrets are printed or persisted."""
 from pathlib import Path
+import argparse
+import time
 import json
 import urllib.error
 import urllib.request
 
 root = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser()
+parser.add_argument("--env-file", type=Path, default=root / ".env")
+parser.add_argument("--wait-expiry", action="store_true", help="Wait for natural responder token expiry before refreshing")
+args = parser.parse_args()
 env = {}
-for line in (root / ".env").read_text().splitlines():
+for line in args.env_file.read_text().splitlines():
     if line.strip() and not line.lstrip().startswith("#") and "=" in line:
         key, value = line.split("=", 1)
         env[key.strip()] = value.strip().strip("\"'")
 
 urls = {name: f"http://127.0.0.1:{env.get(key, default)}" for name, key, default in (
-    ("auth", "AUTH_PORT", "8084"), ("client", "CLIENT_PORT", "8085"),
+    ("auth", "AUTH_PORT", "8084"), ("client", "CLIENT_PORT", "8080"),
     ("aggregator", "AGGREGATOR_PORT", "8083"), ("bmkg", "BMKG_PORT", "8081"),
     ("pvmbg", "PVMBG_PORT", "8082"),
 )}
@@ -39,7 +45,7 @@ for service in urls:
 
 pairs = {}
 fields = {}
-for identity, count in (("public", 5), ("responder", 9), ("analyst", 11)):
+for identity, count in (("public", 7), ("responder", 11), ("analyst", 11)):
     pair = call("auth", "/auth/token", {
         "client_id": identity, "client_secret": env[f"{identity.upper()}_CLIENT_SECRET"],
     })
@@ -50,7 +56,7 @@ for identity, count in (("public", 5), ("responder", 9), ("analyst", 11)):
     item = page["items"][0]
     assert len(item) == count, (identity, sorted(item))
     fields[identity] = sorted(item)
-    if identity != "analyst":
+    if identity == "public":
         assert "attributes" not in item and "source_ref_id" not in item
     if identity == "public":
         assert "latitude" not in item and "longitude" not in item
@@ -58,9 +64,23 @@ for identity, count in (("public", 5), ("responder", 9), ("analyst", 11)):
     if page["sources"][0]["status"] == "unknown":
         assert page["sources"][0]["stale"] is True
 
+if args.wait_expiry:
+    responder = pairs["responder"]
+    wait = responder["expires_in"] + 1
+    print(f"Menunggu kedaluwarsa alami token Tim Lapangan ({wait} detik)...", flush=True)
+    time.sleep(wait)
+    call("client", "/hazards", token=responder["access_token"], expected=401)
+    fresh = call("auth", "/auth/refresh", {"refresh_token": responder["refresh_token"]})
+    call("client", "/hazards", token=fresh["access_token"])
+    call("client", "/hazards", token=responder["access_token"], expected=401)
+    # Refresh remaining sessions without another manual login.
+    for identity in ("public", "analyst"):
+        pairs[identity] = call("auth", "/auth/refresh", {"refresh_token": pairs[identity]["refresh_token"]})
+    pairs["responder"] = fresh
+
 public = pairs["public"]
 call("client", "/hazards", expected=401)
-call("client", "/hazards?fields=attributes", token=public["access_token"], expected=400)
+call("client", "/hazards?fields=attributes", token=public["access_token"], expected=403)
 call("auth", "/auth/token", {"client_id": "public", "client_secret": "wrong"}, expected=401)
 rotated = call("auth", "/auth/refresh", {"refresh_token": public["refresh_token"]})
 call("client", "/hazards", token=public["access_token"], expected=401)
@@ -76,4 +96,4 @@ call("pvmbg", "/volcanic-reports", token=env["BMKG_API_KEY"], expected=401)
 call("bmkg", "/seismic-events", headers={"X-BMKG-Key": pairs["analyst"]["access_token"]}, expected=401)
 call("pvmbg", "/volcanic-reports", token=pairs["analyst"]["access_token"], expected=401)
 call("aggregator", "/internal/hazards", token=pairs["analyst"]["access_token"], expected=401)
-print(json.dumps({"identities_and_fields": fields, "refresh_rotation_and_replay": "passed", "mock_auth_contract": "passed", "source_status": page["sources"]}, indent=2))
+print(json.dumps({"identities_and_fields": fields, "natural_expiry": "passed" if args.wait_expiry else "not run (use --wait-expiry)", "refresh_rotation_and_replay": "passed", "mock_auth_contract": "passed", "source_status": page["sources"]}, indent=2))

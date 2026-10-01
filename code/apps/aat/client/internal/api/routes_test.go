@@ -43,7 +43,7 @@ func TestFieldAllowlistAndInternalCredentialBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		id    string
 		count int
-	}{{"public", 5}, {"responder", 9}, {"analyst", 11}} {
+	}{{"public", 7}, {"responder", 11}, {"analyst", 11}} {
 		t.Run(tc.id, func(t *testing.T) {
 			h := handlerFor(t, func(r *http.Request) (*http.Response, error) {
 				if r.Header.Get("X-Correlation-ID") != "test-correlation" {
@@ -87,7 +87,7 @@ func TestFieldAllowlistAndInternalCredentialBoundary(t *testing.T) {
 			if len(item) != tc.count || item["future_private"] != nil || page.Next != "haz-1" {
 				t.Fatal(page)
 			}
-			if tc.id != "analyst" && (item["attributes"] != nil || item["source_ref_id"] != nil) {
+			if tc.id == "public" && (item["attributes"] != nil || item["source_ref_id"] != nil) {
 				t.Fatal("private data leaked")
 			}
 			if tc.id == "public" && item["latitude"] != nil {
@@ -115,7 +115,7 @@ func TestInvalidAuthQueriesAndUpstreamFailures(t *testing.T) {
 		{"auth_bad_json", "Bearer token", "", `{`, hazardPage, 200, 200, 503},
 		{"agg_down", "Bearer token", "", `{"active":true,"client_id":"public"}`, `{}`, 200, 503, 503},
 		{"agg_bad_shape", "Bearer token", "", `{"active":true,"client_id":"public"}`, `{"items":[{}]}`, 200, 200, 503},
-		{"field_override", "Bearer token", "?fields=attributes", `{"active":true,"client_id":"public"}`, hazardPage, 200, 200, 400},
+		{"field_override", "Bearer token", "?fields=attributes", `{"active":true,"client_id":"public"}`, hazardPage, 200, 200, 403},
 		{"role_override", "Bearer token", "?role=analyst", `{"active":true,"client_id":"public"}`, hazardPage, 200, 200, 400},
 		{"duplicate_limit", "Bearer token", "?limit=1&limit=2", `{"active":true,"client_id":"public"}`, hazardPage, 200, 200, 400},
 		{"bad_limit", "Bearer token", "?limit=1001", `{"active":true,"client_id":"public"}`, hazardPage, 200, 200, 400},
@@ -213,5 +213,61 @@ func TestConcurrentRequestRejectedAndTimeoutReleasesSlot(t *testing.T) {
 	w = invoke(h, "/hazards", "Bearer token")
 	if w.Code != 200 {
 		t.Fatal("slot not released", w.Code)
+	}
+}
+
+func TestRequestedFieldsEnforceM1Permissions(t *testing.T) {
+	for _, tc := range []struct {
+		id, query string
+		want      int
+	}{
+		{"public", "source,ingested_at", 200},
+		{"public", "latitude", 403}, {"public", "longitude", 403},
+		{"public", "source_ref_id", 403}, {"public", "attributes", 403},
+		{"public", "severity,attributes", 403}, {"public", "future_private", 403},
+		{"responder", "source_ref_id,attributes,latitude,longitude", 200},
+		{"analyst", "source_ref_id,attributes,latitude,longitude", 200},
+		{"public", "", 400}, {"public", "source,", 400},
+	} {
+		t.Run(tc.id+"/"+tc.query, func(t *testing.T) {
+			dataCalls := 0
+			h := handlerFor(t, func(r *http.Request) (*http.Response, error) {
+				if r.URL.Host == "auth" {
+					return response(200, `{"active":true,"client_id":"`+tc.id+`"}`), nil
+				}
+				if r.URL.Path == "/internal/hazards" {
+					dataCalls++
+					if r.URL.Query().Has("fields") {
+						t.Error("projection query forwarded to storage")
+					}
+					return response(200, hazardPage), nil
+				}
+				return response(404, `{}`), nil
+			})
+			w := invoke(h, "/hazards?fields="+tc.query, "Bearer token")
+			if w.Code != tc.want {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			if tc.want != 200 && dataCalls != 0 {
+				t.Fatal("denied field request reached data API")
+			}
+			if tc.want == 200 {
+				var page struct {
+					Items []map[string]any `json:"items"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+					t.Fatal(err)
+				}
+				wanted := strings.Split(tc.query, ",")
+				if len(page.Items) != 1 || len(page.Items[0]) != len(wanted) {
+					t.Fatal(page)
+				}
+				for _, field := range wanted {
+					if _, ok := page.Items[0][field]; !ok {
+						t.Fatal("missing field", field)
+					}
+				}
+			}
+		})
 	}
 }

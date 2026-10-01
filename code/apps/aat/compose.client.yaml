@@ -9,7 +9,7 @@ services:
       PUBLIC_CLIENT_SECRET: ${PUBLIC_CLIENT_SECRET:?required}
       RESPONDER_CLIENT_SECRET: ${RESPONDER_CLIENT_SECRET:?required}
       ANALYST_CLIENT_SECRET: ${ANALYST_CLIENT_SECRET:?required}
-      ACCESS_TTL_SECONDS: ${ACCESS_TTL_SECONDS:-300}
+      ACCESS_TTL_SECONDS: ${ACCESS_TTL_SECONDS:-60}
       REFRESH_TTL_SECONDS: ${REFRESH_TTL_SECONDS:-3600}
       AUTH_MAX_SESSIONS: ${AUTH_MAX_SESSIONS:-1000}
       AUTH_MAX_CONCURRENT: ${AUTH_MAX_CONCURRENT:-32}
@@ -32,7 +32,7 @@ services:
       CLIENT_MAX_CONCURRENT: ${CLIENT_MAX_CONCURRENT:-16}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-3000}
       STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-60}
-    ports: ["127.0.0.1:${CLIENT_PORT:-8085}:8085"]
+    ports: ["127.0.0.1:${CLIENT_PORT:-8080}:8080"]
     networks: [services]
     depends_on:
       auth:
@@ -40,7 +40,7 @@ services:
       aggregator:
         condition: service_started
     healthcheck:
-      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8085/health"]
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/health"]
       interval: 5s
       timeout: 2s
       retries: 10

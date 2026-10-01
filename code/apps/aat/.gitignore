@@ -2,3 +2,6 @@
 bin/
 *.test
 *.local.*
+.test-cache/
+.test-modcache/
+__pycache__/

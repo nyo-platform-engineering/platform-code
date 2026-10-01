@@ -1,8 +1,7 @@
 # Kontrak akses client — orang 2
 
-Kontrak demo ini menerjemahkan pembagian kerja orang 2. Nama identitas dan
-matriks field di bawah merupakan pilihan implementasi karena pembagian kerja
-tidak merinci keduanya. Koordinasikan matriks ini jika spesifikasi tim berubah.
+Kontrak ini mengikuti Spesifikasi M1 halaman 11–15 dan Problem 3. Nama
+`client_id` merupakan pilihan implementasi; hak akses dan TTL default mengikuti M1.
 
 ## Identitas dan field
 
@@ -11,14 +10,14 @@ server; client tidak dapat memilih role saat meminta atau me-refresh token.
 
 | client_id | Field HazardEvent yang terlihat |
 |---|---|
-| `public` | `hazard_id`, `hazard_type`, `severity`, `area_name`, `occurred_at` |
-| `responder` | Field public + `source`, `latitude`, `longitude`, `ingested_at` |
-| `analyst` | Field responder + `source_ref_id`, `attributes` |
+| `public` — Media / Pers | Tujuh field Ringkasan: `hazard_id`, `source`, `hazard_type`, `severity`, `area_name`, `occurred_at`, `ingested_at` |
+| `responder` — Tim Lapangan | Seluruh sebelas field, termasuk `source_ref_id`, `latitude`, `longitude`, `attributes` |
+| `analyst` — BNPB Pusat / Internal Ops | Seluruh sebelas field, sama dengan Tim Lapangan |
 
 Semua identitas dapat membaca kedua sumber. Filter menggunakan allowlist di
 Client API: field baru dari Aggregator tidak otomatis menjadi publik. Envelope
 `next_after` dan `sources` tersedia untuk semua identitas. Field `attributes`
-beserta seluruh isi dinamisnya hanya boleh diakses analyst.
+beserta seluruh isi dinamisnya boleh diakses responder dan analyst.
 
 ## Auth Service
 
@@ -26,7 +25,7 @@ beserta seluruh isi dinamisnya hanya boleh diakses analyst.
 - `POST /auth/refresh`: JSON `{"refresh_token":"..."}`.
 - Keduanya mengembalikan `access_token`, `token_type: "Bearer"`, `expires_in`,
   `refresh_token`, dan `refresh_expires_in`; `Cache-Control: no-store`.
-- Access token opaque berlaku 5 menit; refresh session maksimum 1 jam. Refresh
+- Access token opaque berlaku 60 detik secara default (configurable lewat `ACCESS_TTL_SECONDS`); refresh session maksimum 1 jam. Refresh
   merotasi kedua token dan membatalkan access token lama. Penggunaan ulang refresh
   token lama mencabut seluruh session, termasuk pasangan token hasil rotasi.
   Maksimum 127 kali refresh per session; setelahnya client perlu login ulang.
@@ -42,7 +41,11 @@ beserta seluruh isi dinamisnya hanya boleh diakses analyst.
 ## Client-Facing API
 
 `GET /hazards` memerlukan Bearer access token. Query yang diteruskan ke Aggregator:
-`source=BMKG|PVMBG`, `limit=1..1000`, dan `after`. Query lainnya ditolak (400).
+`source=BMKG|PVMBG`, `limit=1..1000`, dan `after`. Query `fields` menerima
+nama field dipisahkan koma dan diproses di Client API. Permintaan eksplisit field
+Mentah oleh Media menghasilkan 403 sebelum pembacaan data, termasuk kombinasi
+Ringkasan/Mentah. Field tak dikenal juga 403; query lain atau sintaks salah 400.
+Semua client read-only: tidak ada endpoint tulis data client pada M1.
 Tidak ada akses database langsung dari Client API atau Auth Service.
 
 `CLIENT_MAX_CONCURRENT` membatasi request aktif per proses, termasuk panggilan
@@ -53,6 +56,9 @@ Auth Service. Batas ini bukan rate limit per pengguna ataupun batas lintas repli
 Token tidak sah menghasilkan 401. Auth atau pembacaan hazards tidak tersedia,
 timeout, atau respons upstream rusak menghasilkan 503. Token internal tidak
 pernah diteruskan ke client. Timeout dan pembatalan request diteruskan ke upstream.
+Setiap panggilan keluar mencatat JSON log `outbound_request` dengan correlation ID,
+tujuan/path, status (0 jika transport gagal), dan latensi termasuk pembacaan body.
+Secret, token, query, dan isi body tidak dicatat.
 
 ## Kontrak dengan orang 1: mock dan Aggregator
 

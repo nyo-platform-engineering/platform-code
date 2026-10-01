@@ -24,7 +24,7 @@ func main() {
 		panic("AUTH_INTERNAL_TOKEN must be at least 32 characters")
 	}
 	store := service.NewStore(clients,
-		time.Duration(httpkit.Integer("ACCESS_TTL_SECONDS", 300))*time.Second,
+		time.Duration(httpkit.Integer("ACCESS_TTL_SECONDS", 60))*time.Second,
 		time.Duration(httpkit.Integer("REFRESH_TTL_SECONDS", 3600))*time.Second,
 		httpkit.Integer("AUTH_MAX_SESSIONS", 1000))
 	httpkit.Serve("Auth", "8084", service.Handler(store, internal, httpkit.Integer("AUTH_MAX_CONCURRENT", 32)))

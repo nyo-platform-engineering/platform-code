@@ -46,9 +46,10 @@ docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build
 ```
 
 Auth Service tersedia di `http://localhost:8084`, Client API di
-`http://localhost:8085`. Endpoint data client adalah `GET /hazards` dengan Bearer
-access token. Identitas demo: `public`, `responder`, dan `analyst`; masing-masing
-memiliki allowlist field sendiri. Ikuti **[demo orang 2](docs/demo-client.md)**
+`http://localhost:8080`. Endpoint data client adalah `GET /hazards` dengan Bearer
+access token. Identitas demo: `public` (Media, tujuh field Ringkasan), `responder` (Tim Lapangan,
+seluruh field), dan `analyst` (BNPB Internal, seluruh field). Default TTL access
+token 60 detik. Permintaan field Mentah oleh Media menghasilkan 403. Ikuti **[demo orang 2](docs/demo-client.md)**
 untuk login, refresh, pengujian mock, dan perintah operasional.
 
 Client API menyajikan `sources[].status` dan `sources[].stale`. Sebelum orang 3
@@ -87,6 +88,15 @@ Body maksimal 2 MiB; input tidak valid → 400, auth salah → 401, DB gagal →
 Batch gagal di-rollback. Log JSON menyertakan `X-Correlation-ID`.
 
 Contoh ingest, perubahan skema, outage, dan auth silang: **[panduan demo](docs/demo.md)**.
+Untuk verifikasi otomatis bagian 1 melalui HTTP (manual ingest, tanpa worker polling):
+
+```sh
+python3 scripts/demo-data.py
+python3 scripts/demo-client.py --wait-expiry
+```
+
+Script kedua menunggu kedaluwarsa alami token Tim Lapangan sesuai TTL sebelum refresh.
+Keduanya menerima `--env-file PATH` untuk konfigurasi stack tes terisolasi.
 
 ## Struktur dan penyimpanan
 
@@ -136,4 +146,4 @@ Tes bagian 2 mencakup field sesuai identitas, refresh/replay, concurrency, dan
 penyajian stale dengan upstream simulasi. Status polling nyata dan publikasi event
 andal (outbox/delivery policy) masih memerlukan bagian 3. HTTP untuk demo lokal.
 Implementasi dibantu Codex; anggota perlu memahami, memverifikasi, dan mendeklarasikan
-penggunaannya dalam laporan. Pembagian kerja ada di `tasks.local.md` (lokal).
+penggunaannya dalam laporan.

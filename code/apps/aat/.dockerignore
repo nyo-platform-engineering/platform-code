@@ -2,3 +2,7 @@
 .git
 *.md
 tests
+.test-cache/
+.test-modcache/
+**/__pycache__/
+bin/

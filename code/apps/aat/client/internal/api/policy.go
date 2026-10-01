@@ -40,12 +40,21 @@ func (h Hazard) valid() bool {
 }
 
 func (h Hazard) project(identity string) map[string]any {
-	fields := map[string]any{"hazard_id": h.ID, "hazard_type": h.Type, "severity": h.Severity, "area_name": h.Area, "occurred_at": h.Occurred}
+	fields := map[string]any{"hazard_id": h.ID, "hazard_type": h.Type, "severity": h.Severity, "area_name": h.Area, "occurred_at": h.Occurred, "source": h.Source, "ingested_at": h.Ingested}
 	if identity == "responder" || identity == "analyst" {
-		fields["source"], fields["latitude"], fields["longitude"], fields["ingested_at"] = h.Source, *h.Latitude, *h.Longitude, h.Ingested
-	}
-	if identity == "analyst" {
+		fields["latitude"], fields["longitude"] = *h.Latitude, *h.Longitude
 		fields["source_ref_id"], fields["attributes"] = h.Ref, h.Attributes
 	}
 	return fields
+}
+
+// Field permissions follow the M1 classification, including future deny-by-default fields.
+func allowedField(identity, field string) bool {
+	switch field {
+	case "hazard_id", "source", "hazard_type", "severity", "area_name", "occurred_at", "ingested_at":
+		return true
+	case "source_ref_id", "latitude", "longitude", "attributes":
+		return identity == "responder" || identity == "analyst"
+	}
+	return false
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,10 +49,18 @@ func (u upstream) get(ctx context.Context, method, endpoint, token, correlation 
 	if body != nil {
 		r.Header.Set("Content-Type", "application/json")
 	}
+	start := time.Now()
+	status := 0
+	defer func() {
+		slog.Info("outbound_request", "service", "Client API", "correlation_id", correlation,
+			"method", method, "upstream", r.URL.Host, "path", r.URL.Path,
+			"status", status, "latency_ms", float64(time.Since(start).Microseconds())/1000)
+	}()
 	response, err := u.http.Do(r)
 	if err != nil {
 		return err
 	}
+	status = response.StatusCode
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
 		return fmt.Errorf("upstream status %d", response.StatusCode)
