@@ -21,6 +21,12 @@ services:
       DATABASE_URL: "host=postgres user=${POSTGRES_USER:?required} password=${POSTGRES_PASSWORD:?required} dbname=${POSTGRES_DB:?required} sslmode=disable"
       AGGREGATOR_TOKEN: ${AGGREGATOR_TOKEN:?required}
       DB_MAX_CONNS: ${DB_MAX_CONNS:-5}
+      BMKG_URL: http://bmkg:8081
+      BMKG_API_KEY: ${BMKG_API_KEY:?required}
+      PVMBG_URL: http://pvmbg:8082
+      PVMBG_TOKEN: ${PVMBG_TOKEN:?required}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-3}
+      POLL_TIMEOUT_MS: ${POLL_TIMEOUT_MS:-4000}
     ports: ["127.0.0.1:${AGGREGATOR_PORT:-8083}:8083"]
     networks: [services, storage]
     depends_on:

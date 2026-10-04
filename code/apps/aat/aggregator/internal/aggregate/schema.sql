@@ -77,3 +77,13 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS hazards_source ON hazards(source, id);
 CREATE UNIQUE INDEX IF NOT EXISTS hazards_source_ref ON hazards(source, source_ref_id);
+
+-- Poll health belongs to the Aggregator. cursor_at is deliberately kept separate from last_success_at so the next inclusive request cannot skip an event created while a source was responding.
+CREATE TABLE IF NOT EXISTS source_polls (
+    source text PRIMARY KEY CHECK (source IN ('BMKG', 'PVMBG')),
+    healthy boolean NOT NULL DEFAULT false,
+    last_success_at timestamptz,
+    cursor_at timestamptz,
+    last_error_at timestamptz,
+    last_error text
+);

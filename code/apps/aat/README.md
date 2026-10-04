@@ -1,10 +1,13 @@
 # AAT — data, penyimpanan, dan akses client
 
 Go + Gin, PostgreSQL, dan pgx. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
-penyimpanan, API internal Aggregator, Auth Service, dan Client-Facing API.
-**Polling otomatis, pencatatan kesehatan polling, broker/consumer, dan load test
+penyimpanan, polling otomatis beserta pencatatan kesehatan sumber, API internal
+Aggregator, Auth Service, dan Client-Facing API. **Broker/consumer dan load test
 sistem belum tersedia.**
 Broker yang direncanakan untuk publikasi event adalah **NATS**.
+
+Untuk tur struktur direktori dan penjelasan tiap package, lihat
+[Project Structure Guide](PROJECT_STRUCTURE.md).
 
 ## Alur data
 
@@ -15,8 +18,9 @@ Aggregator → polling BMKG / PVMBG → normalisasi → PostgreSQL
 Client → Client-Facing API → API Aggregator → PostgreSQL
 ```
 
-Mock bersifat pasif; tidak membaca atau mengirim data ke Aggregator.
-Saat ini ingest dilakukan manual lewat HTTP. Hanya Aggregator yang mengakses DB;
+Mock bersifat pasif; tidak membaca atau mengirim data ke Aggregator. Aggregator
+melakukan polling independen pada interval konfigurabel; ingest HTTP internal tetap
+tersedia untuk demo data manual. Hanya Aggregator yang mengakses DB;
 PostgreSQL berada di network internal tanpa port host.
 
 ## Menjalankan
@@ -52,8 +56,8 @@ seluruh field), dan `analyst` (BNPB Internal, seluruh field). Default TTL access
 token 60 detik. Permintaan field Mentah oleh Media menghasilkan 403. Ikuti **[demo orang 2](docs/demo-client.md)**
 untuk login, refresh, pengujian mock, dan perintah operasional.
 
-Client API menyajikan `sources[].status` dan `sources[].stale`. Sebelum orang 3
-menyediakan `/internal/source-status`, hasilnya `unknown` dan `stale: true`.
+Client API menyajikan `sources[].status` dan `sources[].stale`, berdasarkan
+`/internal/source-status` milik Aggregator.
 [Kontrak integrasi](docs/client-contract.md) mendefinisikan format dan pembagian
 tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
 429 saat semua slot terpakai.
@@ -66,6 +70,7 @@ tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
 | `PVMBG_DELAY_MIN_MS`, `PVMBG_DELAY_MAX_MS` | `500`, `3000`; rentang 0–10000 ms |
 | `EVENT_INTERVAL_SECONDS` | `10`, rentang 1–10 detik |
 | `DB_MAX_CONNS` | `5` per Aggregator |
+| `POLL_INTERVAL_SECONDS`, `POLL_TIMEOUT_MS` | `3`, `4000`; interval dan batas waktu polling Aggregator |
 
 Mock dimulai dengan 20 record, lalu menghasilkan satu record per interval.
 Filter `since` inklusif; warning mengikuti waktu gempa. State mock reset saat restart.
@@ -81,6 +86,11 @@ Filter `since` inklusif; warning mengikuti waktu gempa. State mock reset saat re
 Body admin: `{"enabled":true|false}`. Body ingest BMKG:
 `{"seismic_events":[...],"tsunami_warnings":[...]}`; PVMBG: `{"volcanic_reports":[...]}`.
 Respons ingest: `{"changed":N,"items":[...]}`; payload identik menghasilkan `changed:0`.
+
+Aggregator polling memakai `BMKG_URL` dan `PVMBG_URL` (default service Compose),
+menjalankan kedua sumber secara independen, dan memakai `POLL_INTERVAL_SECONDS`
+serta `POLL_TIMEOUT_MS`. `GET /internal/source-status` mengembalikan hasil polling
+terakhir untuk BMKG dan PVMBG; kegagalan source tidak menghentikan polling source lain.
 
 Pembacaan hazards menerima `source`, `limit` (1–1000), dan `after`; respons berisi
 `items` dan `next_after`. Pagination berdasarkan ID, bukan cursor perubahan.

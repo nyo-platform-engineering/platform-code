@@ -18,6 +18,7 @@ func handler(store aggregate.Store, token string) http.Handler {
 
 	mux.GET("/health", s.health)
 	private.GET("/internal/hazards", s.hazards)
+	private.GET("/internal/source-status", s.sourceStatus)
 	private.POST("/internal/ingest/bmkg", s.ingest("BMKG"))
 	private.POST("/internal/ingest/pvmbg", s.ingest("PVMBG"))
 

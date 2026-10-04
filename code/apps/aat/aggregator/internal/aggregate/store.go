@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,6 +18,19 @@ var schema string
 
 type Store struct {
 	Pool *pgxpool.Pool
+}
+
+type PollState struct {
+	Source      string
+	Healthy     bool
+	LastSuccess *time.Time
+	Cursor      *time.Time
+}
+
+type SourceStatus struct {
+	Source      string     `json:"source"`
+	Healthy     bool       `json:"healthy"`
+	LastSuccess *time.Time `json:"last_success_at"`
 }
 
 type Invalid struct {
@@ -244,4 +258,62 @@ func (s Store) List(ctx context.Context, source, after string, limit int) ([]Haz
 	}
 
 	return items, rows.Err()
+}
+
+func (s Store) PollState(ctx context.Context, source string) (PollState, error) {
+	state := PollState{Source: source}
+	var lastSuccess, cursor *time.Time
+	e := s.Pool.QueryRow(ctx, `SELECT healthy, last_success_at, cursor_at FROM source_polls WHERE source=$1`, source).Scan(&state.Healthy, &lastSuccess, &cursor)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return state, nil
+	}
+	if e != nil {
+		return PollState{}, e
+	}
+	state.LastSuccess = utc(lastSuccess)
+	state.Cursor = utc(cursor)
+	return state, nil
+}
+
+func (s Store) MarkPollSuccess(ctx context.Context, source string, cursor time.Time) error {
+	_, e := s.Pool.Exec(ctx, `INSERT INTO source_polls(source, healthy, last_success_at, cursor_at, last_error_at, last_error)
+        VALUES($1, true, now(), $2, NULL, NULL)
+        ON CONFLICT(source) DO UPDATE SET healthy=true, last_success_at=excluded.last_success_at,
+        cursor_at=excluded.cursor_at, last_error_at=NULL, last_error=NULL`, source, cursor.UTC())
+	return e
+}
+
+func (s Store) MarkPollFailure(ctx context.Context, source, message string) error {
+	_, e := s.Pool.Exec(ctx, `INSERT INTO source_polls(source, healthy, last_error_at, last_error)
+        VALUES($1, false, now(), $2)
+        ON CONFLICT(source) DO UPDATE SET healthy=false, last_error_at=excluded.last_error_at, last_error=excluded.last_error`, source, message)
+	return e
+}
+
+func (s Store) SourceStatuses(ctx context.Context) ([]SourceStatus, error) {
+	rows, e := s.Pool.Query(ctx, `SELECT sources.source, COALESCE(p.healthy, false), p.last_success_at
+        FROM (VALUES ('BMKG'::text), ('PVMBG'::text)) AS sources(source)
+        LEFT JOIN source_polls p USING(source) ORDER BY sources.source`)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	statuses := []SourceStatus{}
+	for rows.Next() {
+		var status SourceStatus
+		if e = rows.Scan(&status.Source, &status.Healthy, &status.LastSuccess); e != nil {
+			return nil, e
+		}
+		status.LastSuccess = utc(status.LastSuccess)
+		statuses = append(statuses, status)
+	}
+	return statuses, rows.Err()
+}
+
+func utc(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	converted := value.UTC()
+	return &converted
 }
