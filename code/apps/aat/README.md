@@ -2,9 +2,8 @@
 
 Go + Gin, PostgreSQL, dan pgx. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
 penyimpanan, polling otomatis beserta pencatatan kesehatan sumber, API internal
-Aggregator, Auth Service, dan Client-Facing API. **Broker/consumer dan load test
-sistem belum tersedia.**
-Broker yang direncanakan untuk publikasi event adalah **NATS**.
+Aggregator, Auth Service, Client-Facing API, NATS JetStream, dashboard updater,
+dan field notifier. Sustained system load testing remains to be completed.
 
 Untuk tur struktur direktori dan penjelasan tiap package, lihat
 [Project Structure Guide](PROJECT_STRUCTURE.md).
@@ -53,7 +52,7 @@ Auth Service tersedia di `http://localhost:8084`, Client API di
 `http://localhost:8080`. Endpoint data client adalah `GET /hazards` dengan Bearer
 access token. Identitas demo: `public` (Media, tujuh field Ringkasan), `responder` (Tim Lapangan,
 seluruh field), dan `analyst` (BNPB Internal, seluruh field). Default TTL access
-token 60 detik. Permintaan field Mentah oleh Media menghasilkan 403. Ikuti **[demo orang 2](docs/demo-client.md)**
+token 60 detik. Permintaan field Mentah oleh Media menghasilkan 403. Ikuti **[demo-client](docs/demo-client.md)**
 untuk login, refresh, pengujian mock, dan perintah operasional.
 
 Client API menyajikan `sources[].status` dan `sources[].stale`, berdasarkan
@@ -62,25 +61,26 @@ Client API menyajikan `sources[].status` dan `sources[].stale`, berdasarkan
 tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
 429 saat semua slot terpakai.
 
-| Konfigurasi | Default / ketentuan |
-|---|---|
-| `BMKG_API_KEY`, `PVMBG_TOKEN`, `AGGREGATOR_TOKEN` | Wajib, berbeda; token Aggregator hanya untuk internal |
+| Konfigurasi                                         | Default / ketentuan                                                  |
+| --------------------------------------------------- | -------------------------------------------------------------------- |
+| `BMKG_API_KEY`, `PVMBG_TOKEN`, `AGGREGATOR_TOKEN`   | Wajib, berbeda; token Aggregator hanya untuk internal                |
 | `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | Wajib; gunakan password hex agar aman untuk format connection string |
-| `BMKG_DELAY_MS` | `100`, rentang 50–150 ms |
-| `PVMBG_DELAY_MIN_MS`, `PVMBG_DELAY_MAX_MS` | `500`, `3000`; rentang 0–10000 ms |
-| `EVENT_INTERVAL_SECONDS` | `10`, rentang 1–10 detik |
-| `DB_MAX_CONNS` | `5` per Aggregator |
-| `POLL_INTERVAL_SECONDS`, `POLL_TIMEOUT_MS` | `3`, `4000`; interval dan batas waktu polling Aggregator |
+| `BMKG_DELAY_MS`                                     | `100`, rentang 50–150 ms                                             |
+| `PVMBG_DELAY_MIN_MS`, `PVMBG_DELAY_MAX_MS`          | `500`, `3000`; rentang 0–10000 ms                                    |
+| `EVENT_INTERVAL_SECONDS`                            | `10`, rentang 1–10 detik                                             |
+| `DB_MAX_CONNS`                                      | `5` per Aggregator                                                   |
+| `POLL_INTERVAL_SECONDS`, `POLL_TIMEOUT_MS`          | `3`, `4000`; interval dan batas waktu polling Aggregator             |
+| `NATS_URL`                                          | `nats://nats:4222`; alamat broker untuk Aggregator dan consumers     |
 
 Mock dimulai dengan 20 record, lalu menghasilkan satu record per interval.
 Filter `since` inklusif; warning mengikuti waktu gempa. State mock reset saat restart.
 
 ## Endpoint
 
-| Service / autentikasi | Endpoint |
-|---|---|
-| BMKG — `X-BMKG-Key` | `GET /seismic-events`, `GET /tsunami-warnings`; keduanya menerima `?since=` |
-| PVMBG — Bearer `PVMBG_TOKEN` | `GET /volcanic-reports?since=`, `POST /admin/schema-version`, `POST /admin/outage` |
+| Service / autentikasi                  | Endpoint                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| BMKG — `X-BMKG-Key`                    | `GET /seismic-events`, `GET /tsunami-warnings`; keduanya menerima `?since=`          |
+| PVMBG — Bearer `PVMBG_TOKEN`           | `GET /volcanic-reports?since=`, `POST /admin/schema-version`, `POST /admin/outage`   |
 | Aggregator — Bearer `AGGREGATOR_TOKEN` | `POST /internal/ingest/bmkg`, `POST /internal/ingest/pvmbg`, `GET /internal/hazards` |
 
 Body admin: `{"enabled":true|false}`. Body ingest BMKG:
@@ -153,7 +153,10 @@ Compose biasa cukup untuk satu Aggregator. `compose.scale.yaml` opsional untuk r
 lokal, menghapus akses host Aggregator, dan belum menyediakan reverse proxy.
 
 Tes bagian 2 mencakup field sesuai identitas, refresh/replay, concurrency, dan
-penyajian stale dengan upstream simulasi. Status polling nyata dan publikasi event
-andal (outbox/delivery policy) masih memerlukan bagian 3. HTTP untuk demo lokal.
+penyajian stale dengan upstream simulasi. Polling otomatis, outbox, dan JetStream
+delivery kini tersedia. Load test terintegrasi masih perlu dijalankan.
 Implementasi dibantu Codex; anggota perlu memahami, memverifikasi, dan mendeklarasikan
 penggunaannya dalam laporan.
+
+Untuk demonstrasi pub-sub, penghentian dan pemulihan consumer, serta penambahan
+subscriber baru, ikuti [panduan Problem 5](docs/demo-events.md).

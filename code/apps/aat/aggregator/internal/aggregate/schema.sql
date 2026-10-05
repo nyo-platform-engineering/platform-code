@@ -87,3 +87,16 @@ CREATE TABLE IF NOT EXISTS source_polls (
     last_error_at timestamptz,
     last_error text
 );
+
+-- The outbox is committed with the canonical hazard. A relay publishes rows asynchronously and marks them only after JetStream confirms persistence.
+CREATE TABLE IF NOT EXISTS hazard_outbox (
+    id bigserial PRIMARY KEY,
+    event_key text NOT NULL UNIQUE,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    published_at timestamptz,
+    lease_until timestamptz,
+    attempts integer NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS hazard_outbox_pending ON hazard_outbox(id)
+    WHERE published_at IS NULL;

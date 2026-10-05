@@ -14,8 +14,8 @@ export AGGREGATOR_URL="http://localhost:${AGGREGATOR_PORT:-8083}"
 ```
 
 Server Aggregator bagian 1 menerima batch lewat HTTP dan menyediakan data lewat
-HTTP. Pengambilan otomatis dari mock akan dipasang sebagai polling bagian 3.
-Untuk memverifikasi bagian 1 secara manual, ekspor `.env` dan URL seperti di atas.
+HTTP. Aggregator juga melakukan polling otomatis; jalur ingest manual tetap tersedia
+untuk memverifikasi mapping secara terkontrol. Ekspor `.env` dan URL seperti di atas.
 
 ```sh
 correlation_id="manual-$(date +%s)"
@@ -74,6 +74,7 @@ curl -fsS -H "Authorization: Bearer $PVMBG_TOKEN" -H 'Content-Type: application/
   -d '{"enabled":false}' "$PVMBG_URL/admin/schema-version"
 ```
 
-Simpan output dan log correlation ID sebagai bukti demo. Alur manual ini belum
-membuktikan polling otomatis; integrasi worker tetap menjadi bagian 3.
+Simpan output dan log correlation ID sebagai bukti demo. Polling otomatis dapat
+ditunjukkan dengan membaca `/internal/hazards` dan `/internal/source-status` setelah
+satu interval polling.
 

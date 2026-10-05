@@ -33,6 +33,12 @@ type SourceStatus struct {
 	LastSuccess *time.Time `json:"last_success_at"`
 }
 
+type OutboxMessage struct {
+	ID       int64
+	EventKey string
+	Payload  []byte
+}
+
 type Invalid struct {
 	Err error
 }
@@ -222,6 +228,14 @@ func (s Store) Ingest(ctx context.Context, source string, body map[string][]Reco
 		}
 
 		if tag.RowsAffected() > 0 {
+			payload, e := json.Marshal(h)
+			if e != nil {
+				return nil, e
+			}
+			eventKey := h.ID + "-" + h.Ingested.UTC().Format(time.RFC3339Nano)
+			if _, e = tx.Exec(ctx, `INSERT INTO hazard_outbox(event_key, payload) VALUES($1, $2) ON CONFLICT(event_key) DO NOTHING`, eventKey, payload); e != nil {
+				return nil, e
+			}
 			changed = append(changed, h)
 		}
 	}
@@ -316,4 +330,46 @@ func utc(value *time.Time) *time.Time {
 	}
 	converted := value.UTC()
 	return &converted
+}
+
+func (s Store) ClaimOutbox(ctx context.Context, limit int, lease time.Duration) ([]OutboxMessage, error) {
+	tx, e := s.Pool.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer tx.Rollback(ctx)
+	rows, e := tx.Query(ctx, `WITH selected AS (
+        SELECT id FROM hazard_outbox
+        WHERE published_at IS NULL AND (lease_until IS NULL OR lease_until < now())
+        ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED
+    )
+    UPDATE hazard_outbox AS outbox
+    SET lease_until = now() + $2, attempts = attempts + 1
+    FROM selected WHERE outbox.id = selected.id
+    RETURNING outbox.id, outbox.event_key, outbox.payload`, limit, lease)
+	if e != nil {
+		return nil, e
+	}
+	items := []OutboxMessage{}
+	for rows.Next() {
+		var item OutboxMessage
+		if e = rows.Scan(&item.ID, &item.EventKey, &item.Payload); e != nil {
+			rows.Close()
+			return nil, e
+		}
+		items = append(items, item)
+	}
+	rows.Close()
+	if e = rows.Err(); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return nil, e
+	}
+	return items, nil
+}
+
+func (s Store) MarkOutboxPublished(ctx context.Context, id int64) error {
+	_, e := s.Pool.Exec(ctx, `UPDATE hazard_outbox SET published_at=now(), lease_until=NULL WHERE id=$1 AND published_at IS NULL`, id)
+	return e
 }

@@ -46,6 +46,7 @@ func main() {
 	go newSourcePoller("PVMBG", httpkit.Env("PVMBG_URL", "http://pvmbg:8082"), "Authorization", "Bearer "+httpkit.Secret("PVMBG_TOKEN"), []pollEndpoint{
 		{path: "/volcanic-reports", key: "volcanic_reports"},
 	}, store, pollClient).Run(context.Background(), pollInterval)
+	go runOutboxRelay(context.Background(), store, httpkit.Env("NATS_URL", "nats://nats:4222"))
 
 	httpkit.Serve("Aggregator", "8083", handler(store, token))
 }

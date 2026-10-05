@@ -3,8 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY internal ./internal
-COPY aggregator ./aggregator
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /service ./aggregator/cmd/server
+COPY consumers ./consumers
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /service ./consumers/dashboard-updater
+
 FROM alpine:3.22
 RUN adduser -D -u 10001 app
 USER app

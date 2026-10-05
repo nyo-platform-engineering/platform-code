@@ -1,4 +1,4 @@
-# Demo orang 2 — akses client dan keamanan
+# Demo Akses Client dan Keamanan
 
 Jalankan dari `code/apps/aat`. Bagian 1 menyediakan mock, Aggregator, PostgreSQL,
 dan `.env`. Python 3 diperlukan untuk script persiapan dan demo. Ketentuan identitas,
@@ -83,26 +83,25 @@ go vet ./...
 Tes `TestConcurrentRequestRejectedAndTimeoutReleasesSlot` menahan upstream,
 memastikan request kedua langsung 429 dengan `Retry-After`, lalu memastikan slot
 kembali tersedia setelah timeout. Tes refresh bersamaan memastikan token hanya
-berhasil digunakan sekali. Ini merupakan tes batas API; load test seluruh sistem
-dikoordinasikan dengan orang 3.
+berhasil digunakan sekali. Ini merupakan tes batas API; load test seluruh sistem dikoordinasikan secara terpisah.
 
 Tes freshness memakai waktu polling sukses yang baru/lama, polling gagal, serta
-status hilang/rusak. Pada stack sekarang, endpoint status orang 3 belum tersedia,
+status hilang/rusak. Pada stack sekarang, endpoint status belum tersedia,
 sehingga respons nyata menampilkan `unknown` dan `stale: true`. Jangan menganggap
 umur event atau keberhasilan manual ingest sebagai waktu polling terakhir.
 
 ## Konfigurasi dan operasional
 
-| Variabel | Default | Arti |
-|---|---|---|
-| `AUTH_PORT` / `CLIENT_PORT` | `8084` / `8080` | Port host localhost |
-| `ACCESS_TTL_SECONDS` | `60` | Umur access token |
-| `REFRESH_TTL_SECONDS` | `3600` | Umur maksimum session, tidak diperpanjang refresh |
-| `AUTH_MAX_SESSIONS` | `1000` | Batas session Auth per proses |
-| `AUTH_MAX_CONCURRENT` | `32` | Batas request Auth aktif per proses |
-| `CLIENT_MAX_CONCURRENT` | `16` | Batas request Client API aktif per proses |
-| `UPSTREAM_TIMEOUT_MS` | `3000` | Batas waktu total panggilan upstream per request |
-| `STALE_AFTER_SECONDS` | `60` | Ambang waktu sejak polling sukses terakhir |
+| Variabel                    | Default         | Arti                                              |
+| --------------------------- | --------------- | ------------------------------------------------- |
+| `AUTH_PORT` / `CLIENT_PORT` | `8084` / `8080` | Port host localhost                               |
+| `ACCESS_TTL_SECONDS`        | `60`            | Umur access token                                 |
+| `REFRESH_TTL_SECONDS`       | `3600`          | Umur maksimum session, tidak diperpanjang refresh |
+| `AUTH_MAX_SESSIONS`         | `1000`          | Batas session Auth per proses                     |
+| `AUTH_MAX_CONCURRENT`       | `32`            | Batas request Auth aktif per proses               |
+| `CLIENT_MAX_CONCURRENT`     | `16`            | Batas request Client API aktif per proses         |
+| `UPSTREAM_TIMEOUT_MS`       | `3000`          | Batas waktu total panggilan upstream per request  |
+| `STALE_AFTER_SECONDS`       | `60`            | Ambang waktu sejak polling sukses terakhir        |
 
 Semua batas harus positif. Refresh TTL harus minimal sebesar access TTL. Respons
 401 berarti kredensial/token tidak sah; 429 berarti kapasitas request/session penuh;
@@ -118,7 +117,4 @@ docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml stop auth cli
 docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml down
 ```
 
-Overlay ini membantu demo lokal orang 2. Orkestrasi penuh, pencatatan polling,
-broker/consumer, dan load test terintegrasi tetap bagian orang 3. Untuk deployment
-beberapa replica Auth diperlukan penyimpanan session bersama; TLS diperlukan
-jika layanan dibuka di luar localhost.
+Overlay ini membantu demo lokal akses client. Orkestrasi penuh, pencatatan polling, dan load test terintegrasi dikelola secara terpisah. Broker dan dua consumer tersedia pada stack Compose dasar. Untuk deployment beberapa replica Auth diperlukan penyimpanan session bersama; TLS diperlukan jika layanan dibuka di luar localhost.

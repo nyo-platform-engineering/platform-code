@@ -1,18 +1,15 @@
-# Kontrak akses client — orang 2
-
-Kontrak ini mengikuti Spesifikasi M1 halaman 11–15 dan Problem 3. Nama
-`client_id` merupakan pilihan implementasi; hak akses dan TTL default mengikuti M1.
+# Kontrak akses client
 
 ## Identitas dan field
 
 Ketiga identitas menggunakan `client_id` dan secret berbeda. Hak akses ditentukan
 server; client tidak dapat memilih role saat meminta atau me-refresh token.
 
-| client_id | Field HazardEvent yang terlihat |
-|---|---|
-| `public` — Media / Pers | Tujuh field Ringkasan: `hazard_id`, `source`, `hazard_type`, `severity`, `area_name`, `occurred_at`, `ingested_at` |
-| `responder` — Tim Lapangan | Seluruh sebelas field, termasuk `source_ref_id`, `latitude`, `longitude`, `attributes` |
-| `analyst` — BNPB Pusat / Internal Ops | Seluruh sebelas field, sama dengan Tim Lapangan |
+| client_id                             | Field HazardEvent yang terlihat                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `public` — Media / Pers               | Tujuh field Ringkasan: `hazard_id`, `source`, `hazard_type`, `severity`, `area_name`, `occurred_at`, `ingested_at` |
+| `responder` — Tim Lapangan            | Seluruh sebelas field, termasuk `source_ref_id`, `latitude`, `longitude`, `attributes`                             |
+| `analyst` — BNPB Pusat / Internal Ops | Seluruh sebelas field, sama dengan Tim Lapangan                                                                    |
 
 Semua identitas dapat membaca kedua sumber. Filter menggunakan allowlist di
 Client API: field baru dari Aggregator tidak otomatis menjadi publik. Envelope
@@ -60,30 +57,27 @@ Setiap panggilan keluar mencatat JSON log `outbound_request` dengan correlation 
 tujuan/path, status (0 jika transport gagal), dan latensi termasuk pembacaan body.
 Secret, token, query, dan isi body tidak dicatat.
 
-## Kontrak dengan orang 1: mock dan Aggregator
+## Integrasi Mock dan Aggregator
 
 Kontrak autentikasi mock yang sudah ada dipertahankan dan diuji lintas kredensial:
 
-| Tujuan | Kredensial |
-|---|---|
-| BMKG `/seismic-events`, `/tsunami-warnings` | `X-BMKG-Key: BMKG_API_KEY` |
-| PVMBG `/volcanic-reports`, `/admin/*` | `Authorization: Bearer PVMBG_TOKEN` |
-| Aggregator `/internal/*` | `Authorization: Bearer AGGREGATOR_TOKEN` |
+| Tujuan                                      | Kredensial                               |
+| ------------------------------------------- | ---------------------------------------- |
+| BMKG `/seismic-events`, `/tsunami-warnings` | `X-BMKG-Key: BMKG_API_KEY`               |
+| PVMBG `/volcanic-reports`, `/admin/*`       | `Authorization: Bearer PVMBG_TOKEN`      |
+| Aggregator `/internal/*`                    | `Authorization: Bearer AGGREGATOR_TOKEN` |
 
-Ketiga nilai harus berbeda. Client API hanya memegang token Aggregator dan token
-introspeksi Auth; tidak memegang key mock. Credential client tidak berlaku pada
-mock maupun Aggregator. `/health` tetap publik sesuai implementasi orang 1.
+Ketiga nilai harus berbeda. Client API hanya memegang token Aggregator dan token introspeksi Auth; tidak memegang key mock. Credential client tidak berlaku pada mock maupun Aggregator. /health tetap publik sesuai implementasi sistem.
 
-## Kontrak dengan orang 3: penyajian stale
+## Penyajian Status Stale
 
-Orang 3 menyediakan `GET /internal/source-status` pada Aggregator, dilindungi
-token Aggregator yang sama. Respons contoh:
+Sistem menyediakan GET /internal/source-status pada Aggregator, dilindungi token Aggregator yang sama. Respons contoh:
 
 ```json
 {
   "sources": [
-    {"source":"BMKG","healthy":true,"last_success_at":"2026-09-30T10:00:00Z"},
-    {"source":"PVMBG","healthy":false,"last_success_at":null}
+    { "source": "BMKG", "healthy": true, "last_success_at": "2026-09-30T10:00:00Z" },
+    { "source": "PVMBG", "healthy": false, "last_success_at": null }
   ]
 }
 ```
@@ -99,11 +93,8 @@ timestamp terlalu tua. Status `unknown` dan stale=true jika endpoint belum ada,
 request gagal, entri hilang/rusak, timestamp kosong, atau timestamp di masa depan.
 Kegagalan status tidak menghalangi pembacaan hazards yang sudah tersimpan.
 
-Endpoint status dan worker pencatatnya adalah tugas orang 3. Pada stack bagian
-1+2, status unknown adalah hasil yang diharapkan sampai endpoint itu terpasang.
+Endpoint status dan worker pencatatnya dikelola secara terpisah. Pada stack dasar, status unknown adalah hasil yang diharapkan sampai endpoint tersebut terpasang.
 
 ## Batas demo
 
-Transport HTTP dibatasi localhost untuk demo. Penempatan di luar mesin lokal
-memerlukan TLS. Polling, broker/consumer, dan koordinasi load test sistem tetap
-tugas orang 3; tes orang 2 mencakup penolakan concurrency dengan upstream tertahan.
+Transport HTTP dibatasi localhost untuk demo. Penempatan di luar mesin lokal memerlukan TLS. Polling dan broker/consumer tersedia di Aggregator dan Compose; koordinasi load test sistem tetap perlu dilakukan. Pengujian sistem mencakup penolakan concurrency dengan upstream tertahan.

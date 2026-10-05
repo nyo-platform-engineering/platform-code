@@ -1,0 +1,19 @@
+# Remove fixed host port so multiple Aggregator replicas can coexist.
+# Reach them via service DNS inside the services network (or a future reverse proxy).
+services:
+  test-consumer:
+    build:
+      context: .
+      dockerfile: consumers/test-consumer/Dockerfile
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      PORT: "8087"
+    networks: [services]
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8087/health]
+      interval: 5s
+      timeout: 2s
+      retries: 10
