@@ -10,7 +10,7 @@ import (
 )
 
 func NewHandler(token string, interval, minDelay, maxDelay time.Duration) http.Handler {
-	feed := model.NewFeed(time.Now().UTC(), httpkit.ID(), interval)
+	feed := model.NewFeed(time.Now().UTC(), interval)
 	ctrl := &controller.Controller{
 		Feed:     feed,
 		MinDelay: minDelay,

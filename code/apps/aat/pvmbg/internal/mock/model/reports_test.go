@@ -10,7 +10,7 @@ import (
 // A new feed begins with 20 historical reports.
 func TestVolcanicSeedCount(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
-	feed := NewFeed(start, "test", time.Second)
+	feed := NewFeed(start, time.Second)
 	reports := feed.VolcanicReports(time.Time{}, start)
 	if len(reports) != 20 {
 		t.Fatalf("seed count: %d", len(reports))
@@ -20,7 +20,7 @@ func TestVolcanicSeedCount(t *testing.T) {
 // The optional confidence field must be absent from JSON until enabled.
 func TestOriginalSchemaOmitsConfidence(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
-	feed := NewFeed(start, "test", time.Second)
+	feed := NewFeed(start, time.Second)
 	reports := feed.VolcanicReports(time.Time{}, start)
 	before, err := json.Marshal(reports[0])
 	if err != nil || strings.Contains(string(before), "confidence_level") {
@@ -31,7 +31,7 @@ func TestOriginalSchemaOmitsConfidence(t *testing.T) {
 // Schema toggles add/remove confidence without replacing the feed.
 func TestConfidenceCanBeEnabledAndDisabled(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
-	feed := NewFeed(start, "test", time.Second)
+	feed := NewFeed(start, time.Second)
 	now := start
 	feed.SetConfidence(true)
 	reports := feed.VolcanicReports(time.Time{}, now)
@@ -47,7 +47,7 @@ func TestConfidenceCanBeEnabledAndDisabled(t *testing.T) {
 // The since filter includes reports exactly at the requested timestamp.
 func TestVolcanicSinceIncludesBoundary(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
-	feed := NewFeed(start, "test", time.Second)
+	feed := NewFeed(start, time.Second)
 	now := start.Add(2 * time.Second)
 	reports := feed.VolcanicReports(start.Add(time.Second), now)
 	if len(reports) != 2 || !reports[0].ReportedAt.Equal(start.Add(time.Second)) {
@@ -58,7 +58,7 @@ func TestVolcanicSinceIncludesBoundary(t *testing.T) {
 // An empty result must serialize as [] rather than null.
 func TestEmptyReportsReturnArray(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
-	feed := NewFeed(start, "test", time.Second)
+	feed := NewFeed(start, time.Second)
 	now := start
 	if reports := feed.VolcanicReports(now.Add(time.Second), now); reports == nil || len(reports) != 0 {
 		t.Fatal("empty response must encode as an array")
@@ -68,7 +68,7 @@ func TestEmptyReportsReturnArray(t *testing.T) {
 // Outage state can be toggled and read independently of HTTP.
 func TestOutageCanBeEnabledAndCleared(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
-	feed := NewFeed(start, "test", time.Second)
+	feed := NewFeed(start, time.Second)
 	feed.SetOutage(true)
 	if !feed.IsOutage() || !feed.State().Outage {
 		t.Fatal("outage not enabled")
@@ -76,5 +76,23 @@ func TestOutageCanBeEnabledAndCleared(t *testing.T) {
 	feed.SetOutage(false)
 	if feed.IsOutage() {
 		t.Fatal("outage not cleared")
+	}
+}
+
+// Restarting at a later time preserves every overlapping time bucket.
+func TestVolcanicTimelineIsDeterministicAcrossRestarts(t *testing.T) {
+	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	restarted := start.Add(2 * time.Second)
+	now := restarted.Add(2 * time.Second)
+
+	before := NewFeed(start, time.Second).VolcanicReports(restarted, now)
+	after := NewFeed(restarted, time.Second).VolcanicReports(restarted, now)
+	if len(before) != len(after) {
+		t.Fatalf("overlap length changed after restart: %d != %d", len(before), len(after))
+	}
+	for i := range before {
+		if before[i] != after[i] {
+			t.Fatalf("bucket changed after restart: %+v != %+v", before[i], after[i])
+		}
 	}
 }

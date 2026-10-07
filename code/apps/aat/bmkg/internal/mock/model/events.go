@@ -26,12 +26,11 @@ type TsunamiWarning struct {
 
 type Feed struct {
 	start    time.Time
-	epoch    string
 	interval time.Duration
 }
 
-func NewFeed(start time.Time, epoch string, interval time.Duration) *Feed {
-	return &Feed{start: start, epoch: epoch, interval: interval}
+func NewFeed(start time.Time, interval time.Duration) *Feed {
+	return &Feed{start: start.UTC().Truncate(interval), interval: interval}
 }
 
 func (f *Feed) SeismicEvents(since, now time.Time) []SeismicEvent {
@@ -42,16 +41,17 @@ func (f *Feed) SeismicEvents(since, now time.Time) []SeismicEvent {
 		if occurred.Before(since) {
 			continue
 		}
+		slot := occurred.UnixNano() / f.interval.Nanoseconds()
 
 		events = append(events, SeismicEvent{
-			EventID:          fmt.Sprintf("bmkg-%s-%d", f.epoch, i),
-			Magnitude:        []float64{7.1, 4.2, 5.0, 6.5}[i%4],
-			DepthKM:          float64(10 + i%30),
+			EventID:          fmt.Sprintf("bmkg-%d", occurred.UnixNano()),
+			Magnitude:        []float64{7.1, 4.2, 5.0, 6.5}[slot%4],
+			DepthKM:          float64(10 + slot%30),
 			EpicenterLat:     -8,
 			EpicenterLon:     110,
 			RegionName:       "Pesisir Selatan Jawa",
 			OccurredAt:       occurred,
-			PotentialTsunami: i%4 == 0,
+			PotentialTsunami: slot%4 == 0,
 		})
 	}
 
@@ -63,15 +63,16 @@ func (f *Feed) TsunamiWarnings(since, now time.Time) []TsunamiWarning {
 	count := 20 + int(now.Sub(f.start)/f.interval)
 	for i := 0; i < count; i++ {
 		occurred := f.start.Add(time.Duration(i-19) * f.interval)
-		if occurred.Before(since) || i%4 != 0 {
+		slot := occurred.UnixNano() / f.interval.Nanoseconds()
+		if occurred.Before(since) || slot%4 != 0 {
 			continue
 		}
 
-		id := fmt.Sprintf("bmkg-%s-%d", f.epoch, i)
+		id := fmt.Sprintf("bmkg-%d", occurred.UnixNano())
 		warnings = append(warnings, TsunamiWarning{
 			WarningID:        "warning-" + id,
 			RelatedEventID:   id,
-			ThreatLevel:      []string{"Waspada", "Siaga", "Awas"}[(i/4)%3],
+			ThreatLevel:      []string{"Waspada", "Siaga", "Awas"}[(slot/4)%3],
 			AffectedZones:    []string{"Pesisir Selatan Jawa"},
 			EstimatedArrival: occurred.Add(30 * time.Minute),
 		})

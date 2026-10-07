@@ -23,14 +23,13 @@ type State struct {
 
 type Feed struct {
 	start      time.Time
-	epoch      string
 	interval   time.Duration
 	outage     atomic.Bool
 	confidence atomic.Bool
 }
 
-func NewFeed(start time.Time, epoch string, interval time.Duration) *Feed {
-	return &Feed{start: start, epoch: epoch, interval: interval}
+func NewFeed(start time.Time, interval time.Duration) *Feed {
+	return &Feed{start: start.UTC().Truncate(interval), interval: interval}
 }
 
 func (f *Feed) IsOutage() bool {
@@ -58,13 +57,14 @@ func (f *Feed) VolcanicReports(since, now time.Time) []VolcanicReport {
 		if reported.Before(since) {
 			continue
 		}
+		slot := reported.UnixNano() / f.interval.Nanoseconds()
 
 		report := VolcanicReport{
-			ReportID:         fmt.Sprintf("pvmbg-%s-%d", f.epoch, i),
-			VolcanoID:        []string{"MERAPI", "SEMERU", "ANAK_KRAKATAU"}[i%3],
-			AlertLevel:       []string{"Normal", "Waspada", "Siaga", "Awas"}[i%4],
-			EruptionCount24h: i % 12,
-			AshColumnHeightM: float64((i % 8) * 100),
+			ReportID:         fmt.Sprintf("pvmbg-%d", reported.UnixNano()),
+			VolcanoID:        []string{"MERAPI", "SEMERU", "ANAK_KRAKATAU"}[slot%3],
+			AlertLevel:       []string{"Normal", "Waspada", "Siaga", "Awas"}[slot%4],
+			EruptionCount24h: int(slot % 12),
+			AshColumnHeightM: float64((slot % 8) * 100),
 			ReportedAt:       reported,
 		}
 		if confidence {
