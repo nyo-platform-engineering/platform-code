@@ -15,6 +15,45 @@ func TestVolcanicSeedCount(t *testing.T) {
 	if len(reports) != 20 {
 		t.Fatalf("seed count: %d", len(reports))
 	}
+	if !feed.start.Equal(start.Add(-19*time.Second)) || !reports[0].ReportedAt.Equal(feed.start) || !reports[19].ReportedAt.Equal(start) {
+		t.Fatal("seed timeline must span startup minus 19 intervals through startup")
+	}
+}
+
+// Ten-second intervals align startup and cursors to wall-clock boundaries.
+func TestTenSecondAlignment(t *testing.T) {
+	start := time.Date(2026, 9, 26, 0, 0, 27, 123, time.UTC)
+	feed := NewFeed(start, 10*time.Second)
+	seed := feed.VolcanicReports(time.Time{}, start)
+	if len(seed) != 20 || !seed[19].ReportedAt.Equal(start.Truncate(10*time.Second)) {
+		t.Fatalf("unexpected aligned seed: %+v", seed)
+	}
+	since := start
+	now := time.Date(2026, 9, 26, 0, 1, 5, 0, time.UTC)
+	reports := feed.VolcanicReports(since, now)
+	if len(reports) != 4 || reports[0].ReportedAt.Second() != 30 || reports[3].ReportedAt.Second() != 0 {
+		t.Fatalf("expected 00:30, 00:40, 00:50, 01:00: %+v", reports)
+	}
+	for _, report := range append(seed, reports...) {
+		if report.ReportedAt.Second()%10 != 0 || report.ReportedAt.Nanosecond() != 0 {
+			t.Fatalf("unaligned report: %+v", report)
+		}
+	}
+}
+
+// Requested bounds between intervals must not leak earlier or later events.
+func TestVolcanicReportsRespectTimeRange(t *testing.T) {
+	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	feed := NewFeed(start, time.Second)
+	since := start.Add(500 * time.Millisecond)
+	now := start.Add(2500 * time.Millisecond)
+	reports := feed.VolcanicReports(since, now)
+	if len(reports) != 2 || !reports[0].ReportedAt.Equal(start.Add(time.Second)) || !reports[1].ReportedAt.Equal(start.Add(2*time.Second)) {
+		t.Fatalf("reports must stay within since and now: %+v", reports)
+	}
+	if reports := feed.VolcanicReports(time.Time{}, feed.start.Add(-time.Nanosecond)); len(reports) != 0 {
+		t.Fatalf("reports after now returned: %+v", reports)
+	}
 }
 
 // The optional confidence field must be absent from JSON until enabled.

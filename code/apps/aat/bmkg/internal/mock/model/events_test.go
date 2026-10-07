@@ -10,8 +10,58 @@ import (
 func TestSeismicSeedCount(t *testing.T) {
 	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	feed := NewFeed(start, time.Second)
-	if events := feed.SeismicEvents(time.Time{}, start); len(events) != 20 {
+	events := feed.SeismicEvents(time.Time{}, start)
+	if len(events) != 20 {
 		t.Fatalf("seed count: %d", len(events))
+	}
+	if !feed.start.Equal(start.Add(-19*time.Second)) || !events[0].OccurredAt.Equal(feed.start) || !events[19].OccurredAt.Equal(start) {
+		t.Fatal("seed timeline must span startup minus 19 intervals through startup")
+	}
+}
+
+// Ten-second intervals align startup and cursors to wall-clock boundaries.
+func TestTenSecondAlignment(t *testing.T) {
+	start := time.Date(2026, 9, 26, 0, 0, 27, 123, time.UTC)
+	feed := NewFeed(start, 10*time.Second)
+	seed := feed.SeismicEvents(time.Time{}, start)
+	if len(seed) != 20 || !seed[19].OccurredAt.Equal(start.Truncate(10*time.Second)) {
+		t.Fatalf("unexpected aligned seed: %+v", seed)
+	}
+	since := start
+	now := time.Date(2026, 9, 26, 0, 1, 5, 0, time.UTC)
+	events := feed.SeismicEvents(since, now)
+	if len(events) != 4 || events[0].OccurredAt.Second() != 30 || events[3].OccurredAt.Second() != 0 {
+		t.Fatalf("expected 00:30, 00:40, 00:50, 01:00: %+v", events)
+	}
+	for _, event := range append(seed, events...) {
+		if event.OccurredAt.Second()%10 != 0 || event.OccurredAt.Nanosecond() != 0 {
+			t.Fatalf("unaligned event: %+v", event)
+		}
+	}
+	for _, warning := range feed.TsunamiWarnings(since, now) {
+		occurred := warning.EstimatedArrival.Add(-30 * time.Minute)
+		if occurred.Before(since) || occurred.After(now) || occurred.Second()%10 != 0 || occurred.Nanosecond() != 0 {
+			t.Fatalf("warning outside aligned range: %+v", warning)
+		}
+	}
+}
+
+// Requested bounds between intervals must not leak earlier or later events.
+func TestSeismicEventsRespectTimeRange(t *testing.T) {
+	start := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
+	feed := NewFeed(start, time.Second)
+	since := start.Add(500 * time.Millisecond)
+	now := start.Add(2500 * time.Millisecond)
+	events := feed.SeismicEvents(since, now)
+	if len(events) != 2 || !events[0].OccurredAt.Equal(start.Add(time.Second)) || !events[1].OccurredAt.Equal(start.Add(2*time.Second)) {
+		t.Fatalf("events must stay within since and now: %+v", events)
+	}
+	// The startup bucket has a warning; a later cursor must exclude it.
+	if warnings := feed.TsunamiWarnings(since, now); len(warnings) != 0 {
+		t.Fatalf("warning before since returned: %+v", warnings)
+	}
+	if events := feed.SeismicEvents(time.Time{}, feed.start.Add(-time.Nanosecond)); len(events) != 0 {
+		t.Fatalf("events after now returned: %+v", events)
 	}
 }
 

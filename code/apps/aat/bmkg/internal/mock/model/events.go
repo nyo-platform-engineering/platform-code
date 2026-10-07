@@ -30,17 +30,38 @@ type Feed struct {
 }
 
 func NewFeed(start time.Time, interval time.Duration) *Feed {
-	return &Feed{start: start.UTC().Truncate(interval), interval: interval}
+	// seed initial 20 by shifting the start time
+	// Truncate() run down from start to the nearest interval,
+	// e.g. interval = 10s 10:00:05 to 10:00:00
+	// -19 * interval = 190s or 3m10s
+	// makes it 9:56:50
+	// with this we generate 20 events from 9:56:50 to 10:00:00
+	return &Feed{
+		start:    start.UTC().Truncate(interval).Add(-19 * interval),
+		interval: interval,
+	}
 }
+
+func (f *Feed) firstOccurrence(since time.Time) time.Time {
+	if !since.After(f.start) {
+		return f.start
+	}
+	// since truncate runs down, need to make sure first after since,
+	// so add interval if truncated time is before since
+	first := since.UTC().Truncate(f.interval)
+	if first.Before(since) {
+		first = first.Add(f.interval)
+	}
+	return first
+}
+
+// SeismicEvents and TsunamiWarnings are deterministic by using the timestamp to generate the data
+// The same timestamp will always produce the same event data.
 
 func (f *Feed) SeismicEvents(since, now time.Time) []SeismicEvent {
 	events := []SeismicEvent{}
-	count := 20 + int(now.Sub(f.start)/f.interval)
-	for i := 0; i < count; i++ {
-		occurred := f.start.Add(time.Duration(i-19) * f.interval)
-		if occurred.Before(since) {
-			continue
-		}
+	occurred := f.firstOccurrence(since)
+	for !occurred.After(now) {
 		slot := occurred.UnixNano() / f.interval.Nanoseconds()
 
 		events = append(events, SeismicEvent{
@@ -53,6 +74,7 @@ func (f *Feed) SeismicEvents(since, now time.Time) []SeismicEvent {
 			OccurredAt:       occurred,
 			PotentialTsunami: slot%4 == 0,
 		})
+		occurred = occurred.Add(f.interval)
 	}
 
 	return events
@@ -60,22 +82,20 @@ func (f *Feed) SeismicEvents(since, now time.Time) []SeismicEvent {
 
 func (f *Feed) TsunamiWarnings(since, now time.Time) []TsunamiWarning {
 	warnings := []TsunamiWarning{}
-	count := 20 + int(now.Sub(f.start)/f.interval)
-	for i := 0; i < count; i++ {
-		occurred := f.start.Add(time.Duration(i-19) * f.interval)
+	occurred := f.firstOccurrence(since)
+	for !occurred.After(now) {
 		slot := occurred.UnixNano() / f.interval.Nanoseconds()
-		if occurred.Before(since) || slot%4 != 0 {
-			continue
+		if slot%4 == 0 {
+			id := fmt.Sprintf("bmkg-%d", occurred.UnixNano())
+			warnings = append(warnings, TsunamiWarning{
+				WarningID:        "warning-" + id,
+				RelatedEventID:   id,
+				ThreatLevel:      []string{"Waspada", "Siaga", "Awas"}[(slot/4)%3],
+				AffectedZones:    []string{"Pesisir Selatan Jawa"},
+				EstimatedArrival: occurred.Add(30 * time.Minute),
+			})
 		}
-
-		id := fmt.Sprintf("bmkg-%d", occurred.UnixNano())
-		warnings = append(warnings, TsunamiWarning{
-			WarningID:        "warning-" + id,
-			RelatedEventID:   id,
-			ThreatLevel:      []string{"Waspada", "Siaga", "Awas"}[(slot/4)%3],
-			AffectedZones:    []string{"Pesisir Selatan Jawa"},
-			EstimatedArrival: occurred.Add(30 * time.Minute),
-		})
+		occurred = occurred.Add(f.interval)
 	}
 
 	return warnings
