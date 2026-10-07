@@ -1,6 +1,6 @@
 # AAT — data, penyimpanan, dan akses client
 
-Go + Gin, PostgreSQL, dan pgx. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
+Go + Gin, PostgreSQL, dan GORM. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
 penyimpanan, polling otomatis beserta pencatatan kesehatan sumber, API internal
 Aggregator, Auth Service, Client-Facing API, NATS JetStream, dashboard updater,
 dan field notifier. Sustained system load testing remains to be completed.
@@ -113,7 +113,7 @@ Keduanya menerima `--env-file PATH` untuk konfigurasi stack tes terisolasi.
 - `bmkg/`, `pvmbg/`: masing-masing memiliki `cmd/server`, `internal/mock`, dan Dockerfile.
   Di dalam mock, `model/` menangani data/state, `controller/` menangani HTTP,
   dan `routes.go` mendaftarkan endpoint.
-- `aggregator/`: route/handler di `cmd/server`, pemetaan dan storage di `internal/aggregate`.
+- `aggregator/`: handler HTTP dan operasi GORM di `internal/controller`, model `HazardEvent` dan AutoMigrate di `internal/model`, pemetaan di `internal/mapper`; startup dan polling di `cmd/server`.
 - `auth/`: identitas client, token opaque, rotasi refresh, dan introspeksi internal.
 - `client/`: API client, allowlist field, timeout upstream, dan penyajian stale.
 - `internal/httpkit/`: helper transport/config/log bersama; business logic tetap per service.
@@ -123,9 +123,11 @@ JSONB. Payload sumber disimpan sebagai JSONB untuk korelasi/pemetaan ulang.
 Field tambahan diteruskan ke attributes tanpa migrasi; perubahan tipe atau penghapusan
 field wajib ditolak. Warning mengoverride severity gempa; ID tetap stabil.
 
-[Schema SQL](aggregator/internal/aggregate/schema.sql) memigrasikan tabel dokumen lama
-secara transaksional saat startup. **Update seluruh replica Aggregator bersama** karena
-binary lama membutuhkan kolom `document`. Data lama dipertahankan.
+[AutoMigrate](aggregator/internal/model/migrate.go) membuat atau memperbarui tabel,
+kolom, constraint, dan index dari definisi model saat startup. Migrasi berjalan di dalam
+transaksi dengan advisory lock untuk menyelaraskan startup replica. Format lama yang
+menyimpan seluruh HazardEvent di kolom `document` tidak lagi dikonversi otomatis;
+data tersebut perlu dipindahkan ke kolom bertipe sebelum memakai versi ini.
 
 PostgreSQL dipilih untuk constraint dan transaksi plus JSONB; SQLite membatasi replikasi
 berbasis file, sedangkan MongoDB menambah model operasional berbeda.
@@ -139,7 +141,7 @@ go test ./...
 go vet ./...
 # Opsional: PostgreSQL khusus tes, setiap kasus memakai schema terpisah.
 AAT_TEST_DATABASE_URL='postgres://user:password@localhost/testdb?sslmode=disable' \
-  go test ./aggregator/internal/aggregate -run TestStoreSchemaAndIngestion -v
+  go test ./aggregator/internal/controller -run TestAutoMigrateAndIngestion -v
 
 # Rebuild satu service tanpa restart service lain.
 docker compose -p aat-part1 up -d --build --no-deps pvmbg

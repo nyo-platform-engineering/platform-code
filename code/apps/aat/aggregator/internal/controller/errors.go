@@ -1,16 +1,15 @@
-package main
+package controller
 
 import (
 	"errors"
 	"log/slog"
 	"net/http"
 
-	"aat/aggregator/internal/aggregate"
 	"aat/internal/httpkit"
 )
 
 func fail(w http.ResponseWriter, r *http.Request, e error) {
-	var invalid aggregate.Invalid
+	var invalid Invalid
 	if errors.As(e, &invalid) {
 		httpkit.JSON(w, 400, map[string]string{"error": invalid.Error()})
 		return

@@ -83,7 +83,9 @@ Sistem menyediakan GET /internal/source-status pada Aggregator, dilindungi token
 ```
 
 `healthy` berarti hasil polling terakhir, dan `last_success_at` adalah waktu
-polling sukses terakhir, termasuk polling sukses tanpa data baru. Jangan memakai
+awal panggilan polling terakhir yang berhasil, dicatat dari `now()` pada caller
+sebelum mengambil data. Nilai ini juga menjadi `since` berikutnya, termasuk bila
+polling sukses tanpa data baru. Jangan memakai
 `occurred_at`, `ingested_at`, atau health check HTTP sebagai penggantinya.
 
 Client API menyajikan `sources` dengan `source`, `status`, `last_success_at`, dan

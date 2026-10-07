@@ -1,4 +1,4 @@
-package main
+package controller
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (s *server) health(c *gin.Context) {
+func (ctrl *Controller) Health(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
 	defer cancel()
-	if s.store.Pool.Ping(ctx) != nil {
+	if ctrl.Ping(ctx) != nil {
 		c.JSON(503, map[string]string{"error": "store unavailable"})
 		return
 	}

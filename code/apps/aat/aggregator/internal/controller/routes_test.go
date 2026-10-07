@@ -1,17 +1,15 @@
-package main
+package controller
 
 import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"aat/aggregator/internal/aggregate"
 )
 
 // Invalid credentials and payloads must fail before any database access.
 func TestRouteValidationBeforeStoreAccess(t *testing.T) {
 	// No database is needed for authentication and input validation failures.
-	router := handler(aggregate.Store{}, "test-only")
+	router := NewHandler(&Controller{}, "test-only")
 	for _, tc := range []struct {
 		name, method, path, token, body string
 		status                          int

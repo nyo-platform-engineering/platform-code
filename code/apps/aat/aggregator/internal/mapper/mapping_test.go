@@ -1,13 +1,16 @@
-package aggregate
+package mapper_test
 
 import (
+	"aat/aggregator/internal/mapper"
+	"aat/aggregator/internal/model"
 	"encoding/json"
+
 	"testing"
 )
 
 // record builds a raw source fixture; malformed fixture JSON is a test setup error.
-func record(s string) Record {
-	var r Record
+func record(s string) model.Record {
+	var r model.Record
 	if e := json.Unmarshal([]byte(s), &r); e != nil {
 		panic(e)
 	}
@@ -16,17 +19,17 @@ func record(s string) Record {
 }
 
 // quake returns a valid seismic event with a configurable magnitude.
-func quake(magnitude string) Record {
+func quake(magnitude string) model.Record {
 	return record(`{"event_id":"eq-1","magnitude":` + magnitude + `,"depth_km":10,"epicenter_lat":-8,"epicenter_lon":110,"region_name":"Jawa","occurred_at":"2026-09-25T00:00:00Z","potential_tsunami":true}`)
 }
 
 // report returns a valid Merapi report with a configurable source ID.
-func report(id string) Record {
+func report(id string) model.Record {
 	return record(`{"report_id":"` + id + `","volcano_id":"MERAPI","alert_level":"Siaga","eruption_count_24h":2,"ash_column_height_m":300,"reported_at":"2026-09-25T00:00:00Z"}`)
 }
 
 // tsunami references the quake fixture at the requested threat level.
-func tsunami(level string) Record {
+func tsunami(level string) model.Record {
 	return record(`{"warning_id":"tw-1","related_event_id":"eq-1","threat_level":"` + level + `","affected_zones":["Jawa"],"estimated_arrival":"2026-09-25T00:30:00Z"}`)
 }
 
@@ -38,7 +41,7 @@ func TestSeismicSeverityByMagnitude(t *testing.T) {
 		{"6.49", "WASPADA"},
 		{"6.5", "SIAGA"},
 	} {
-		h, e := Seismic(quake(tc.m), nil)
+		h, e := mapper.Seismic(quake(tc.m), nil)
 		if e != nil || h.Severity != tc.want {
 			t.Fatalf("%s: %+v %v", tc.m, h, e)
 		}
@@ -48,8 +51,8 @@ func TestSeismicSeverityByMagnitude(t *testing.T) {
 // A related warning overrides magnitude-based severity.
 func TestWarningOverridesSeismicSeverity(t *testing.T) {
 	for _, level := range []string{"Waspada", "Siaga", "Awas"} {
-		h, e := Seismic(quake("7"), []Record{tsunami(level)})
-		if e != nil || h.Severity != levels[level] {
+		h, e := mapper.Seismic(quake("7"), []model.Record{tsunami(level)})
+		if e != nil || h.Severity != mapper.Levels[level] {
 			t.Fatalf("warning override: %+v %v", h, e)
 		}
 	}
@@ -60,7 +63,7 @@ func TestVolcanicAttributesAndReference(t *testing.T) {
 	r := report("v1")
 	r["confidence_level"] = json.RawMessage(`0.85`)
 	r["future_sensor"] = json.RawMessage(`{"nested":[1,true]}`)
-	h, e := Volcanic(r)
+	h, e := mapper.Volcanic(r)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -69,7 +72,7 @@ func TestVolcanicAttributesAndReference(t *testing.T) {
 		t.Fatalf("bad mapping: %+v", h)
 	}
 
-	old, _ := Volcanic(report("v1"))
+	old, _ := mapper.Volcanic(report("v1"))
 	if old.ID != h.ID {
 		t.Fatal("unstable id")
 	}
@@ -87,7 +90,7 @@ func TestVolcanicRejectsInvalidFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			input := report("v1")
 			input[tc.field] = tc.value
-			if _, err := Volcanic(input); err == nil {
+			if _, err := mapper.Volcanic(input); err == nil {
 				t.Fatalf("invalid %s accepted", tc.field)
 			}
 		})
@@ -99,7 +102,7 @@ func TestSeismicRejectsBreakingChanges(t *testing.T) {
 	t.Run("magnitude_has_wrong_type", func(t *testing.T) {
 		input := quake("5")
 		input["magnitude"] = json.RawMessage(`"five"`)
-		if _, err := Seismic(input, nil); err == nil {
+		if _, err := mapper.Seismic(input, nil); err == nil {
 			t.Fatal("string magnitude accepted")
 		}
 	})
@@ -107,7 +110,7 @@ func TestSeismicRejectsBreakingChanges(t *testing.T) {
 	t.Run("event_id_is_missing", func(t *testing.T) {
 		input := quake("5")
 		delete(input, "event_id")
-		if _, err := Seismic(input, nil); err == nil {
+		if _, err := mapper.Seismic(input, nil); err == nil {
 			t.Fatal("missing event ID accepted")
 		}
 	})

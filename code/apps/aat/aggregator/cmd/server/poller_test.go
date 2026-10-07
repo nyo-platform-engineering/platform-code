@@ -2,84 +2,154 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync"
+	"os"
 	"testing"
 	"time"
 
-	"aat/aggregator/internal/aggregate"
+	"aat/aggregator/internal/controller"
+	"aat/aggregator/internal/model"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-type memoryPollStore struct {
-	mu       sync.Mutex
-	state    aggregate.PollState
-	body     map[string][]aggregate.Record
-	failures []string
+// Fetching uses each source's credentials and preserves the inclusive cursor.
+func TestSourcePollerFetchCredentialsAndCursor(t *testing.T) {
+	since := time.Date(2026, 9, 26, 0, 0, 0, 123, time.UTC)
+	for _, source := range []struct{ name, header, credential, path string }{
+		{"BMKG", "X-BMKG-Key", "key", "/seismic-events"},
+		{"PVMBG", "Authorization", "Bearer token", "/volcanic-reports"},
+	} {
+		t.Run(source.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != source.path || r.Header.Get(source.header) != source.credential || r.Header.Get("X-Correlation-ID") != "correlation" {
+					t.Error("wrong upstream path, credentials, or correlation ID")
+				}
+				if r.URL.Query().Get("since") != since.Format(time.RFC3339Nano) {
+					t.Error("cursor changed")
+				}
+				_, _ = w.Write([]byte(`[{"source_id":"1"}]`))
+			}))
+			defer upstream.Close()
+			poller := newSourcePoller(source.name, upstream.URL, source.header, source.credential, nil, nil, upstream.Client())
+			records, err := poller.fetch(context.Background(), source.path, &since, "correlation")
+			if err != nil || len(records) != 1 {
+				t.Fatalf("fetch: %v, %v", records, err)
+			}
+		})
+	}
 }
 
-func (s *memoryPollStore) PollState(context.Context, string) (aggregate.PollState, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.state, nil
-}
-
-func (s *memoryPollStore) Ingest(_ context.Context, _ string, body map[string][]aggregate.Record) ([]aggregate.Hazard, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.body = body
-	return []aggregate.Hazard{{ID: "hazard-1"}}, nil
-}
-
-func (s *memoryPollStore) MarkPollSuccess(_ context.Context, source string, cursor time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.state = aggregate.PollState{Source: source, Healthy: true, Cursor: &cursor}
-	return nil
-}
-
-func (s *memoryPollStore) MarkPollFailure(_ context.Context, _ string, message string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.failures = append(s.failures, message)
-	return nil
-}
-
+// Full polls use the real controller against an isolated PostgreSQL schema.
 func TestSourcePollerStoresAllBMKGResponsesAndMarksSuccess(t *testing.T) {
-	var requests int
+	ctrl := pollController(t)
+	requests := 0
+	beforePoll := time.Now().UTC().Add(-180 * time.Second)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		if r.Header.Get("X-BMKG-Key") != "key" || r.Header.Get("X-Correlation-ID") == "" {
-			t.Fatal("missing upstream credentials or correlation ID")
+			t.Error("missing upstream credentials or correlation ID")
 		}
-		if r.URL.Query().Has("since") {
-			t.Fatal("initial poll unexpectedly used a cursor")
+		since, err := time.Parse(time.RFC3339Nano, r.URL.Query().Get("since"))
+		if err != nil || since.Before(beforePoll) || since.After(time.Now().UTC().Add(-180*time.Second)) {
+			t.Error("initial poll must request the last 180 seconds")
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/seismic-events" {
+			_, _ = w.Write([]byte(`[{"event_id":"eq-1","magnitude":7,"depth_km":10,"epicenter_lat":-8,"epicenter_lon":110,"region_name":"Jawa","occurred_at":"2026-09-25T00:00:00Z","potential_tsunami":true}]`))
+			return
+		}
+		_, _ = w.Write([]byte(`[{"warning_id":"warn-1","related_event_id":"eq-1","threat_level":"Awas","affected_zones":["Jawa"],"estimated_arrival":"2026-09-25T00:30:00Z"}]`))
+	}))
+	defer upstream.Close()
+	poller := newSourcePoller("BMKG", upstream.URL, "X-BMKG-Key", "key", []pollEndpoint{{"/seismic-events", "seismic_events"}, {"/tsunami-warnings", "tsunami_warnings"}}, ctrl, upstream.Client())
+	poller.Poll(context.Background())
+	state, err := ctrl.GetPollState(context.Background(), "BMKG")
+	if err != nil || requests != 2 || !state.Healthy || state.LastSuccessCallerTime == nil {
+		t.Fatalf("requests=%d state=%+v error=%v", requests, state, err)
+	}
+	hazards, err := ctrl.List(context.Background(), "BMKG", "", 100)
+	if err != nil || len(hazards) != 1 || hazards[0].Severity != "AWAS" {
+		t.Fatalf("hazards=%+v error=%v", hazards, err)
+	}
+	var warnings []model.Record
+	if err := json.Unmarshal(hazards[0].Attributes["tsunami_warnings"], &warnings); err != nil || len(warnings) != 1 {
+		t.Fatalf("warnings=%+v error=%v", warnings, err)
+	}
+}
+
+// If BMKG's second endpoint fails, neither the first response nor a cursor is saved.
+func TestSourcePollerMarksFailureWithoutIngestingPartialResponse(t *testing.T) {
+	ctrl := pollController(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/seismic-events" {
 			_, _ = w.Write([]byte(`[{"event_id":"eq-1"}]`))
 			return
 		}
-		_, _ = w.Write([]byte(`[{"warning_id":"warn-1"}]`))
-	}))
-	defer upstream.Close()
-	store := &memoryPollStore{}
-	poller := newSourcePoller("BMKG", upstream.URL, "X-BMKG-Key", "key", []pollEndpoint{{"/seismic-events", "seismic_events"}, {"/tsunami-warnings", "tsunami_warnings"}}, store, upstream.Client())
-	poller.Poll(context.Background())
-	if requests != 2 || len(store.body["seismic_events"]) != 1 || len(store.body["tsunami_warnings"]) != 1 || !store.state.Healthy {
-		t.Fatalf("requests=%d body=%v state=%+v", requests, store.body, store.state)
-	}
-}
-
-func TestSourcePollerMarksFailureWithoutIngestingPartialResponse(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer upstream.Close()
-	store := &memoryPollStore{}
-	poller := newSourcePoller("PVMBG", upstream.URL, "Authorization", "Bearer token", []pollEndpoint{{"/volcanic-reports", "volcanic_reports"}}, store, upstream.Client())
+	poller := newSourcePoller("BMKG", upstream.URL, "X-BMKG-Key", "key", []pollEndpoint{{"/seismic-events", "seismic_events"}, {"/tsunami-warnings", "tsunami_warnings"}}, ctrl, upstream.Client())
 	poller.Poll(context.Background())
-	if len(store.failures) != 1 || store.body != nil {
-		t.Fatalf("failures=%v body=%v", store.failures, store.body)
+	state, err := ctrl.GetPollState(context.Background(), "BMKG")
+	if err != nil || state.Healthy || state.LastError == nil {
+		t.Fatalf("state=%+v error=%v", state, err)
 	}
+	var savedState model.PollState
+	if err := ctrl.DB.Take(&savedState, "source = ?", "BMKG").Error; err != nil || savedState.LastSuccessCallerTime != nil {
+		t.Fatalf("failed poll saved a cursor: %+v, %v", savedState, err)
+	}
+	var rawEvents int64
+	if err := ctrl.DB.Model(&model.SeismicEvent{}).Count(&rawEvents).Error; err != nil || rawEvents != 0 {
+		t.Fatalf("partial data persisted: %d, %v", rawEvents, err)
+	}
+}
+
+func pollController(t *testing.T) *controller.Controller {
+	t.Helper()
+	url := os.Getenv("AAT_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("set AAT_TEST_DATABASE_URL to run full polling integration tests")
+	}
+	ctx := context.Background()
+	admin, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(admin.Close)
+	schema := fmt.Sprintf("aat_poll_test_%d", time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := admin.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+			t.Error(err)
+		}
+	})
+	config, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	return &controller.Controller{DB: db}
 }

@@ -5,14 +5,14 @@ import (
 	"log/slog"
 	"time"
 
-	"aat/aggregator/internal/aggregate"
+	"aat/aggregator/internal/model"
 	"aat/internal/eventbus"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
 type outboxStore interface {
-	ClaimOutbox(context.Context, int, time.Duration) ([]aggregate.OutboxMessage, error)
+	ClaimOutbox(context.Context, int, time.Duration) ([]model.OutboxMessage, error)
 	MarkOutboxPublished(context.Context, int64) error
 }
 

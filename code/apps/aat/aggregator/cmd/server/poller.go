@@ -11,16 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"aat/aggregator/internal/aggregate"
+	"aat/aggregator/internal/controller"
+	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
 )
-
-type pollStore interface {
-	PollState(context.Context, string) (aggregate.PollState, error)
-	Ingest(context.Context, string, map[string][]aggregate.Record) ([]aggregate.Hazard, error)
-	MarkPollSuccess(context.Context, string, time.Time) error
-	MarkPollFailure(context.Context, string, string) error
-}
 
 type pollEndpoint struct {
 	path string
@@ -33,22 +27,38 @@ type sourcePoller struct {
 	header     string
 	credential string
 	endpoints  []pollEndpoint
-	store      pollStore
+	ctrl       *controller.Controller
 	client     *http.Client
 }
 
-func newSourcePoller(source, baseURL, header, credential string, endpoints []pollEndpoint, store pollStore, client *http.Client) sourcePoller {
-	u, e := url.ParseRequestURI(baseURL)
-	if e != nil || u.Scheme != "http" || u.Host == "" || credential == "" {
+func newSourcePoller(
+	source, baseURL, header, credential string,
+	endpoints []pollEndpoint,
+	ctrl *controller.Controller,
+	client *http.Client,
+) sourcePoller {
+	requestURL, err := url.ParseRequestURI(baseURL)
+	if err != nil || requestURL.Scheme != "http" || requestURL.Host == "" || credential == "" {
 		panic("invalid polling configuration for " + source)
 	}
-	return sourcePoller{source: source, baseURL: strings.TrimRight(baseURL, "/"), header: header, credential: credential, endpoints: endpoints, store: store, client: client}
+	return sourcePoller{
+		source:     source,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		header:     header,
+		credential: credential,
+		endpoints:  endpoints,
+		ctrl:       ctrl,
+		client:     client,
+	}
 }
 
 func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
+	// Fetch immediately, then repeat at the configured interval.
 	p.Poll(ctx)
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -60,75 +70,113 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 }
 
 func (p sourcePoller) Poll(ctx context.Context) {
-	state, e := p.store.PollState(ctx, p.source)
-	if e != nil {
-		slog.Error("poll state unavailable", "source", p.source, "error", e)
+	state, err := p.ctrl.GetPollState(ctx, p.source)
+	if err != nil {
+		slog.Error("poll state unavailable", "source", p.source, "error", err)
 		return
 	}
 
-	started := time.Now().UTC()
-	correlation := httpkit.ID()
-	body := make(map[string][]aggregate.Record, len(p.endpoints))
+	// Capture the caller time before fetching; save it only if the whole poll succeeds.
+	callerTime := time.Now().UTC()
+	correlationID := httpkit.ID()
+
+	since := callerTime.Add(-180 * time.Second)
+	if state.LastSuccessCallerTime != nil {
+		since = *state.LastSuccessCallerTime
+	}
+
+	// Fetch every endpoint before saving anything.
+	batch := make(map[string][]model.Record, len(p.endpoints))
 	for _, endpoint := range p.endpoints {
-		records, e := p.fetch(ctx, endpoint.path, state.Cursor, correlation)
-		if e != nil {
-			p.failure(ctx, e)
+		records, err := p.fetch(ctx, endpoint.path, &since, correlationID)
+		if err != nil {
+			p.markFailure(ctx, callerTime, err)
 			return
 		}
-		body[endpoint.key] = records
+		batch[endpoint.key] = records
 	}
 
-	changed, e := p.store.Ingest(ctx, p.source, body)
-	if e != nil {
-		p.failure(ctx, fmt.Errorf("ingest: %w", e))
+	// Save the batch and save this source's caller time only after ingestion succeeds.
+	changedEvents, err := p.ctrl.IngestBatch(ctx, p.source, batch)
+	if err != nil {
+		p.markFailure(ctx, callerTime, fmt.Errorf("ingest: %w", err))
 		return
 	}
-	if e = p.store.MarkPollSuccess(ctx, p.source, started); e != nil {
-		slog.Error("poll status write failed", "source", p.source, "correlation_id", correlation, "error", e)
+
+	if err := p.ctrl.MarkPollSuccess(ctx, p.source, callerTime); err != nil {
+		slog.Error("poll status write failed",
+			"source", p.source,
+			"correlation_id", correlationID,
+			"error", err,
+		)
 		return
 	}
-	slog.Info("poll succeeded", "source", p.source, "correlation_id", correlation, "changed", len(changed))
+	slog.Info("poll succeeded",
+		"source", p.source,
+		"correlation_id", correlationID,
+		"changed", len(changedEvents),
+	)
 }
 
-func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, correlation string) ([]aggregate.Record, error) {
-	u, e := url.Parse(p.baseURL + path)
-	if e != nil {
-		return nil, e
+func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, correlationID string) ([]model.Record, error) {
+	requestURL, err := url.Parse(p.baseURL + path)
+	if err != nil {
+		return nil, err
 	}
+
+	// Use the last successful caller time, or the initial 180-second lookback.
 	if since != nil {
-		q := u.Query()
-		q.Set("since", since.UTC().Format(time.RFC3339Nano))
-		u.RawQuery = q.Encode()
+		query := requestURL.Query()
+		query.Set("since", since.UTC().Format(time.RFC3339Nano))
+		requestURL.RawQuery = query.Encode()
 	}
-	req, e := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if e != nil {
-		return nil, e
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
-	req.Header.Set(p.header, p.credential)
-	req.Header.Set("X-Correlation-ID", correlation)
-	start := time.Now()
-	response, e := p.client.Do(req)
-	latency := time.Since(start)
-	if e != nil {
-		slog.Warn("poll request failed", "source", p.source, "path", path, "correlation_id", correlation, "latency_ms", latency.Milliseconds(), "error", e)
-		return nil, e
+	request.Header.Set(p.header, p.credential)
+	request.Header.Set("X-Correlation-ID", correlationID)
+
+	requestStartedAt := time.Now()
+	response, err := p.client.Do(request)
+	latency := time.Since(requestStartedAt)
+	if err != nil {
+		slog.Warn("poll request failed",
+			"source", p.source,
+			"path", path,
+			"correlation_id", correlationID,
+			"latency_ms", latency.Milliseconds(),
+			"error", err,
+		)
+		return nil, err
 	}
 	defer response.Body.Close()
+
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s returned %s", path, response.Status)
 	}
-	var records []aggregate.Record
-	if e = json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&records); e != nil {
-		return nil, fmt.Errorf("decode %s: %w", path, e)
+
+	// Limit each response to 2 MiB before decoding the source records.
+	const maxResponseBytes = 2 << 20
+	var records []model.Record
+	decoder := json.NewDecoder(io.LimitReader(response.Body, maxResponseBytes))
+	if err := decoder.Decode(&records); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", path, err)
 	}
-	slog.Info("poll request", "source", p.source, "path", path, "correlation_id", correlation, "latency_ms", latency.Milliseconds(), "records", len(records))
+	slog.Info("poll request",
+		"source", p.source,
+		"path", path,
+		"correlation_id", correlationID,
+		"latency_ms", latency.Milliseconds(),
+		"records", len(records),
+	)
 	return records, nil
 }
 
-func (p sourcePoller) failure(ctx context.Context, e error) {
-	slog.Warn("poll failed", "source", p.source, "error", e)
-	if statusError := p.store.MarkPollFailure(ctx, p.source, e.Error()); statusError != nil {
+func (p sourcePoller) markFailure(ctx context.Context, callerTime time.Time, err error) {
+	slog.Warn("poll failed", "source", p.source, "error", err)
+	if statusError := p.ctrl.MarkPollFailure(ctx, p.source, callerTime, err.Error()); statusError != nil {
 		slog.Error("poll failure write failed", "source", p.source, "error", statusError)
 	}
 }
-

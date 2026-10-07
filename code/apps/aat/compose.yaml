@@ -67,7 +67,7 @@ services:
       - nats-data:/data
     networks: [services]
     healthcheck:
-      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8222/health"]
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8222/healthz"]
       interval: 3s
       timeout: 2s
       retries: 20
