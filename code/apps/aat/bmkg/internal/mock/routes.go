@@ -9,8 +9,8 @@ import (
 	"aat/internal/httpkit"
 )
 
-func NewHandler(key string, interval, delay time.Duration) http.Handler {
-	feed := model.NewFeed(time.Now().UTC(), interval)
+func NewHandler(key string, start time.Time, interval, delay time.Duration) http.Handler {
+	feed := model.NewFeed(start, interval)
 	ctrl := &controller.Controller{
 		Feed:  feed,
 		Delay: delay,

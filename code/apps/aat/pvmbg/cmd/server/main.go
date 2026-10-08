@@ -8,6 +8,10 @@ import (
 )
 
 func main() {
+	start, err := time.Parse(time.RFC3339Nano, httpkit.Secret("START_TIME"))
+	if err != nil {
+		panic("START_TIME must be an RFC3339 timestamp: " + err.Error())
+	}
 	interval := httpkit.Integer("EVENT_INTERVAL_SECONDS", 10)
 	min := httpkit.Integer("PVMBG_DELAY_MIN_MS", 500)
 	max := httpkit.Integer("PVMBG_DELAY_MAX_MS", 3000)
@@ -20,6 +24,7 @@ func main() {
 		"8082",
 		mock.NewHandler(
 			httpkit.Secret("PVMBG_TOKEN"),
+			start,
 			time.Duration(interval)*time.Second,
 			time.Duration(min)*time.Millisecond,
 			time.Duration(max)*time.Millisecond,

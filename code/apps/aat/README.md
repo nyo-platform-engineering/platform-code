@@ -70,12 +70,17 @@ tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
 | `BMKG_DELAY_MS`                                     | `100`, rentang 50–150 ms                                             |
 | `PVMBG_DELAY_MIN_MS`, `PVMBG_DELAY_MAX_MS`          | `500`, `3000`; rentang 0–10000 ms                                    |
 | `EVENT_INTERVAL_SECONDS`                            | `10`, rentang 1–10 detik                                             |
+| `START_TIME`                                        | Wajib, RFC3339; dibuat sekali oleh `scripts/setup-env.py` dan dipakai kedua mock |
 | `DB_MAX_CONNS`                                      | `5` per Aggregator                                                   |
 | `POLL_INTERVAL_SECONDS`, `POLL_TIMEOUT_MS`          | `3`, `4000`; interval dan batas waktu polling Aggregator             |
 | `NATS_URL`                                          | `nats://nats:4222`; alamat broker untuk Aggregator dan consumers     |
 
-Mock dimulai dengan 20 record, lalu menghasilkan satu record per interval.
-Filter `since` inklusif; warning mengikuti waktu gempa. State mock reset saat restart.
+Mock memiliki 20 seed record hingga `START_TIME` (dibulatkan ke bawah sesuai interval),
+lalu menghasilkan satu record per interval setelahnya hingga waktu saat ini. Pertahankan `START_TIME` dan
+`EVENT_INTERVAL_SECONDS` agar timeline dan record tetap sama setelah restart.
+Filter `since` inklusif; warning mengikuti waktu gempa. Toggle outage dan schema PVMBG
+tetap reset saat restart. Untuk `.env` lama, jalankan kembali `python3 scripts/setup-env.py`
+sebelum rebuild; timestamp yang sudah ada dan kredensial tidak diubah.
 
 ## Endpoint
 

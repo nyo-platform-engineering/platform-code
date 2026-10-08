@@ -9,8 +9,8 @@ import (
 	"aat/pvmbg/internal/mock/model"
 )
 
-func NewHandler(token string, interval, minDelay, maxDelay time.Duration) http.Handler {
-	feed := model.NewFeed(time.Now().UTC(), interval)
+func NewHandler(token string, start time.Time, interval, minDelay, maxDelay time.Duration) http.Handler {
+	feed := model.NewFeed(start, interval)
 	ctrl := &controller.Controller{
 		Feed:     feed,
 		MinDelay: minDelay,

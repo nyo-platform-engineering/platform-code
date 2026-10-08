@@ -10,7 +10,7 @@ import (
 
 // BMKG credentials must not be interchangeable with PVMBG credentials.
 func TestRejectsPVMBGCredential(t *testing.T) {
-	handler := NewHandler("bmkg-test-only", time.Second, 0)
+	handler := NewHandler("bmkg-test-only", time.Now().UTC(), time.Second, 0)
 	response := requestBMKG(handler, "/seismic-events", "pvmbg-test-only")
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("got status %d, want 401", response.Code)
@@ -19,7 +19,7 @@ func TestRejectsPVMBGCredential(t *testing.T) {
 
 // A new mock exposes 20 historical events before the next generation interval.
 func TestSeismicEndpointReturnsSeedEvents(t *testing.T) {
-	handler := NewHandler("bmkg-test-only", time.Hour, 0)
+	handler := NewHandler("bmkg-test-only", time.Now().UTC(), time.Hour, 0)
 	response := requestBMKG(handler, "/seismic-events", "bmkg-test-only")
 	rows := decodeBMKGRows(t, response)
 	if len(rows) != 20 {
@@ -29,11 +29,32 @@ func TestSeismicEndpointReturnsSeedEvents(t *testing.T) {
 
 // Warnings have their own endpoint and reference the related seismic event.
 func TestWarningEndpointReturnsEventReferences(t *testing.T) {
-	handler := NewHandler("bmkg-test-only", time.Hour, 0)
+	handler := NewHandler("bmkg-test-only", time.Now().UTC(), time.Hour, 0)
 	response := requestBMKG(handler, "/tsunami-warnings", "bmkg-test-only")
 	rows := decodeBMKGRows(t, response)
 	if len(rows) == 0 || rows[0]["related_event_id"] == nil {
 		t.Fatalf("missing warning event reference: %s", response.Body.String())
+	}
+}
+
+// Recreating the handler with the same configured start preserves the full timeline.
+func TestConfiguredStartPersistsAcrossRestart(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Hour).Add(-2 * time.Hour)
+	before := NewHandler("bmkg-test-only", start, time.Hour, 0)
+	after := NewHandler("bmkg-test-only", start, time.Hour, 0)
+	for _, path := range []string{"/seismic-events", "/tsunami-warnings"} {
+		first := requestBMKG(before, path, "bmkg-test-only")
+		second := requestBMKG(after, path, "bmkg-test-only")
+		rows := decodeBMKGRows(t, first)
+		decodeBMKGRows(t, second)
+		if first.Body.String() != second.Body.String() {
+			t.Fatalf("%s changed after restart", path)
+		}
+		if path == "/seismic-events" {
+			if len(rows) != 22 || rows[0]["occurred_at"] != start.Add(-19*time.Hour).Format(time.RFC3339) {
+				t.Fatal("configured start was not used to reconstruct historical events")
+			}
+		}
 	}
 }
 

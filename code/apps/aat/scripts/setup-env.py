@@ -2,6 +2,7 @@
 Implementation assisted by Codex; see README.
 """
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 import secrets
 
@@ -37,7 +38,14 @@ for key in keys:
         raise SystemExit(f'{key} must be at least 32 characters without whitespace.')
 if len({values[key] for key in keys}) != len(keys):
     raise SystemExit('Use a distinct credential for each domain and client.')
-if changed or not path.exists():
+start_added = not values.get('START_TIME')
+if start_added:
+    start = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    if 'START_TIME' in positions:
+        lines[positions['START_TIME']] = f'START_TIME={start}'
+    else:
+        lines.append(f'START_TIME={start}')
+if changed or start_added or not path.exists():
     # Create with owner-only permissions before writing secrets.
     path.touch(mode=0o600)
     path.chmod(0o600)
@@ -45,3 +53,4 @@ if changed or not path.exists():
 else:
     path.chmod(0o600)
 print(f'Configuration ready; {changed} credentials generated. Existing credentials preserved.')
+print('Start time initialized.' if start_added else 'Existing start time preserved.')

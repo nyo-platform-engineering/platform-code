@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,14 +12,14 @@ import (
 
 // Each test creates its own mock so outage/schema state cannot leak between tests.
 func TestRejectsBMKGCredential(t *testing.T) {
-	handler := NewHandler("pvmbg-test-only", time.Hour, 0, 0)
+	handler := NewHandler("pvmbg-test-only", time.Now().UTC(), time.Hour, 0, 0)
 	response := requestPVMBG(handler, "GET", "/volcanic-reports", "bmkg-test-only", "")
 	requireStatus(t, response, http.StatusUnauthorized)
 }
 
 // Startup uses the original schema: 20 reports with no confidence_level field.
 func TestReportsStartWithOriginalSchema(t *testing.T) {
-	handler := NewHandler("pvmbg-test-only", time.Hour, 0, 0)
+	handler := NewHandler("pvmbg-test-only", time.Now().UTC(), time.Hour, 0, 0)
 	rows := fetchReports(t, handler)
 	if len(rows) != 20 {
 		t.Fatalf("got %d seed reports, want 20", len(rows))
@@ -30,7 +31,7 @@ func TestReportsStartWithOriginalSchema(t *testing.T) {
 
 // Enabling the new schema changes responses from the same running handler.
 func TestSchemaActivationAddsConfidence(t *testing.T) {
-	handler := NewHandler("pvmbg-test-only", time.Hour, 0, 0)
+	handler := NewHandler("pvmbg-test-only", time.Now().UTC(), time.Hour, 0, 0)
 	response := requestPVMBG(handler, "POST", "/admin/schema-version", "pvmbg-test-only", `{"enabled":true}`)
 	requireStatus(t, response, http.StatusOK)
 	rows := fetchReports(t, handler)
@@ -41,7 +42,7 @@ func TestSchemaActivationAddsConfidence(t *testing.T) {
 
 // Outage returns 503; disabling it restores reports without recreating the mock.
 func TestOutageAndRecovery(t *testing.T) {
-	handler := NewHandler("pvmbg-test-only", time.Hour, 0, 0)
+	handler := NewHandler("pvmbg-test-only", time.Now().UTC(), time.Hour, 0, 0)
 	response := requestPVMBG(handler, "POST", "/admin/outage", "pvmbg-test-only", `{"enabled":true}`)
 	requireStatus(t, response, http.StatusOK)
 	response = requestPVMBG(handler, "GET", "/volcanic-reports", "pvmbg-test-only", "")
@@ -55,9 +56,22 @@ func TestOutageAndRecovery(t *testing.T) {
 
 // Invalid timestamps must be rejected instead of silently disabling filtering.
 func TestReportsRejectInvalidSince(t *testing.T) {
-	handler := NewHandler("pvmbg-test-only", time.Hour, 0, 0)
+	handler := NewHandler("pvmbg-test-only", time.Now().UTC(), time.Hour, 0, 0)
 	response := requestPVMBG(handler, "GET", "/volcanic-reports?since=bad", "pvmbg-test-only", "")
 	requireStatus(t, response, http.StatusBadRequest)
+}
+
+// Recreating the handler with the same configured start preserves historical reports.
+func TestConfiguredStartPersistsAcrossRestart(t *testing.T) {
+	start := time.Now().UTC().Truncate(time.Hour).Add(-2 * time.Hour)
+	before := fetchReports(t, NewHandler("pvmbg-test-only", start, time.Hour, 0, 0))
+	after := fetchReports(t, NewHandler("pvmbg-test-only", start, time.Hour, 0, 0))
+	if len(before) != 22 || before[0]["reported_at"] != start.Add(-19*time.Hour).Format(time.RFC3339) {
+		t.Fatal("configured start was not used to reconstruct historical reports")
+	}
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("reports changed after restart")
+	}
 }
 
 // requestPVMBG exercises routing/auth directly, without a network server.
