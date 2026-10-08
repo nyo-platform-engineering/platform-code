@@ -90,13 +90,14 @@ func Number(r model.Record, key string, min, max float64) (float64, error) {
 	return v, e
 }
 
-// SelectAttributes keeps only listed fields that are present in the source record.
-func SelectAttributes(r model.Record, keys ...string) model.Record {
+// AttributesExcept preserves source fields except those mapped to canonical fields.
+func AttributesExcept(r model.Record, keys ...string) model.Record {
 	a := model.Record{}
+	for k, v := range r {
+		a[k] = v
+	}
 	for _, k := range keys {
-		if v, present := r[k]; present {
-			a[k] = v
-		}
+		delete(a, k)
 	}
 
 	return a

@@ -55,7 +55,14 @@ func Volcanic(r model.Record) (model.HazardEvent, error) {
 	h.Latitude = v.Lat
 	h.Longitude = v.Lon
 	h.Severity = Levels[input.AlertLevel]
-	h.Attributes = SelectAttributes(r, "eruption_count_24h", "ash_column_height_m", "confidence_level")
+	// report_id (x)
+	// volcano_id
+	// alert_level (x)
+	// eruption_count_24h
+	// ash_column_height_m
+	// reported_at (x)
+	// confidence_level
+	h.Attributes = AttributesExcept(r, "report_id", "reported_at", "alert_level")
 	return h, nil
 }
 

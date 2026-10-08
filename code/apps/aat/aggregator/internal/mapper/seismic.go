@@ -45,7 +45,15 @@ func Seismic(r model.Record, warnings []model.Record) (model.HazardEvent, error)
 	h.Latitude = input.Latitude
 	h.Longitude = input.Longitude
 	h.Severity = seismicSeverity(input.Magnitude)
-	h.Attributes = SelectAttributes(r, "magnitude", "depth_km", "potential_tsunami")
+	// event_id (x)
+	// magnitude
+	// depth_km
+	// epicenter_lat (x)
+	// epicenter_lon (x)
+	// region_name (x)
+	// occurred_at (x)
+	// potential_tsunami
+	h.Attributes = AttributesExcept(r, "event_id", "region_name", "epicenter_lat", "epicenter_lon", "occurred_at")
 
 	if err := applyTsunamiWarnings(&h, input.PotentialTsunami, warnings); err != nil {
 		return h, err
@@ -120,6 +128,9 @@ func applyTsunamiWarnings(h *model.HazardEvent, potential bool, warnings []model
 		}
 	}
 
+	if _, collision := h.Attributes["tsunami_warnings"]; collision {
+		return fmt.Errorf("seismic event payload must not contain tsunami_warnings; fetch warnings from the /tsunami-warnings endpoint")
+	}
 	h.Attributes["tsunami_warnings"], _ = json.Marshal(warnings)
 	return nil
 }
