@@ -90,14 +90,13 @@ func Number(r model.Record, key string, min, max float64) (float64, error) {
 	return v, e
 }
 
-func Attributes(r model.Record, keys ...string) model.Record {
+// SelectAttributes keeps only listed fields that are present in the source record.
+func SelectAttributes(r model.Record, keys ...string) model.Record {
 	a := model.Record{}
-	for k, v := range r {
-		a[k] = v
-	}
-
 	for _, k := range keys {
-		delete(a, k)
+		if v, present := r[k]; present {
+			a[k] = v
+		}
 	}
 
 	return a

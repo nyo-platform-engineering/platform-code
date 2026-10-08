@@ -89,7 +89,7 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 		t.Fatal("repeat ingest changed timestamp", err)
 	}
 
-	// Old/new attributes coexist without another schema migration.
+	// Allowed optional attributes coexist; fields outside the whitelist are discarded.
 	dynamic := report("v2")
 	dynamic["confidence_level"] = json.RawMessage(`0.85`)
 	dynamic["future_sensor"] = json.RawMessage(`{"nested":[1,true]}`)
@@ -106,8 +106,8 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 			if _, ok := h.Attributes["confidence_level"]; ok {
 				t.Fatal("old event gained new attribute")
 			}
-		} else if string(h.Attributes["confidence_level"]) != "0.85" || h.Attributes["future_sensor"] == nil {
-			t.Fatal("dynamic attributes lost")
+		} else if string(h.Attributes["confidence_level"]) != "0.85" || h.Attributes["future_sensor"] != nil {
+			t.Fatal("attribute whitelist not respected")
 		}
 	}
 	// Changing an attribute must count as an update.

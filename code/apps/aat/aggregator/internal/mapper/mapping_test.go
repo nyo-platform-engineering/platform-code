@@ -58,16 +58,17 @@ func TestWarningOverridesSeismicSeverity(t *testing.T) {
 	}
 }
 
-// Enrichment uses the highest warning level without modifying the source payload.
+// Enrichment uses the highest warning level and only keeps whitelisted attributes.
 func TestSeismicWarningEnrichmentPreservesRawAttributes(t *testing.T) {
 	input := quake("7")
 	input["future_sensor"] = json.RawMessage(`{"nested":[1,true]}`)
+	input["tsunami_warnings"] = json.RawMessage(`[{"unexpected":true}]`)
 	before, _ := json.Marshal(input)
 	h, err := mapper.Seismic(input, []model.Record{tsunami("Awas"), tsunami("Waspada")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.Severity != "AWAS" || string(h.Attributes["magnitude"]) != "7" || string(h.Attributes["future_sensor"]) != `{"nested":[1,true]}` {
+	if h.Severity != "AWAS" || string(h.Attributes["magnitude"]) != "7" || len(h.Attributes) != 4 {
 		t.Fatalf("incorrect enrichment: %+v", h)
 	}
 	var warnings []model.Record
@@ -85,7 +86,7 @@ func TestSeismicWarningEnrichmentPreservesRawAttributes(t *testing.T) {
 
 // Invalid correlations must fail rather than produce an enriched hazard.
 func TestSeismicRejectsInvalidWarningEnrichment(t *testing.T) {
-	for _, name := range []string{"no_tsunami_potential", "unrelated_warning", "reserved_attribute", "invalid_warning_level"} {
+	for _, name := range []string{"no_tsunami_potential", "unrelated_warning", "invalid_warning_level"} {
 		t.Run(name, func(t *testing.T) {
 			input := quake("7")
 			warning := tsunami("Awas")
@@ -94,8 +95,6 @@ func TestSeismicRejectsInvalidWarningEnrichment(t *testing.T) {
 				input["potential_tsunami"] = json.RawMessage(`false`)
 			case "unrelated_warning":
 				warning["related_event_id"] = json.RawMessage(`"another-event"`)
-			case "reserved_attribute":
-				input["tsunami_warnings"] = json.RawMessage(`[]`)
 			case "invalid_warning_level":
 				warning["threat_level"] = json.RawMessage(`"Unknown"`)
 			}
@@ -106,7 +105,7 @@ func TestSeismicRejectsInvalidWarningEnrichment(t *testing.T) {
 	}
 }
 
-// Mapping retains additive fields, resolves Merapi coordinates, and keeps its stable ID.
+// Mapping keeps allowed optional fields, resolves Merapi coordinates, and keeps its stable ID.
 func TestVolcanicAttributesAndReference(t *testing.T) {
 	r := report("v1")
 	r["confidence_level"] = json.RawMessage(`0.85`)
@@ -116,7 +115,7 @@ func TestVolcanicAttributesAndReference(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if h.Area != "Gunung Merapi" || h.Latitude != -7.54 || string(h.Attributes["confidence_level"]) != "0.85" || string(h.Attributes["future_sensor"]) != `{"nested":[1,true]}` {
+	if h.Area != "Gunung Merapi" || h.Latitude != -7.54 || string(h.Attributes["confidence_level"]) != "0.85" || len(h.Attributes) != 3 {
 		t.Fatalf("bad mapping: %+v", h)
 	}
 
