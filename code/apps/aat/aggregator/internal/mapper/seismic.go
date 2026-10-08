@@ -8,81 +8,122 @@ import (
 	"time"
 )
 
+/*
+Kanonik (HazardEvent)
+Asal (SeismicEvent)
+
+source_ref_id
+event_id
+
+hazard_type
+SEISMIC
+
+area_name
+region_name
+
+latitude, longitude
+epicenter_lat, epicenter_lon
+
+occurred_at
+occurred_at
+
+severity
+AWAS bila terdapat TsunamiWarning dengan threat_level = Awas; selain itu mengikuti threat_level dari TsunamiWarning terkait; bila tidak ada warning, NORMAL untuk magnitude < 5.0, WASPADA untuk 5.0 ≤ magnitude < 6.5, dan SIAGA untuk magnitude ≥ 6.5
+
+attributes
+magnitude, depth_km, potential_tsunami, serta field TsunamiWarning terkait bila ada
+*/
+
 func Seismic(r model.Record, warnings []model.Record) (model.HazardEvent, error) {
-	var h model.HazardEvent
-	ref, e := String(r, "event_id")
-	if e != nil {
-		return h, e
+	input, err := readSeismic(r)
+	if err != nil {
+		return model.HazardEvent{}, err
 	}
 
-	at, e := Read[time.Time](r, "occurred_at")
-	if e != nil {
-		return h, e
-	}
+	h := Base("BMKG", input.Ref, "SEISMIC", input.Occurred)
+	h.Area = input.Area
+	h.Latitude = input.Latitude
+	h.Longitude = input.Longitude
+	h.Severity = seismicSeverity(input.Magnitude)
+	h.Attributes = Attributes(r, "event_id", "region_name", "epicenter_lat", "epicenter_lon", "occurred_at")
 
-	h = Base("BMKG", ref, "SEISMIC", at)
-	if h.Area, e = String(r, "region_name"); e != nil {
-		return h, e
+	if err := applyTsunamiWarnings(&h, input.PotentialTsunami, warnings); err != nil {
+		return h, err
 	}
+	return h, nil
+}
 
-	if h.Latitude, e = Number(r, "epicenter_lat", -90, 90); e != nil {
-		return h, e
+type seismicInput struct {
+	Ref              string    `json:"event_id"`
+	Occurred         time.Time `json:"occurred_at"`
+	Area             string    `json:"region_name"`
+	Latitude         float64   `json:"epicenter_lat"`
+	Longitude        float64   `json:"epicenter_lon"`
+	Magnitude        float64   `json:"magnitude"`
+	PotentialTsunami bool      `json:"potential_tsunami"`
+}
+
+// Before mapping: read and validate the source fields, keeping the raw record intact.
+func readSeismic(r model.Record) (seismicInput, error) {
+	if err := validateSeismic(r); err != nil {
+		return seismicInput{}, err
 	}
+	return decodeRecord[seismicInput](r)
+}
 
-	if h.Longitude, e = Number(r, "epicenter_lon", -180, 180); e != nil {
-		return h, e
+func validateSeismic(r model.Record) error {
+	return validateFields(r,
+		requiredString("event_id"),
+		requiredField[time.Time]("occurred_at"),
+		requiredString("region_name"),
+		boundedNumber("epicenter_lat", -90, 90),
+		boundedNumber("epicenter_lon", -180, 180),
+		boundedNumber("magnitude", 0, math.MaxFloat64),
+		boundedNumber("depth_km", 0, math.MaxFloat64),
+		requiredField[bool]("potential_tsunami"),
+	)
+}
+
+func seismicSeverity(magnitude float64) string {
+	if magnitude >= 6.5 {
+		return "SIAGA"
 	}
-
-	mag, e := Number(r, "magnitude", 0, math.MaxFloat64)
-	if e != nil {
-		return h, e
+	if magnitude >= 5 {
+		return "WASPADA"
 	}
+	return "NORMAL"
+}
 
-	if _, e = Number(r, "depth_km", 0, math.MaxFloat64); e != nil {
-		return h, e
+// After mapping: related warnings override severity and enrich the attributes.
+func applyTsunamiWarnings(h *model.HazardEvent, potential bool, warnings []model.Record) error {
+	if len(warnings) == 0 {
+		return nil
 	}
-
-	potential, e := Read[bool](r, "potential_tsunami")
-	if e != nil {
-		return h, e
+	if !potential {
+		return fmt.Errorf("warning requires potential_tsunami=true")
 	}
 
 	h.Severity = "NORMAL"
-	if mag >= 6.5 {
-		h.Severity = "SIAGA"
-	} else if mag >= 5 {
-		h.Severity = "WASPADA"
+	for _, w := range warnings {
+		_, related, e := Tsunami(w)
+		if e != nil {
+			return e
+		}
+
+		if related != h.Ref {
+			return fmt.Errorf("unrelated warning")
+		}
+
+		level, _ := String(w, "threat_level")
+		if Rank[Levels[level]] > Rank[h.Severity] {
+			h.Severity = Levels[level]
+		}
 	}
 
-	h.Attributes = Attributes(r, "event_id", "region_name", "epicenter_lat", "epicenter_lon", "occurred_at")
-	if len(warnings) > 0 {
-		if !potential {
-			return h, fmt.Errorf("warning requires potential_tsunami=true")
-		}
-
-		h.Severity = "NORMAL"
-		for _, w := range warnings {
-			_, related, e := Tsunami(w)
-			if e != nil {
-				return h, e
-			}
-
-			if related != ref {
-				return h, fmt.Errorf("unrelated warning")
-			}
-
-			level, _ := String(w, "threat_level")
-			if Rank[Levels[level]] > Rank[h.Severity] {
-				h.Severity = Levels[level]
-			}
-		}
-
-		if _, collision := h.Attributes["tsunami_warnings"]; collision {
-			return h, fmt.Errorf("reserved attribute tsunami_warnings")
-		}
-
-		h.Attributes["tsunami_warnings"], _ = json.Marshal(warnings)
+	if _, collision := h.Attributes["tsunami_warnings"]; collision {
+		return fmt.Errorf("reserved attribute tsunami_warnings")
 	}
 
-	return h, nil
+	h.Attributes["tsunami_warnings"], _ = json.Marshal(warnings)
+	return nil
 }

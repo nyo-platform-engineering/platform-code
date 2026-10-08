@@ -7,6 +7,32 @@ import (
 	"time"
 )
 
+/*
+Kanonik (HazardEvent)
+Asal (VolcanicReport)
+
+source_ref_id
+report_id
+
+hazard_type
+VOLCANIC
+
+area_name
+Nama gunung api hasil pemetaan dari volcano_id
+
+latitude, longitude
+Koordinat gunung api dari tabel referensi statis milik BNPB
+
+occurred_at
+reported_at
+
+severity
+alert_level dipetakan langsung ke enum kanonik
+
+attributes
+eruption_count_24h, ash_column_height_m, serta confidence_level bila tersedia
+*/
+
 // Coordinates are static demo references owned by BNPB, not navigation data.
 var volcanoes = map[string]struct {
 	Name     string
@@ -18,56 +44,80 @@ var volcanoes = map[string]struct {
 }
 
 func Volcanic(r model.Record) (model.HazardEvent, error) {
-	var h model.HazardEvent
-	ref, e := String(r, "report_id")
-	if e != nil {
-		return h, e
+	input, err := readVolcanic(r)
+	if err != nil {
+		return model.HazardEvent{}, err
 	}
 
-	at, e := Read[time.Time](r, "reported_at")
-	if e != nil {
-		return h, e
-	}
-
-	h = Base("PVMBG", ref, "VOLCANIC", at)
-	id, e := String(r, "volcano_id")
-	if e != nil {
-		return h, e
-	}
-
-	v, ok := volcanoes[id]
-	if !ok {
-		return h, fmt.Errorf("unknown volcano_id %q", id)
-	}
-
+	v := volcanoes[input.VolcanoID]
+	h := Base("PVMBG", input.Ref, "VOLCANIC", input.Reported)
 	h.Area = v.Name
 	h.Latitude = v.Lat
 	h.Longitude = v.Lon
-	level, e := String(r, "alert_level")
-	if e != nil {
-		return h, e
-	}
-
-	h.Severity, ok = Levels[level]
-	if !ok {
-		return h, fmt.Errorf("unknown alert_level")
-	}
-
-	count, e := Read[int](r, "eruption_count_24h")
-	if e != nil || count < 0 {
-		return h, fmt.Errorf("invalid eruption_count_24h")
-	}
-
-	if _, e = Number(r, "ash_column_height_m", 0, math.MaxFloat64); e != nil {
-		return h, e
-	}
-
-	if _, ok = r["confidence_level"]; ok {
-		if _, e = Number(r, "confidence_level", 0, 1); e != nil {
-			return h, e
-		}
-	}
-
+	h.Severity = Levels[input.AlertLevel]
 	h.Attributes = Attributes(r, "report_id", "reported_at", "alert_level")
 	return h, nil
+}
+
+type volcanicInput struct {
+	Ref        string    `json:"report_id"`
+	Reported   time.Time `json:"reported_at"`
+	VolcanoID  string    `json:"volcano_id"`
+	AlertLevel string    `json:"alert_level"`
+}
+
+// Before mapping: validate source fields and the reference data used by the mapping.
+func readVolcanic(r model.Record) (volcanicInput, error) {
+	if err := validateVolcanic(r); err != nil {
+		return volcanicInput{}, err
+	}
+	return decodeRecord[volcanicInput](r)
+}
+
+func validateVolcanic(r model.Record) error {
+	err := validateFields(r,
+		requiredString("report_id"),
+		requiredField[time.Time]("reported_at"),
+		validateVolcanoID,
+		validateAlertLevel,
+		validateEruptionCount,
+		boundedNumber("ash_column_height_m", 0, math.MaxFloat64),
+	)
+	if err != nil {
+		return err
+	}
+	if _, present := r["confidence_level"]; present {
+		return boundedNumber("confidence_level", 0, 1)(r)
+	}
+	return nil
+}
+
+func validateVolcanoID(r model.Record) error {
+	id, err := String(r, "volcano_id")
+	if err != nil {
+		return err
+	}
+	if _, ok := volcanoes[id]; !ok {
+		return fmt.Errorf("unknown volcano_id %q", id)
+	}
+	return nil
+}
+
+func validateAlertLevel(r model.Record) error {
+	level, err := String(r, "alert_level")
+	if err != nil {
+		return err
+	}
+	if _, ok := Levels[level]; !ok {
+		return fmt.Errorf("unknown alert_level")
+	}
+	return nil
+}
+
+func validateEruptionCount(r model.Record) error {
+	count, err := Read[int](r, "eruption_count_24h")
+	if err != nil || count < 0 {
+		return fmt.Errorf("invalid eruption_count_24h")
+	}
+	return nil
 }

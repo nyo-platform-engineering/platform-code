@@ -14,6 +14,50 @@ var Levels = map[string]string{"Normal": "NORMAL", "Waspada": "WASPADA", "Siaga"
 
 var Rank = map[string]int{"NORMAL": 0, "WASPADA": 1, "SIAGA": 2, "AWAS": 3}
 
+type fieldValidator func(model.Record) error
+
+// validateFields stops at the first invalid field, preserving the source error.
+func validateFields(r model.Record, validators ...fieldValidator) error {
+	for _, validate := range validators {
+		if err := validate(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func requiredField[T any](key string) fieldValidator {
+	return func(r model.Record) error {
+		_, err := Read[T](r, key)
+		return err
+	}
+}
+
+func requiredString(key string) fieldValidator {
+	return func(r model.Record) error {
+		_, err := String(r, key)
+		return err
+	}
+}
+
+func boundedNumber(key string, min, max float64) fieldValidator {
+	return func(r model.Record) error {
+		_, err := Number(r, key, min, max)
+		return err
+	}
+}
+
+// decodeRecord reads validated fields into a typed input; raw attributes stay in r.
+func decodeRecord[T any](r model.Record) (T, error) {
+	var input T
+	payload, err := json.Marshal(r)
+	if err != nil {
+		return input, err
+	}
+	err = json.Unmarshal(payload, &input)
+	return input, err
+}
+
 func Read[T any](r model.Record, key string) (T, error) {
 	var v T
 	b, ok := r[key]
