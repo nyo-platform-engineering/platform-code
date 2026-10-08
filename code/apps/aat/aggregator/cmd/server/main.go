@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"aat/aggregator/internal"
 	"aat/aggregator/internal/controller"
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
@@ -83,6 +84,6 @@ func main() {
 	go pvmbgPoller.Run(workerCtx, pollInterval)
 	go runOutboxRelay(workerCtx, ctrl, natsURL)
 
-	router := controller.NewHandler(ctrl, token)
+	router := internal.NewHandler(ctrl, token)
 	httpkit.Serve("Aggregator", "8083", router)
 }

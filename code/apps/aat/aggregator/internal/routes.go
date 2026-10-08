@@ -1,12 +1,13 @@
-package controller
+package internal
 
 import (
 	"net/http"
 
+	"aat/aggregator/internal/controller"
 	"aat/internal/httpkit"
 )
 
-func NewHandler(ctrl *Controller, token string) http.Handler {
+func NewHandler(ctrl *controller.Controller, token string) http.Handler {
 	mux := httpkit.Router()
 	private := mux.Group("", httpkit.Auth("Authorization", "Bearer "+token))
 
