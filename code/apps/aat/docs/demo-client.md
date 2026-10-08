@@ -17,8 +17,8 @@ Script persiapan membuat empat secret acak di `.env`, mengganti placeholder bagi
 dapat dibaca/ditulis pemilik file. Secret mock, Aggregator, Auth internal, dan
 ketiga identitas harus berbeda. Auth/Client API tidak mengakses PostgreSQL langsung.
 
-Ingest data terlebih dahulu mengikuti [demo bagian 1](demo.md). Setelah ada data
-BMKG dalam Canonical Store, jalankan:
+Tunggu polling pertama selesai (umumnya satu interval polling). Data BMKG akan
+tersimpan otomatis. Alternatif manual tersedia di [demo bagian 1](demo.md). Jalankan:
 
 ```sh
 python3 scripts/demo-client.py --wait-expiry
@@ -83,11 +83,12 @@ go vet ./...
 Tes `TestConcurrentRequestRejectedAndTimeoutReleasesSlot` menahan upstream,
 memastikan request kedua langsung 429 dengan `Retry-After`, lalu memastikan slot
 kembali tersedia setelah timeout. Tes refresh bersamaan memastikan token hanya
-berhasil digunakan sekali. Ini merupakan tes batas API; load test seluruh sistem dikoordinasikan secara terpisah.
+berhasil digunakan sekali. Ini merupakan tes batas API; load test seluruh sistem memakai [k6](load-testing.md) secara terpisah.
 
 Tes freshness memakai waktu polling sukses yang baru/lama, polling gagal, serta
-status hilang/rusak. Pada stack sekarang, endpoint status belum tersedia,
-sehingga respons nyata menampilkan `unknown` dan `stale: true`. Jangan menganggap
+status hilang/rusak. Pada stack sekarang, polling dan endpoint status tersedia.
+Respons fresh/stale mengikuti hasil polling; unknown dapat muncul sebelum polling
+pertama berhasil atau bila metadata tidak tersedia. Jangan menganggap
 umur event atau keberhasilan manual ingest sebagai waktu polling terakhir.
 
 ## Konfigurasi dan operasional
@@ -117,4 +118,5 @@ docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml stop auth cli
 docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml down
 ```
 
-Overlay ini membantu demo lokal akses client. Orkestrasi penuh, pencatatan polling, dan load test terintegrasi dikelola secara terpisah. Broker dan dua consumer tersedia pada stack Compose dasar. Untuk deployment beberapa replica Auth diperlukan penyimpanan session bersama; TLS diperlukan jika layanan dibuka di luar localhost.
+Overlay ini membantu demo lokal akses client. Orkestrasi penuh dan pencatatan polling tersedia pada stack dasar; load test
+terintegrasi tersedia di [panduan k6](load-testing.md). Broker dan dua consumer tersedia pada stack Compose dasar. Untuk deployment beberapa replica Auth diperlukan penyimpanan session bersama; TLS diperlukan jika layanan dibuka di luar localhost.

@@ -3,10 +3,12 @@
 Go + Gin, PostgreSQL, dan GORM. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
 penyimpanan, polling otomatis beserta pencatatan kesehatan sumber, API internal
 Aggregator, Auth Service, Client-Facing API, NATS JetStream, dashboard updater,
-dan field notifier. Sustained system load testing remains to be completed.
+dan field notifier. Load testing sustained M1 tersedia di
+[panduan load testing](docs/load-testing.md). Laporan PDF M1 belum dibuat; audit implementasi tidak menggantikan laporan pengumpulan.
 
-Untuk tur struktur direktori dan penjelasan tiap package, lihat
-[Project Structure Guide](PROJECT_STRUCTURE.md).
+Hasil pencocokan ketiga bagian terhadap spesifikasi M1 tersedia di
+[audit M1](docs/m1-audit.md); cara mengulang demo terintegrasi di
+[demo sistem](docs/demo-system.md).
 
 ## Alur data
 
@@ -28,11 +30,11 @@ Memerlukan Docker Compose v2. Jalankan dari root repository:
 
 ```sh
 cd code/apps/aat
-# Hanya jika .env belum ada; isi kredensial acak yang berbeda untuk tiap service.
-cp -n .env.example .env
-# Edit .env sebelum menjalankan stack.
-docker compose -p aat-part1 up -d --build
-docker compose -p aat-part1 ps
+# Buat .env dari contoh dan isi delapan secret acak; secret nyata tidak dirotasi.
+python3 scripts/setup-env.py
+# Satu perintah menyalakan seluruh komponen M1.
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml ps
 ```
 
 Konfigurasi ada di [.env.example](.env.example). Port host default:
@@ -156,7 +158,8 @@ lokal, menghapus akses host Aggregator, dan belum menyediakan reverse proxy.
 
 Tes bagian 2 mencakup field sesuai identitas, refresh/replay, concurrency, dan
 penyajian stale dengan upstream simulasi. Polling otomatis, outbox, dan JetStream
-delivery kini tersedia. Load test terintegrasi masih perlu dijalankan.
+delivery kini tersedia. Load test terintegrasi memakai k6, 50 VU selama 65 detik;
+lihat [metode dan hasil](docs/load-testing.md).
 Implementasi dibantu Codex; anggota perlu memahami, memverifikasi, dan mendeklarasikan
 penggunaannya dalam laporan.
 

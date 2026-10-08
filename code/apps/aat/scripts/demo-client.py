@@ -5,12 +5,15 @@ import time
 import json
 import urllib.error
 import urllib.request
+import uuid
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--env-file", type=Path, default=root / ".env")
 parser.add_argument("--wait-expiry", action="store_true", help="Wait for natural responder token expiry before refreshing")
+parser.add_argument("--output", type=Path, help="Write sanitized verification evidence as JSON")
 args = parser.parse_args()
+correlation = "client-demo-" + uuid.uuid4().hex
 env = {}
 for line in args.env_file.read_text().splitlines():
     if line.strip() and not line.lstrip().startswith("#") and "=" in line:
@@ -25,6 +28,7 @@ urls = {name: f"http://127.0.0.1:{env.get(key, default)}" for name, key, default
 
 def call(service, path, body=None, token=None, headers=None, expected=200):
     headers = dict(headers or {})
+    headers["X-Correlation-ID"] = correlation
     if token:
         headers["Authorization"] = f"Bearer {token}"
     data = None if body is None else json.dumps(body).encode()
@@ -34,6 +38,7 @@ def call(service, path, body=None, token=None, headers=None, expected=200):
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             status, raw = response.status, response.read()
+            assert response.headers.get("X-Correlation-ID") == correlation
     except urllib.error.HTTPError as error:
         status, raw = error.code, error.read()
     if status != expected:
@@ -96,4 +101,8 @@ call("pvmbg", "/volcanic-reports", token=env["BMKG_API_KEY"], expected=401)
 call("bmkg", "/seismic-events", headers={"X-BMKG-Key": pairs["analyst"]["access_token"]}, expected=401)
 call("pvmbg", "/volcanic-reports", token=pairs["analyst"]["access_token"], expected=401)
 call("aggregator", "/internal/hazards", token=pairs["analyst"]["access_token"], expected=401)
-print(json.dumps({"identities_and_fields": fields, "natural_expiry": "passed" if args.wait_expiry else "not run (use --wait-expiry)", "refresh_rotation_and_replay": "passed", "mock_auth_contract": "passed", "source_status": page["sources"]}, indent=2))
+result = {"correlation_id": correlation, "identities_and_fields": fields, "natural_expiry": "passed" if args.wait_expiry else "not run (use --wait-expiry)", "refresh_rotation_and_replay": "passed", "mock_auth_contract": "passed", "source_status": page["sources"]}
+if args.output:
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(result, indent=2) + "\n")
+print(json.dumps(result, indent=2))

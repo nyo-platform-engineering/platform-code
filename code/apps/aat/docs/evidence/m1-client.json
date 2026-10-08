@@ -1,0 +1,51 @@
+{
+  "correlation_id": "client-demo-fcfd6bd9b88a4a9292327d38d19c7195",
+  "identities_and_fields": {
+    "public": [
+      "area_name",
+      "hazard_id",
+      "hazard_type",
+      "ingested_at",
+      "occurred_at",
+      "severity",
+      "source"
+    ],
+    "responder": [
+      "area_name",
+      "attributes",
+      "hazard_id",
+      "hazard_type",
+      "ingested_at",
+      "latitude",
+      "longitude",
+      "occurred_at",
+      "severity",
+      "source",
+      "source_ref_id"
+    ],
+    "analyst": [
+      "area_name",
+      "attributes",
+      "hazard_id",
+      "hazard_type",
+      "ingested_at",
+      "latitude",
+      "longitude",
+      "occurred_at",
+      "severity",
+      "source",
+      "source_ref_id"
+    ]
+  },
+  "natural_expiry": "passed",
+  "refresh_rotation_and_replay": "passed",
+  "mock_auth_contract": "passed",
+  "source_status": [
+    {
+      "source": "BMKG",
+      "status": "fresh",
+      "last_success_at": "2026-10-08T09:28:14.387959Z",
+      "stale": false
+    }
+  ]
+}

@@ -95,8 +95,8 @@ timestamp terlalu tua. Status `unknown` dan stale=true jika endpoint belum ada,
 request gagal, entri hilang/rusak, timestamp kosong, atau timestamp di masa depan.
 Kegagalan status tidak menghalangi pembacaan hazards yang sudah tersimpan.
 
-Endpoint status dan worker pencatatnya dikelola secara terpisah. Pada stack dasar, status unknown adalah hasil yang diharapkan sampai endpoint tersebut terpasang.
+Endpoint status dan polling sudah tersedia pada stack dasar. Status unknown hanya diharapkan sebelum polling pertama berhasil atau jika metadata polling tidak dapat dibaca.
 
 ## Batas demo
 
-Transport HTTP dibatasi localhost untuk demo. Penempatan di luar mesin lokal memerlukan TLS. Polling dan broker/consumer tersedia di Aggregator dan Compose; koordinasi load test sistem tetap perlu dilakukan. Pengujian sistem mencakup penolakan concurrency dengan upstream tertahan.
+Transport HTTP dibatasi localhost untuk demo. Penempatan di luar mesin lokal memerlukan TLS. Polling dan broker/consumer tersedia di Aggregator dan Compose; load test sustained tersedia di [panduan](load-testing.md). Pengujian sistem mencakup penolakan concurrency dengan upstream tertahan.

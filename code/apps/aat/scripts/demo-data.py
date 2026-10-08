@@ -94,4 +94,4 @@ finally:
 print(json.dumps({"correlation_id": correlation, "seismic_mapping_and_correlation": "passed",
     "idempotent_ingest": "passed", "schema_change_without_restart": "passed",
     "old_and_new_records_coexist": "passed", "mock_outage_and_recovery": "passed",
-    "automatic_polling": "not implemented (person 3)"}, indent=2))
+    "automatic_polling": "not checked by this manual-ingest script; use demo-system.py"}, indent=2))

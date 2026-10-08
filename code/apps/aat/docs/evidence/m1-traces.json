@@ -1,0 +1,228 @@
+{
+  "matching_correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+  "logs": {
+    "bmkg": [
+      {
+        "time": "2026-10-08T09:26:32.493054378Z",
+        "level": "INFO",
+        "msg": "request",
+        "service": "BMKG",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "method": "GET",
+        "path": "/seismic-events",
+        "status": 200,
+        "latency_ms": 101
+      },
+      {
+        "time": "2026-10-08T09:26:32.59514342Z",
+        "level": "INFO",
+        "msg": "request",
+        "service": "BMKG",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "method": "GET",
+        "path": "/tsunami-warnings",
+        "status": 200,
+        "latency_ms": 101
+      }
+    ],
+    "aggregator": [
+      {
+        "time": "2026-10-08T09:26:32.493537419Z",
+        "level": "INFO",
+        "msg": "poll request",
+        "source": "BMKG",
+        "path": "/seismic-events",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "latency_ms": 102
+      },
+      {
+        "time": "2026-10-08T09:26:32.493589919Z",
+        "level": "INFO",
+        "msg": "outbound_request",
+        "source": "BMKG",
+        "path": "/seismic-events",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "status": 200,
+        "latency_ms": 102
+      },
+      {
+        "time": "2026-10-08T09:26:32.596057378Z",
+        "level": "INFO",
+        "msg": "poll request",
+        "source": "BMKG",
+        "path": "/tsunami-warnings",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "latency_ms": 102
+      },
+      {
+        "time": "2026-10-08T09:26:32.59612167Z",
+        "level": "INFO",
+        "msg": "outbound_request",
+        "source": "BMKG",
+        "path": "/tsunami-warnings",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "status": 200,
+        "latency_ms": 102
+      },
+      {
+        "time": "2026-10-08T09:26:32.606631253Z",
+        "level": "INFO",
+        "msg": "poll succeeded",
+        "source": "BMKG",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147"
+      },
+      {
+        "time": "2026-10-08T09:26:33.054920086Z",
+        "level": "INFO",
+        "msg": "outbound_publish",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "event_key": "haz-7e9fea4664a6efb182c6cba17285c124-2026-10-08T09:26:32.602466586Z",
+        "subject": "hazards.created.v1",
+        "latency_ms": 0
+      },
+      {
+        "time": "2026-10-08T09:26:33.058104628Z",
+        "level": "INFO",
+        "msg": "hazard published",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "outbox_id": 49,
+        "event_key": "haz-7e9fea4664a6efb182c6cba17285c124-2026-10-08T09:26:32.602466586Z",
+        "subject": "hazards.created.v1"
+      }
+    ],
+    "dashboard-updater": [
+      {
+        "time": "2026-10-08T09:26:33.05605867Z",
+        "level": "INFO",
+        "msg": "dashboard hazard update",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "hazard_id": "haz-7e9fea4664a6efb182c6cba17285c124",
+        "source": "BMKG",
+        "severity": "SIAGA"
+      }
+    ],
+    "field-notifier": [
+      {
+        "time": "2026-10-08T09:26:33.055975545Z",
+        "level": "WARN",
+        "msg": "field alert sent",
+        "correlation_id": "aaa7e8df656bfa814c3bbc3f04d82147",
+        "hazard_id": "haz-7e9fea4664a6efb182c6cba17285c124",
+        "source": "BMKG",
+        "severity": "SIAGA"
+      }
+    ]
+  },
+  "container_networks": {
+    "aggregator": {
+      "networks": [
+        "aat-m1-audit_services",
+        "aat-m1-audit_storage"
+      ],
+      "host_ports": {
+        "8083/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "18083"
+          }
+        ]
+      }
+    },
+    "auth": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {
+        "8084/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "18084"
+          }
+        ]
+      }
+    },
+    "bmkg": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {
+        "8081/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "18081"
+          }
+        ]
+      }
+    },
+    "client": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {
+        "8080/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "18080"
+          }
+        ]
+      }
+    },
+    "dashboard-updater": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {}
+    },
+    "field-notifier": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {}
+    },
+    "nats": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {
+        "4222/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "4222"
+          }
+        ],
+        "8222/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "8222"
+          }
+        ]
+      }
+    },
+    "postgres": {
+      "networks": [
+        "aat-m1-audit_storage"
+      ],
+      "host_ports": {}
+    },
+    "pvmbg": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {
+        "8082/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "18082"
+          }
+        ]
+      }
+    },
+    "test-consumer": {
+      "networks": [
+        "aat-m1-audit_services"
+      ],
+      "host_ports": {}
+    }
+  },
+  "canonical_store_isolation": "passed"
+}

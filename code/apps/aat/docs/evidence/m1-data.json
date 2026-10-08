@@ -1,0 +1,9 @@
+{
+  "correlation_id": "data-demo-55c821d56c204d18a09ead6eee4385da",
+  "seismic_mapping_and_correlation": "passed",
+  "idempotent_ingest": "passed",
+  "schema_change_without_restart": "passed",
+  "old_and_new_records_coexist": "passed",
+  "mock_outage_and_recovery": "passed",
+  "automatic_polling": "checked separately by demo-system.py"
+}
