@@ -2,6 +2,7 @@
 package httpkit
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -16,6 +17,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+type correlationKey struct{}
+
+func WithCorrelationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, correlationKey{}, id)
+}
+
+func CorrelationID(ctx context.Context) string {
+	id, _ := ctx.Value(correlationKey{}).(string)
+	return id
+}
 
 func Env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -111,6 +123,7 @@ func Observe(service string, next http.Handler) http.Handler {
 		}
 
 		r.Header.Set("X-Correlation-ID", id)
+		r = r.WithContext(WithCorrelationID(r.Context(), id))
 		w.Header().Set("X-Correlation-ID", id)
 		rw := &response{w, 200}
 		next.ServeHTTP(rw, r)

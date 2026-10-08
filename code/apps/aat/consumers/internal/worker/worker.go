@@ -2,12 +2,15 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
 
 	"aat/internal/eventbus"
+	"aat/internal/httpkit"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -24,6 +27,15 @@ type Hazard struct {
 }
 
 type Handler func(context.Context, Hazard) error
+
+// A new warning may update a hazard: deduplicate each delivery, not its hazard ID.
+func deliveryKey(messageID string, hazard Hazard) string {
+	if messageID == "" {
+		messageID = hazard.ID + "-" + hazard.Ingested.UTC().Format(time.RFC3339Nano)
+	}
+	sum := sha256.Sum256([]byte(messageID))
+	return hex.EncodeToString(sum[:])
+}
 
 func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 	for ctx.Err() == nil {
@@ -75,13 +87,19 @@ func consume(ctx context.Context, consumer jetstream.Consumer, dedupe jetstream.
 			return
 		}
 		for msg := range batch.Messages() {
+			correlationID := msg.Headers().Get("X-Correlation-ID")
+			if correlationID == "" {
+				correlationID = httpkit.ID()
+			}
+			messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
 			var hazard Hazard
 			if e = json.Unmarshal(msg.Data(), &hazard); e != nil || hazard.ID == "" {
 				slog.Error("invalid hazard event; terminating delivery", "error", e)
 				_ = msg.Term()
 				continue
 			}
-			_, e = dedupe.Get(ctx, hazard.ID)
+			key := deliveryKey(msg.Headers().Get("Nats-Msg-Id"), hazard)
+			_, e = dedupe.Get(messageCtx, key)
 			if e == nil {
 				if ackErr := msg.Ack(); ackErr != nil {
 					slog.Warn("duplicate ack failed", "hazard_id", hazard.ID, "error", ackErr)
@@ -92,13 +110,13 @@ func consume(ctx context.Context, consumer jetstream.Consumer, dedupe jetstream.
 				_ = msg.NakWithDelay(2 * time.Second)
 				continue
 			}
-			if e = handle(ctx, hazard); e != nil {
+			if e = handle(messageCtx, hazard); e != nil {
 				slog.Error("hazard handling failed; message will retry", "hazard_id", hazard.ID, "error", e)
 				_ = msg.NakWithDelay(2 * time.Second)
 				continue
 			}
-			if _, e = dedupe.Create(ctx, hazard.ID, []byte(time.Now().UTC().Format(time.RFC3339Nano))); e != nil {
-				if _, getErr := dedupe.Get(ctx, hazard.ID); getErr != nil {
+			if _, e = dedupe.Create(messageCtx, key, []byte(time.Now().UTC().Format(time.RFC3339Nano))); e != nil {
+				if _, getErr := dedupe.Get(messageCtx, key); getErr != nil {
 					_ = msg.NakWithDelay(2 * time.Second)
 					continue
 				}

@@ -15,7 +15,7 @@ Watch the two independent subscribers:
 docker compose -p aat-part1 logs -f dashboard-updater field-notifier
 ```
 
-Dashboard updater logs every hazard. Field notifier logs a simulated alert for `SIAGA` and `AWAS` hazards. Each consumer has a separate durable pull consumer and a separate processed-ID KV bucket.
+Dashboard updater logs every hazard. Field notifier logs a simulated alert for `SIAGA` and `AWAS` hazards. Each consumer has a separate durable pull consumer and a separate processed-delivery KV bucket.
 
 ## Stop And Resume One Consumer
 
@@ -38,7 +38,7 @@ docker compose -p aat-part1 start dashboard-updater
 docker compose -p aat-part1 logs -f dashboard-updater
 ```
 
-Its durable consumer resumes at its last acknowledged message and receives the hazards published while it was stopped. The stream retains messages for seven days; a longer outage can exceed retention and lose older events. The KV dedupe bucket retains processed IDs for 30 days.
+Its durable consumer resumes at its last acknowledged message and receives the hazards published while it was stopped. The stream retains messages for seven days; a longer outage can exceed retention and lose older events. The KV dedupe bucket retains processed delivery keys for 30 days.
 
 ## Add A Third Subscriber
 
@@ -49,3 +49,10 @@ docker compose -p aat-part1 -f compose.yaml -f compose.consumer.yaml up -d --no-
 ```
 
 The new subscriber uses `HAZARDS_STREAM`, `hazards.created.v1`, explicit acknowledgements, and its own durable KV idempotency bucket. Starting a durable consumer with a new name begins at the first retained stream message. No Aggregator code change is needed.
+
+Delivery bersifat at-least-once. Kunci deduplikasi adalah hash `Nats-Msg-Id`
+(event key versi outbox), bukan hazard ID saja, agar pembaruan warning/severity
+tetap diterima. Handler log merupakan side effect demo; crash setelah handler
+namun sebelum KV disimpan masih dapat menggandakan log. Side effect produksi
+perlu transaksi/idempotency key sendiri. Header `X-Correlation-ID` diteruskan
+dari poll/ingest melalui outbox dan broker ke log kedua consumer.

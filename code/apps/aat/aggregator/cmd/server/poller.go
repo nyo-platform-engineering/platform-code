@@ -72,6 +72,8 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 func (p sourcePoller) Poll(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	correlationID := httpkit.ID()
+	ctx = httpkit.WithCorrelationID(ctx, correlationID)
 	state, err := p.ctrl.GetPollState(ctx, p.source)
 	if err != nil {
 		slog.Error("poll state unavailable", "source", p.source, "error", err)
@@ -80,9 +82,7 @@ func (p sourcePoller) Poll(ctx context.Context) {
 
 	// Capture the caller time before fetching; save it only if the whole poll succeeds.
 	callerTime := time.Now().UTC()
-	correlationID := httpkit.ID()
-
-	// Import all seed records initially, then resume from the successful cursor.
+	// The initial request imports all seed records; recovery uses the successful cursor.
 	since := state.LastSuccessCallerTime
 
 	// Fetch every endpoint before saving anything.
@@ -139,6 +139,12 @@ func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, 
 	request.Header.Set("X-Correlation-ID", correlationID)
 
 	requestStartedAt := time.Now()
+	status := 0
+	defer func() {
+		slog.Info("outbound_request", "source", p.source, "path", path,
+			"correlation_id", correlationID, "status", status,
+			"latency_ms", time.Since(requestStartedAt).Milliseconds())
+	}()
 	response, err := p.client.Do(request)
 	latency := time.Since(requestStartedAt)
 	if err != nil {
@@ -152,6 +158,7 @@ func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, 
 		return nil, err
 	}
 	defer response.Body.Close()
+	status = response.StatusCode
 
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s returned %s", path, response.Status)
@@ -175,7 +182,7 @@ func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, 
 }
 
 func (p sourcePoller) markFailure(ctx context.Context, callerTime time.Time, err error) {
-	slog.Warn("poll failed", "source", p.source, "error", err)
+	slog.Warn("poll failed", "source", p.source, "correlation_id", httpkit.CorrelationID(ctx), "error", err)
 	if statusError := p.ctrl.MarkPollFailure(ctx, p.source, callerTime, err.Error()); statusError != nil {
 		slog.Error("poll failure write failed", "source", p.source, "error", statusError)
 	}

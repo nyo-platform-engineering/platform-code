@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"aat/aggregator/internal/model"
+	"aat/internal/httpkit"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -25,7 +26,7 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 	if url == "" {
 		t.Skip("set AAT_TEST_DATABASE_URL to run PostgreSQL integration tests")
 	}
-	ctx := context.Background()
+	ctx := httpkit.WithCorrelationID(context.Background(), "storage-integration")
 	admin, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Fatal(err)
@@ -173,6 +174,9 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 		t.Fatalf("outbox claim: %+v, %v", messages, err)
 	}
 	for _, message := range messages {
+		if message.CorrelationID != "storage-integration" {
+			t.Fatal("outbox lost correlation ID")
+		}
 		var event model.HazardEvent
 		if err := json.Unmarshal(message.Payload, &event); err != nil || event.ID == "" || event.Attributes == nil {
 			t.Fatalf("invalid outbox payload: %s, %v", message.Payload, err)

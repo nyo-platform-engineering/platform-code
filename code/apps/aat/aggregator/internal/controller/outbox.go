@@ -25,7 +25,7 @@ func (ctrl *Controller) ClaimOutbox(ctx context.Context, limit int, lease time.D
     UPDATE hazard_outboxes AS outbox
     SET lease_until = now() + (? * interval '1 second'), attempts = attempts + 1
     FROM selected WHERE outbox.id = selected.id
-    RETURNING outbox.id, outbox.event_key, outbox.payload`, limit, lease.Seconds()).Scan(&items).Error
+    RETURNING outbox.id, outbox.event_key, outbox.correlation_id, outbox.payload`, limit, lease.Seconds()).Scan(&items).Error
 	if err != nil {
 		return nil, err
 	}

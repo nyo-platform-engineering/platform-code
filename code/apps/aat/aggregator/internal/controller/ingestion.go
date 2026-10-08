@@ -10,6 +10,7 @@ import (
 
 	"aat/aggregator/internal/mapper"
 	"aat/aggregator/internal/model"
+	"aat/internal/httpkit"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -171,7 +172,11 @@ func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch ma
 				return nil, err
 			}
 			eventKey := hazard.ID + "-" + hazard.Ingested.UTC().Format(time.RFC3339Nano)
-			outbox := model.HazardOutbox{EventKey: eventKey, Payload: json.RawMessage(payload)}
+			correlationID := httpkit.CorrelationID(ctx)
+			if correlationID == "" {
+				correlationID = httpkit.ID()
+			}
+			outbox := model.HazardOutbox{EventKey: eventKey, CorrelationID: correlationID, Payload: json.RawMessage(payload)}
 			if err = tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "event_key"}}, DoNothing: true}).Create(&outbox).Error; err != nil {
 				return nil, err
 			}

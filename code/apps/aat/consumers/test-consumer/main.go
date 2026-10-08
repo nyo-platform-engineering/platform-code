@@ -16,8 +16,8 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go worker.Run(ctx, "test-consumer", "TEST", httpkit.Env("NATS_URL", "nats://nats:4222"), func(_ context.Context, hazard worker.Hazard) error {
-		slog.Info("consuuuuume", "hazard_id", hazard.ID, "source", hazard.Source, "type", hazard.Type, "severity", hazard.Severity, "area", hazard.Area, "occurred_at", hazard.Occurred)
+	go worker.Run(ctx, "test-consumer", "TEST", httpkit.Env("NATS_URL", "nats://nats:4222"), func(ctx context.Context, hazard worker.Hazard) error {
+		slog.Info("test consumer hazard", "correlation_id", httpkit.CorrelationID(ctx), "hazard_id", hazard.ID, "source", hazard.Source, "type", hazard.Type, "severity", hazard.Severity, "area", hazard.Area, "occurred_at", hazard.Occurred)
 		return nil
 	})
 	router := httpkit.Router()

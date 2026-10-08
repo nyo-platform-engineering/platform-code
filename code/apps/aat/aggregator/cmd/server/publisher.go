@@ -7,6 +7,7 @@ import (
 
 	"aat/aggregator/internal/model"
 	"aat/internal/eventbus"
+	"aat/internal/httpkit"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -55,9 +56,19 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 			}
 			for _, item := range items {
 				publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				_, e = js.Publish(publishCtx, eventbus.Subject, item.Payload,
+				correlationID := item.CorrelationID
+				if correlationID == "" {
+					correlationID = item.EventKey
+				}
+				publishCtx = httpkit.WithCorrelationID(publishCtx, correlationID)
+				message := &nats.Msg{Subject: eventbus.Subject, Data: item.Payload, Header: nats.Header{}}
+				message.Header.Set("X-Correlation-ID", correlationID)
+				started := time.Now()
+				_, e = js.PublishMsg(publishCtx, message,
 					jetstream.WithMsgID(item.EventKey), jetstream.WithExpectStream(eventbus.StreamName))
 				cancel()
+				slog.Info("outbound_publish", "correlation_id", correlationID, "event_key", item.EventKey,
+					"subject", eventbus.Subject, "latency_ms", time.Since(started).Milliseconds(), "error", e)
 				if e != nil {
 					slog.Warn("JetStream publish failed; outbox will retry", "outbox_id", item.ID, "error", e)
 					reconnect = true
@@ -68,7 +79,7 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 					reconnect = true
 					break
 				}
-				slog.Info("hazard published", "outbox_id", item.ID, "event_key", item.EventKey, "subject", eventbus.Subject)
+				slog.Info("hazard published", "correlation_id", correlationID, "outbox_id", item.ID, "event_key", item.EventKey, "subject", eventbus.Subject)
 			}
 		}
 		nc.Close()
