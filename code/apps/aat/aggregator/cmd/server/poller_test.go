@@ -50,15 +50,13 @@ func TestSourcePollerFetchCredentialsAndCursor(t *testing.T) {
 func TestSourcePollerStoresAllBMKGResponsesAndMarksSuccess(t *testing.T) {
 	ctrl := pollController(t)
 	requests := 0
-	beforePoll := time.Now().UTC().Add(-180 * time.Second)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		if r.Header.Get("X-BMKG-Key") != "key" || r.Header.Get("X-Correlation-ID") == "" {
 			t.Error("missing upstream credentials or correlation ID")
 		}
-		since, err := time.Parse(time.RFC3339Nano, r.URL.Query().Get("since"))
-		if err != nil || since.Before(beforePoll) || since.After(time.Now().UTC().Add(-180*time.Second)) {
-			t.Error("initial poll must request the last 180 seconds")
+		if r.URL.Query().Has("since") {
+			t.Error("initial poll must import all historical seed records")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/seismic-events" {

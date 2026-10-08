@@ -70,6 +70,8 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 }
 
 func (p sourcePoller) Poll(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	state, err := p.ctrl.GetPollState(ctx, p.source)
 	if err != nil {
 		slog.Error("poll state unavailable", "source", p.source, "error", err)
@@ -80,15 +82,13 @@ func (p sourcePoller) Poll(ctx context.Context) {
 	callerTime := time.Now().UTC()
 	correlationID := httpkit.ID()
 
-	since := callerTime.Add(-180 * time.Second)
-	if state.LastSuccessCallerTime != nil {
-		since = *state.LastSuccessCallerTime
-	}
+	// Import all seed records initially, then resume from the successful cursor.
+	since := state.LastSuccessCallerTime
 
 	// Fetch every endpoint before saving anything.
 	batch := make(map[string][]model.Record, len(p.endpoints))
 	for _, endpoint := range p.endpoints {
-		records, err := p.fetch(ctx, endpoint.path, &since, correlationID)
+		records, err := p.fetch(ctx, endpoint.path, since, correlationID)
 		if err != nil {
 			p.markFailure(ctx, callerTime, err)
 			return
@@ -124,7 +124,7 @@ func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, 
 		return nil, err
 	}
 
-	// Use the last successful caller time, or the initial 180-second lookback.
+	// Omit since on the initial poll so none of the historical seed is skipped.
 	if since != nil {
 		query := requestURL.Query()
 		query.Set("since", since.UTC().Format(time.RFC3339Nano))
