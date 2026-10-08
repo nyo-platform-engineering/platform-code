@@ -4,9 +4,28 @@ import (
 	"aat/aggregator/internal/mapper"
 	"aat/aggregator/internal/model"
 	"encoding/json"
+	"time"
 
 	"testing"
 )
+
+func TestHazardIDsSortByOccurrenceAndRemainStable(t *testing.T) {
+	at := time.Date(2026, 10, 8, 14, 0, 0, 0, time.UTC)
+	first := mapper.Base("BMKG", "first", "SEISMIC", at)
+	next := mapper.Base("PVMBG", "second", "VOLCANIC", at.Add(time.Nanosecond))
+	later := mapper.Base("BMKG", "third", "SEISMIC", at.Add(time.Second))
+	if !(first.ID < next.ID && next.ID < later.ID) {
+		t.Fatalf("IDs are not in occurrence order: %s, %s, %s", first.ID, next.ID, later.ID)
+	}
+	repeated := mapper.Base("BMKG", "first", "SEISMIC", at.In(time.FixedZone("WIB", 7*60*60)))
+	if first.ID != repeated.ID {
+		t.Fatal("the same source record changed ID on remapping or timezone conversion")
+	}
+	otherSource := mapper.Base("PVMBG", "first", "VOLCANIC", at)
+	if first.ID == otherSource.ID {
+		t.Fatal("different sources share a hazard ID")
+	}
+}
 
 // record builds a raw source fixture; malformed fixture JSON is a test setup error.
 func record(s string) model.Record {

@@ -105,12 +105,14 @@ func AttributesExcept(r model.Record, keys ...string) model.Record {
 
 func Base(source, ref, kind string, at time.Time) model.HazardEvent {
 	sum := sha256.Sum256([]byte(source + ":" + ref))
+	// Fixed-width UTC timestamps keep ID sorting in occurred_at order.
+	occurred := at.UTC()
 	return model.HazardEvent{
-		ID:       "haz-" + hex.EncodeToString(sum[:16]),
+		ID:       "haz-" + occurred.Format("20060102T150405.000000000Z") + "-" + hex.EncodeToString(sum[:16]),
 		Source:   source,
 		Ref:      ref,
 		Type:     kind,
-		Occurred: at.UTC(),
+		Occurred: occurred,
 		Ingested: time.Now().UTC(),
 	}
 }
