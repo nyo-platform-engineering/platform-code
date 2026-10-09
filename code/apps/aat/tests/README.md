@@ -1,4 +1,15 @@
-# Integration test scripts (Problem 4 & 5)
+# Integration test scripts (Problem 1, 4 & 5)
+
+## Problem 1 — demo Python
+
+Prerequisite: stack sudah berjalan lewat `docker compose up`.
+Dari `code/apps/aat`:
+
+```sh
+python3 tests/test-problem-1.py
+```
+
+## Problem 4 & 5
 
 Two runnable, repeatable integration tests against the existing Dockerized system.
 They demonstrate assignment requirements; they do not rewrite the application.
@@ -91,17 +102,17 @@ with the same `-p` and `--env-file`.
 
 ## Configurable timeouts
 
-| Var | Default | Meaning |
-| --- | --- | --- |
-| `PROJECT` / `COMPOSE_PROJECT_NAME` | `aat-part1` | must match the running stack |
-| `ENV_FILE` | `.env` | dotenv with ports/tokens |
-| `TIMEOUT_SECS` | `90` | delivery/log wait budget |
-| `POLL_INTERVAL_SECS` | `2` | bounded-poll interval |
-| `CURL_TIMEOUT_SECS` | `10` | per-request timeout |
-| `REBUILD_TIMEOUT_SECS` (P4) | `300` | rebuild health wait |
-| `REBUILD_SERVICE` (P4) | `pvmbg` | only service rebuilt (`postgres`/`nats`/`aggregator` rejected) |
-| `DOWNTIME_EVENTS` (P5) | `3` | events published while dashboard stopped |
-| `CLEANUP_TEST_CONSUMER` (P5) | `0` | `1` = stop test-consumer iff script started it |
+| Var                                | Default     | Meaning                                                        |
+| ---------------------------------- | ----------- | -------------------------------------------------------------- |
+| `PROJECT` / `COMPOSE_PROJECT_NAME` | `aat-part1` | must match the running stack                                   |
+| `ENV_FILE`                         | `.env`      | dotenv with ports/tokens                                       |
+| `TIMEOUT_SECS`                     | `90`        | delivery/log wait budget                                       |
+| `POLL_INTERVAL_SECS`               | `2`         | bounded-poll interval                                          |
+| `CURL_TIMEOUT_SECS`                | `10`        | per-request timeout                                            |
+| `REBUILD_TIMEOUT_SECS` (P4)        | `300`       | rebuild health wait                                            |
+| `REBUILD_SERVICE` (P4)             | `pvmbg`     | only service rebuilt (`postgres`/`nats`/`aggregator` rejected) |
+| `DOWNTIME_EVENTS` (P5)             | `3`         | events published while dashboard stopped                       |
+| `CLEANUP_TEST_CONSUMER` (P5)       | `0`         | `1` = stop test-consumer iff script started it                 |
 
 Example:
 
@@ -130,6 +141,7 @@ REBUILD_SERVICE=bmkg ./scripts/test-problem-4.sh
 ## What each test proves (and limits)
 
 **Problem 4**
+
 - A: separate containers via `ps -q` + `docker inspect` Running state; prints
   service → 12-char container ID. Limit: proves container separation, not CPU
   isolation.
@@ -149,6 +161,7 @@ REBUILD_SERVICE=bmkg ./scripts/test-problem-4.sh
   `localhost:808x` access is explicitly distinguished from container isolation.
 
 **Problem 5**
+
 - A/B: files printed, `nats` + both consumers running, `8222/healthz` +
   `jsz` show `HAZARDS_STREAM`, subject/stream taken from code, no hardcoded
   consumer names in `aggregator/`, async outbox relay (`publisher.go`).
