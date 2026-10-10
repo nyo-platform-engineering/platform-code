@@ -42,6 +42,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -213,6 +214,51 @@ def http_post_json(url: str, payload: dict, headers: dict | None = None) -> tupl
             return exc.code, b""
     except OSError as exc:
         return 0, str(exc).encode()
+
+
+def fetch_hazards_page(source: str, after: str = "", limit: int = 1000
+                       ) -> tuple[list | None, str]:
+    """Fetch one page of /internal/hazards. Returns (items, next_after).
+
+    Returns (None, "") on HTTP/parse failure.
+    """
+    params: dict[str, str] = {"source": source, "limit": str(limit)}
+    if after:
+        params["after"] = after
+    url = (f"http://127.0.0.1:{AGG_PORT}/internal/hazards?"
+           + urllib.parse.urlencode(params))
+    st, body = http_get(url, headers={"Authorization": f"Bearer {AGG_TOKEN}"})
+    if not (200 <= st < 300):
+        return None, ""
+    try:
+        data = json.loads(body.decode())
+        items = data.get("items", [])
+        return items if isinstance(items, list) else [], str(data.get("next_after", "") or "")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        return None, ""
+
+
+def find_hazard(source: str, key: str, value: str, limit: int = 1000,
+                max_pages: int = 100) -> tuple[dict | None, bool]:
+    """Search all pages for a hazard where hazard[key] == value.
+
+    The API orders by id ascending with max limit=1000/page, so a single GET
+    only returns the oldest page — new records need cursor pagination via
+    after/next_after. Returns (dict_or_None, ok): ok=False means HTTP failure,
+    ok=True + None means fully scanned but not found.
+    """
+    after = ""
+    for _ in range(max_pages):
+        items, nxt = fetch_hazards_page(source, after, limit)
+        if items is None:
+            return None, False
+        for h in items:
+            if isinstance(h, dict) and h.get(key) == value:
+                return h, True
+        if not nxt:
+            break
+        after = nxt
+    return None, True
 
 
 def compose_logs(service: str, since: str, use_both: bool = False) -> str:
@@ -456,11 +502,13 @@ def main() -> int:
     else:
         rid_b, hid_b = out_b
         info(f"probe event: report={rid_b} hazard={hid_b}")
-        st, body = http_get(
-            f"http://127.0.0.1:{AGG_PORT}/internal/hazards?source=PVMBG&limit=1000",
-            headers={"Authorization": f"Bearer {AGG_TOKEN}"})
-        if 200 <= st < 300 and hid_b.encode() in body:
+        # Paginated search: the API returns oldest-first pages (max 1000), so a
+        # single GET misses new records once the DB holds >1000 PVMBG rows.
+        probe_h, probe_ok = find_hazard("PVMBG", "hazard_id", hid_b)
+        if probe_h is not None:
             passed(f"aggregator mapped+stored probe event ({hid_b})")
+        elif not probe_ok:
+            failed("probe event lookup failed (GET /internal/hazards HTTP error)")
         else:
             failed("probe event not found in canonical store")
         if wait_for(f"aggregator publish {hid_b}", TIMEOUT_SECS, agg_published_since, ts_b):
@@ -468,10 +516,8 @@ def main() -> int:
         else:
             failed("no 'hazard published' log for probe window (publishing broken or too slow?)")
         try:
-            items = json.loads(body.decode())["items"]
-            match = [h for h in items if h.get("hazard_id") == hid_b]
-            assert match, "missing"
-            h = match[0]
+            assert probe_h, "missing"
+            h = probe_h
             assert (h["source"] == "PVMBG" and h["hazard_type"] == "VOLCANIC"
                     and h["area_name"] == "Gunung Merapi"), h
             passed(f"published payload matches mapped event (PVMBG/VOLCANIC/Gunung Merapi, "
@@ -746,17 +792,12 @@ def main() -> int:
         dup_rid, dup_hid = dup_out
         info(f"duplicate probe: re-ingesting report {dup_rid} with the IDENTICAL payload "
              "directly via API")
-        st, body = http_get(
-            f"http://127.0.0.1:{AGG_PORT}/internal/hazards?source=PVMBG&limit=1000",
-            headers={"Authorization": f"Bearer {AGG_TOKEN}"})
-        dup_occ = ""
-        if 200 <= st < 300:
-            try:
-                items = json.loads(body.decode())["items"]
-                match = [h for h in items if h.get("hazard_id") == dup_hid]
-                dup_occ = match[0].get("occurred_at", "") if match else ""
-            except (ValueError, KeyError, IndexError, UnicodeDecodeError):
-                dup_occ = ""
+        dup_h, dup_ok = find_hazard("PVMBG", "hazard_id", dup_hid)
+        if dup_h is None and not dup_ok:
+            info(f"duplicate re-ingest skipped: hazards lookup failed for {dup_hid}")
+            dup_occ = ""
+        else:
+            dup_occ = (dup_h.get("occurred_at", "") if isinstance(dup_h, dict) else "") or ""
         if not dup_occ:
             info(f"duplicate re-ingest skipped: could not read back occurred_at for {dup_hid}")
         else:

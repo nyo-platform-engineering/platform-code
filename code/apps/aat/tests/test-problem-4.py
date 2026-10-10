@@ -35,6 +35,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -181,6 +182,48 @@ def http_post_json(url: str, payload: dict, headers: dict | None = None,
         except Exception:
             body = b""
         return exc.code, body
+
+
+def fetch_hazards_page(source: str, after: str = "", limit: int = 1000
+                       ) -> tuple[list | None, str]:
+    """Fetch one page of /internal/hazards. Returns (items, next_after).
+
+    Returns (None, "") on HTTP/parse failure. `AGG_PORT`/`AGG_TOKEN` are read
+    lazily from module-level env values set in main().
+    """
+    params: dict[str, str] = {"source": source, "limit": str(limit)}
+    if after:
+        params["after"] = after
+    url = (f"http://127.0.0.1:{env_val('AGGREGATOR_PORT', '8083')}/internal/hazards?"
+           + urllib.parse.urlencode(params))
+    st, body = http_get(url, headers={"Authorization": f"Bearer {env_val('AGGREGATOR_TOKEN', '')}"})
+    if not (200 <= st < 300):
+        return None, ""
+    try:
+        data = json.loads(body.decode())
+        items = data.get("items", [])
+        return items if isinstance(items, list) else [], str(data.get("next_after", "") or "")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        return None, ""
+
+
+def get_all_hazards(source: str, limit: int = 1000, max_pages: int = 100) -> list | None:
+    """Collect ALL hazards for source by following after/next_after cursors.
+
+    The API orders by id ascending with max limit=1000/page, so a single GET
+    only returns the oldest page. Returns None on HTTP failure.
+    """
+    all_items: list = []
+    after = ""
+    for _ in range(max_pages):
+        items, nxt = fetch_hazards_page(source, after, limit)
+        if items is None:
+            return None
+        all_items.extend(items)
+        if not nxt:
+            break
+        after = nxt
+    return all_items
 
 
 def utc_stamp() -> str:
@@ -434,43 +477,35 @@ def main() -> int:
         failed(f"ingest with confidence_level failed (schema migration required? "
                f"see implementation): {str(resp)[:500]}")
 
-    info("retrieving both records via GET /internal/hazards")
-    st, body = http_get(f"http://127.0.0.1:{agg_port}/internal/hazards?source=PVMBG&limit=1000",
-                        headers={"Authorization": f"Bearer {agg_token}"})
-    if 200 <= st < 300:
-        try:
-            items = json.loads(body.decode())["items"]
-        except (ValueError, KeyError, UnicodeDecodeError):
-            items = None
-        if items is None:
-            failed("GET /internal/hazards returned unparsable response")
-        else:
-            by_ref = {h.get("source_ref_id"): h for h in items if isinstance(h, dict)}
-            for rid, label in ((rid_noconf, "without"), (rid_conf, "with")):
-                if rid not in by_ref:
-                    failed(f"record {label} confidence_level not retrievable")
-                else:
-                    passed(f"record {label} confidence_level retrievable")
-            h_conf = by_ref.get(rid_conf, {})
-            attrs = h_conf.get("attributes", {}) if isinstance(h_conf, dict) else {}
-            if "confidence_level" in attrs:
-                try:
-                    if abs(float(attrs["confidence_level"]) - 0.85) < 1e-9:
-                        passed("new record contains confidence_level=0.85")
-                    else:
-                        failed(f"new record confidence value wrong: {attrs.get('confidence_level')}")
-                except (TypeError, ValueError):
-                    failed(f"new record confidence value wrong: {attrs.get('confidence_level')}")
-            else:
-                failed("new record missing confidence_level in attributes")
-            h_noc = by_ref.get(rid_noconf, {})
-            attrs_noc = h_noc.get("attributes", {}) if isinstance(h_noc, dict) else {}
-            if "confidence_level" not in attrs_noc:
-                passed("older record remains valid without fabricated confidence_level")
-            else:
-                failed(f"older record unexpectedly has confidence_level (fabricated?): {attrs_noc}")
-    else:
+    info("retrieving both records via GET /internal/hazards (paginated via after/next_after)")
+    items = get_all_hazards("PVMBG")
+    if items is None:
         failed("GET /internal/hazards failed during flexible-storage check")
+    else:
+        by_ref = {h.get("source_ref_id"): h for h in items if isinstance(h, dict)}
+        for rid, label in ((rid_noconf, "without"), (rid_conf, "with")):
+            if rid not in by_ref:
+                failed(f"record {label} confidence_level not retrievable")
+            else:
+                passed(f"record {label} confidence_level retrievable")
+        h_conf = by_ref.get(rid_conf, {})
+        attrs = h_conf.get("attributes", {}) if isinstance(h_conf, dict) else {}
+        if "confidence_level" in attrs:
+            try:
+                if abs(float(attrs["confidence_level"]) - 0.85) < 1e-9:
+                    passed("new record contains confidence_level=0.85")
+                else:
+                    failed(f"new record confidence value wrong: {attrs.get('confidence_level')}")
+            except (TypeError, ValueError):
+                failed(f"new record confidence value wrong: {attrs.get('confidence_level')}")
+        else:
+            failed("new record missing confidence_level in attributes")
+        h_noc = by_ref.get(rid_noconf, {})
+        attrs_noc = h_noc.get("attributes", {}) if isinstance(h_noc, dict) else {}
+        if "confidence_level" not in attrs_noc:
+            passed("older record remains valid without fabricated confidence_level")
+        else:
+            failed(f"older record unexpectedly has confidence_level (fabricated?): {attrs_noc}")
     info(f"note: test records {rid_noconf}/{rid_conf} are intentionally left in the DB "
          "(no deletion of app data)")
 
