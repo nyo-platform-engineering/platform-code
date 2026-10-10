@@ -2,39 +2,48 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
 	"aat/aggregator/internal"
 	"aat/aggregator/internal/controller"
+	"aat/aggregator/internal/dbtrace"
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	token := httpkit.Secret("AGGREGATOR_TOKEN")
 	startupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	startupCtx = httpkit.WithCorrelationID(startupCtx, httpkit.ID())
 
 	// Connect to PostgreSQL and limit the number of open connections.
 	databaseURL := httpkit.Secret("DATABASE_URL")
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
+	config, err := pgx.ParseConfig(databaseURL)
+	if err != nil {
+		panic("invalid DATABASE_URL")
+	}
+	config.Tracer = dbtrace.New()
+	sqlDB := stdlib.OpenDB(*config)
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(httpkit.Integer("DB_MAX_CONNS", 5))
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
 		DisableAutomaticPing: true,
 		Logger:               logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
 		panic(err)
 	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		panic(err)
-	}
-	sqlDB.SetMaxOpenConns(httpkit.Integer("DB_MAX_CONNS", 5))
-	defer sqlDB.Close()
 
 	// Check the connection and create or update the model tables.
 	ctrl := &controller.Controller{DB: db}

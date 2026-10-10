@@ -42,7 +42,8 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 
 		reconnect := false
 		for ctx.Err() == nil && !reconnect {
-			items, claimErr := store.ClaimOutbox(ctx, 32, 30*time.Second)
+			claimCtx := httpkit.WithCorrelationID(ctx, httpkit.ID())
+			items, claimErr := store.ClaimOutbox(claimCtx, 32, 30*time.Second)
 			if claimErr != nil {
 				slog.Error("outbox claim failed", "error", claimErr)
 				if !wait(ctx, time.Second) {
@@ -74,7 +75,8 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 					reconnect = true
 					break
 				}
-				if e = store.MarkOutboxPublished(ctx, item.ID); e != nil {
+				dbCtx := httpkit.WithCorrelationID(ctx, correlationID)
+				if e = store.MarkOutboxPublished(dbCtx, item.ID); e != nil {
 					slog.Error("outbox acknowledgement update failed", "outbox_id", item.ID, "error", e)
 					reconnect = true
 					break

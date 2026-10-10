@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+
+	"aat/aggregator/internal/dbtrace"
 	"gorm.io/gorm"
 )
 
@@ -14,5 +16,5 @@ func (ctrl *Controller) Ping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return db.PingContext(ctx)
+	return dbtrace.Observe(ctx, "ping", db.PingContext)
 }
