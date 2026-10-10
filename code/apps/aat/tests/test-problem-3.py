@@ -44,6 +44,11 @@ class Problem3Test(IntegrationTest):
         historical_paths = self.cmd(['git', 'log', '--all', '--format=', '--name-only', '--', '.']).splitlines()
         require(not any(Path(p).name == '.env' or (Path(p).name.startswith('.env.') and Path(p).name != '.env.example') for p in historical_paths),
                 'Credential environment file found in reachable Git history')
+        self.show('Credential audit', {'distinct_credentials': True, 'env_example_tracked': True,
+                  'env_file_ignored': True, 'files_scanned': sum(bool(name) for name in paths),
+                  'current_credentials_found_in_files_or_history': False,
+                  'production_go_credential_literal_check': 'passed',
+                  'scope': 'AAT files and reachable AAT Git history; current credential values'})
         self.passed('credential_config_and_repository_audit', {'scope': 'AAT files and reachable AAT Git history',
             'checks': ['distinct credentials', 'tracked .env.example', 'ignored env file',
                        'current credential values absent in files/history', 'production Go credential literal heuristic'],
@@ -52,21 +57,21 @@ class Problem3Test(IntegrationTest):
     def run(self):
         self.secret_audit()
         self.preflight()
-        self.call('bmkg', '/seismic-events', headers={'X-BMKG-Key': self.env['BMKG_API_KEY']})
-        self.call('pvmbg', '/volcanic-reports', token=self.env['PVMBG_TOKEN'])
-        self.call('bmkg', '/seismic-events', headers={'X-BMKG-Key': self.env['PVMBG_TOKEN']}, expected=(401, 403))
-        self.call('pvmbg', '/volcanic-reports', token=self.env['BMKG_API_KEY'], expected=(401, 403))
+        self.call('bmkg', '/seismic-events', headers={'X-BMKG-Key': self.env['BMKG_API_KEY']}, evidence='BMKG with own credential')
+        self.call('pvmbg', '/volcanic-reports', token=self.env['PVMBG_TOKEN'], evidence='PVMBG with own credential')
+        self.call('bmkg', '/seismic-events', headers={'X-BMKG-Key': self.env['PVMBG_TOKEN']}, expected=(401, 403), evidence='BMKG with PVMBG credential')
+        self.call('pvmbg', '/volcanic-reports', token=self.env['BMKG_API_KEY'], expected=(401, 403), evidence='PVMBG with BMKG credential')
         self.passed('valid_upstream_credentials_rejected_cross_domain')
         public = self.login('public')
         for source in ('BMKG', 'PVMBG'):
-            page = self.call('client', f'/hazards?source={source}&limit=100', token=public['access_token'])
+            page = self.call('client', f'/hazards?source={source}&limit=100', token=public['access_token'], evidence='Media reads ' + source)
             require(page.get('items') and all(set(h) == SUMMARY for h in page['items']), 'Media field allowlist violation: ' + source)
         for field in sorted(RAW) + ['severity,attributes']:
-            self.call('client', '/hazards?fields=' + field, token=public['access_token'], expected=(401, 403))
+            self.call('client', '/hazards?fields=' + field, token=public['access_token'], expected=(401, 403), evidence='Media explicitly requests ' + field)
         self.passed('media_summary_only_and_explicit_raw_fields_denied', {'allowed_fields': sorted(SUMMARY), 'denied_fields': sorted(RAW)})
         for service, path, headers in (('bmkg', '/seismic-events', {'X-BMKG-Key': public['access_token']}),
                                        ('pvmbg', '/volcanic-reports', {}), ('aggregator', '/internal/hazards', {})):
-            self.call(service, path, token=public['access_token'], headers=headers, expected=(401, 403))
+            self.call(service, path, token=public['access_token'], headers=headers, expected=(401, 403), evidence='Media token against ' + service)
         self.passed('media_token_cannot_access_upstream_or_internal_store_api')
 
         responder = self.login('responder')
@@ -78,7 +83,7 @@ class Problem3Test(IntegrationTest):
         print(f'[INFO] active Tim Lapangan session: waiting natural expiry, TTL={ttl}s', flush=True)
         while True:
             try:
-                page = self.call('client', '/hazards?source=BMKG&limit=1', token=responder['access_token'])
+                page = self.call('client', '/hazards?source=BMKG&limit=1', token=responder['access_token'], evidence='Tim Lapangan reads with original access token')
             except RuntimeError as error:
                 if 'HTTP 401' not in str(error):
                     raise
@@ -91,15 +96,17 @@ class Problem3Test(IntegrationTest):
             time.sleep(min(5, max(.1, ttl + 1 - elapsed)))
         elapsed = time.monotonic() - start
         require(reads > 0 and elapsed >= max(0, ttl - 2), 'Token rejected before natural TTL expiry')
-        fresh = self.refresh(responder)
+        self.show('Natural expiry observation', {'ttl_seconds': ttl, 'elapsed_seconds': round(elapsed, 3), 'successful_reads_before_expiry': reads})
+        fresh = self.refresh(responder, evidence='Tim Lapangan refresh without login')
         require(fresh.get('access_token') != responder['access_token'] and fresh.get('refresh_token') != responder['refresh_token'], 'Refresh did not rotate both tokens')
-        page = self.call('client', '/hazards?source=BMKG&limit=1', token=fresh['access_token'])
+        page = self.call('client', '/hazards?source=BMKG&limit=1', token=fresh['access_token'], evidence='Tim Lapangan reads with new access token')
         require(page.get('items') and all(set(h) == SUMMARY | RAW for h in page['items']), 'Refreshed Tim Lapangan session lost scope')
-        self.call('client', '/hazards', token=responder['access_token'], expected=(401, 403))
+        self.call('client', '/hazards', token=responder['access_token'], expected=(401, 403), evidence='Old access token after refresh')
+        self.show('Token rotation', {'access_token_changed': True, 'refresh_token_changed': True, 'logins': 1})
         self.passed('natural_expiry_refresh_without_login_and_old_access_denied', {'ttl_seconds': ttl,
             'elapsed_seconds': elapsed, 'active_session_reads': reads, 'logins': 1})
-        self.call('auth', '/auth/refresh', {'refresh_token': responder['refresh_token']}, expected=(401, 403))
-        self.call('client', '/hazards', token=fresh['access_token'], expected=(401, 403))
+        self.call('auth', '/auth/refresh', {'refresh_token': responder['refresh_token']}, expected=(401, 403), evidence='Replay old refresh token')
+        self.call('client', '/hazards', token=fresh['access_token'], expected=(401, 403), evidence='New access token after session revocation')
         self.passed('refresh_replay_rejected_and_session_revoked')
 
 

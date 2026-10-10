@@ -1,5 +1,6 @@
 """Shared HTTP, configuration, Docker and evidence helpers for integration tests."""
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 import sys
@@ -42,7 +43,9 @@ class IntegrationTest:
         self.compose = ['docker', 'compose', '-p', args.project, '--env-file', str(args.env_file),
                         '-f', 'compose.yaml', '-f', 'compose.client.yaml']
         self.correlation = f'p{args.problem}-' + uuid.uuid4().hex
-        self.proof = {'problem': args.problem, 'correlation_id': self.correlation, 'checks': {}}
+        self.proof = {'problem': args.problem, 'correlation_id': self.correlation, 'checks': {}, 'http_results': []}
+        self.redacted_values = set(self.env[key] for key in SECRET_KEYS)
+        self.shown_summaries = set()
         self.session = None
 
     def cmd(self, argv):
@@ -63,7 +66,22 @@ class IntegrationTest:
         except OSError as exc:
             raise RuntimeError(f'{argv[0]} could not run: {type(exc).__name__}') from None
 
-    def call(self, service, path, body=None, token=None, headers=None, expected=(200,)):
+    def clean(self, data):
+        if isinstance(data, str):
+            for value in sorted(self.redacted_values, key=len, reverse=True):
+                if value:
+                    data = data.replace(value, '[REDACTED]')
+            return data
+        if isinstance(data, dict):
+            return {self.clean(key): self.clean(value) for key, value in data.items()}
+        if isinstance(data, list):
+            return [self.clean(value) for value in data]
+        return data
+
+    def show(self, label, data):
+        print('[INFO] ' + label + '\n' + json.dumps(self.clean(data), indent=2, ensure_ascii=False), flush=True)
+
+    def call(self, service, path, body=None, token=None, headers=None, expected=(200,), evidence=None):
         headers = dict(headers or {})
         headers['X-Correlation-ID'] = self.correlation
         if token:
@@ -72,28 +90,65 @@ class IntegrationTest:
         if data is not None:
             headers['Content-Type'] = 'application/json'
         req = urllib.request.Request(self.urls[service] + path, data=data, headers=headers)
+        started_at = datetime.now(timezone.utc).isoformat()
+        started = time.perf_counter()
+        received_correlation = None
         try:
             with urllib.request.urlopen(req, timeout=self.args.request_timeout) as response:
                 status, raw = response.status, response.read()
+                received_correlation = response.headers.get('X-Correlation-ID')
         except urllib.error.HTTPError as error:
             status, raw = error.code, error.read()
+            received_correlation = error.headers.get('X-Correlation-ID')
         except (urllib.error.URLError, TimeoutError):
             raise RuntimeError(f'{service} {path}: network failure or client timeout') from None
+        elapsed = (time.perf_counter() - started) * 1000
+        record = None
+        if evidence:
+            record = {'label': evidence, 'started_at_utc': started_at, 'service': service,
+                      'method': req.get_method(), 'path': path, 'status': status,
+                      'expected_statuses': list(expected), 'duration_ms': round(elapsed, 3),
+                      'request_correlation_id': self.correlation,
+                      'response_correlation_id': received_correlation}
+            self.proof['http_results'].append(record)
+            print(f'[HTTP] {evidence}: {req.get_method()} {service}{path} -> HTTP {status} ({elapsed:.2f} ms)', flush=True)
         require(status in expected, f'{service} {path}: HTTP {status}, expected {expected}')
         try:
-            return json.loads(raw)
+            payload = json.loads(raw)
         except ValueError:
             raise RuntimeError(f'{service} {path}: invalid JSON') from None
+        if isinstance(payload, dict):
+            for key in ('access_token', 'refresh_token'):
+                if isinstance(payload.get(key), str):
+                    self.redacted_values.add(payload[key])
+            if record is not None:
+                summary = {}
+                if isinstance(payload.get('items'), list):
+                    summary['item_count'] = len(payload['items'])
+                    summary['received_fields'] = sorted({key for item in payload['items'] if isinstance(item, dict) for key in item})
+                    if payload['items'] and isinstance(payload['items'][0], dict):
+                        summary['example_item'] = {key: value for key, value in payload['items'][0].items() if key in SUMMARY}
+                if 'sources' in payload:
+                    summary['sources'] = payload['sources']
+                for key in ('expires_in', 'refresh_expires_in', 'token_type', 'outage'):
+                    if key in payload:
+                        summary[key] = payload[key]
+                if summary:
+                    record['response_summary'] = summary
+                    if evidence not in self.shown_summaries:
+                        self.show(evidence + ' response', summary)
+                        self.shown_summaries.add(evidence)
+        return payload
 
     def login(self, identity):
         pair = self.call('auth', '/auth/token', {'client_id': identity,
-                         'client_secret': self.env[identity.upper() + '_CLIENT_SECRET']})
+                         'client_secret': self.env[identity.upper() + '_CLIENT_SECRET']}, evidence='Login ' + identity)
         require(pair.get('access_token') and pair.get('refresh_token') and pair.get('expires_in', 0) > 0,
                 'Invalid token response')
         return pair
 
-    def refresh(self, pair):
-        return self.call('auth', '/auth/refresh', {'refresh_token': pair['refresh_token']})
+    def refresh(self, pair, evidence=None):
+        return self.call('auth', '/auth/refresh', {'refresh_token': pair['refresh_token']}, evidence=evidence)
 
     def statuses(self):
         page = self.call('aggregator', '/internal/source-status', token=self.env['AGGREGATOR_TOKEN'])
@@ -167,6 +222,7 @@ def run_test(problem, test_class, description):
     error = None
     try:
         test = test_class(args)
+        print('[INFO] correlation_id=' + test.correlation, flush=True)
         test.run()
     except (OSError, RuntimeError, ValueError, KeyError, KeyboardInterrupt) as exc:
         # Only print our own diagnostic messages; other exceptions may contain secrets.
@@ -174,6 +230,8 @@ def run_test(problem, test_class, description):
         print('[FAIL] ' + error, flush=True)
     proof = test.proof if test else {'problem': problem, 'checks': {}}
     proof.update({'passed': error is None, 'failure': error})
+    if test:
+        proof = test.clean(proof)
     (args.output_dir / 'result.json').write_text(json.dumps(proof, indent=2) + '\n')
     print(f"[INFO] evidence: {args.output_dir}")
     print(f"Problem {problem} summary: {len(proof['checks'])} passed, {int(error is not None)} failed")
