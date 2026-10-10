@@ -34,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -125,6 +126,23 @@ def cid_of(service: str) -> str:
     return ""
 
 
+def cid_of_all(service: str) -> str:
+    """Container ID including stopped containers (docker compose ps -a).
+
+    cid_of() only lists running containers, so a service left stopped by a
+    previous crashed run reports "". This fallback still finds its ID so the
+    test can confirm/handle the stopped state instead of logging "?".
+    """
+    proc = compose_main("ps", "-a", "-q", service)
+    if proc.returncode != 0:
+        return ""
+    for line in (proc.stdout or "").splitlines():
+        cid = line.strip()
+        if cid:
+            return cid
+    return ""
+
+
 def is_running(cid: str) -> bool:
     if not cid:
         return False
@@ -165,6 +183,10 @@ def http_get(url: str, headers: dict | None = None, timeout: float | None = None
             return resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read() if hasattr(exc, "read") else b""
+    except OSError:
+        # Target stopped / connection refused / timeout: expected while the
+        # rebuilt service is down. Return 0 so callers treat it as "down".
+        return 0, b""
 
 
 def http_post_json(url: str, payload: dict, headers: dict | None = None,
@@ -182,6 +204,8 @@ def http_post_json(url: str, payload: dict, headers: dict | None = None,
         except Exception:
             body = b""
         return exc.code, body
+    except OSError as exc:
+        return 0, str(exc).encode()
 
 
 def fetch_hazards_page(source: str, after: str = "", limit: int = 1000
@@ -343,6 +367,32 @@ def main() -> int:
     before = {"aggregator": agg_cid, "postgres": pg_cid, "nats": nats_cid,
               "bmkg": bmkg_cid, "pvmbg": pvmbg_cid,
               "dashboard-updater": dash_cid, "field-notifier": field_cid}
+    rebuilt_port = bmkg_port if REBUILD_SERVICE == "bmkg" else pvmbg_port
+    target_id = before.get(REBUILD_SERVICE, "") or cid_of_all(REBUILD_SERVICE)
+    if not target_id or not is_running(target_id):
+        info(f"{REBUILD_SERVICE} not running at Section B start "
+             f"(leftover stopped container? id={target_id[:12] if target_id else '?'}); "
+             f"starting it first (docker compose up -d --no-deps {REBUILD_SERVICE})")
+        up = compose_main("up", "-d", "--no-deps", REBUILD_SERVICE)
+        if up.returncode != 0:
+            failed(f"could not (re)start {REBUILD_SERVICE} before stop-phase")
+            info((up.stderr or "")[-2000:])
+
+        def _target_healthy() -> bool:
+            st, _ = http_get(f"http://127.0.0.1:{rebuilt_port}/health")
+            return 200 <= st < 300
+
+        if wait_for(f"(re)started {REBUILD_SERVICE} health", REBUILD_TIMEOUT_SECS,
+                    _target_healthy):
+            info(f"{REBUILD_SERVICE} running again before stop-phase")
+        else:
+            failed(f"{REBUILD_SERVICE} did not become healthy before stop-phase")
+        before = {svc: cid_of(svc) for svc in before}
+        if REBUILD_SERVICE == "pvmbg":
+            pvmbg_cid = before["pvmbg"]
+        else:
+            bmkg_cid = before["bmkg"]
+        info(f"re-snapshotted before IDs (target={before.get(REBUILD_SERVICE, '')[:12] or '?'})")
 
     info("verifying unrelated BMKG request before restart")
     st, _ = http_get(f"http://127.0.0.1:{bmkg_port}/seismic-events?since=2026-01-01T00:00:00Z",
@@ -357,6 +407,68 @@ def main() -> int:
     else:
         failed("aggregator health failed before restart")
 
+    info(f"stopping {REBUILD_SERVICE} first (docker compose stop {REBUILD_SERVICE})")
+    stop = compose_main("stop", REBUILD_SERVICE)
+    if stop.returncode == 0:
+        passed(f"stop command for {REBUILD_SERVICE} accepted")
+    else:
+        failed(f"stop command for {REBUILD_SERVICE} failed")
+        info((stop.stderr or "")[-2000:])
+    time.sleep(3)
+
+    target_before_id = before.get(REBUILD_SERVICE, "") or cid_of_all(REBUILD_SERVICE)
+    if target_before_id and not is_running(target_before_id):
+        passed(f"{REBUILD_SERVICE} confirmed stopped ({target_before_id[:12]} not running)")
+    elif not target_before_id:
+        failed(f"cannot confirm {REBUILD_SERVICE} stopped (no container ID before stop)")
+    else:
+        failed(f"{REBUILD_SERVICE} still running after stop")
+
+    # While the target is stopped, unrelated services must keep serving.
+    # NOTE: cid_of() uses `ps -q` (running only), so the stopped service may
+    # legitimately report no ID here — only unrelated services are compared.
+    stopped_ids = {svc: cid_of(svc) for svc in before if svc != REBUILD_SERVICE}
+    stopped_unrelated_ok = True
+    for name in ("aggregator", "postgres", "nats", "dashboard-updater", "field-notifier",
+                 "bmkg", "pvmbg"):
+        if name == REBUILD_SERVICE:
+            continue
+        b, cur = before.get(name, ""), stopped_ids.get(name, "")
+        if not b or not cur:
+            failed(f"unrelated {name} missing container ID while {REBUILD_SERVICE} stopped")
+            stopped_unrelated_ok = False
+        elif b != cur:
+            failed(f"unrelated {name} container ID changed while {REBUILD_SERVICE} stopped "
+                   f"({b} -> {cur})")
+            stopped_unrelated_ok = False
+        elif not is_running(cur):
+            failed(f"unrelated {name} not running while {REBUILD_SERVICE} stopped")
+            stopped_unrelated_ok = False
+    if stopped_unrelated_ok:
+        passed(f"unrelated containers undisturbed while {REBUILD_SERVICE} is stopped")
+
+    info(f"hitting unrelated BMKG request while {REBUILD_SERVICE} is stopped")
+    st, _ = http_get(f"http://127.0.0.1:{bmkg_port}/seismic-events?since=2026-01-01T00:00:00Z",
+                     headers={"X-BMKG-Key": bmkg_key})
+    if REBUILD_SERVICE == "bmkg":
+        # Target itself is down; its own endpoint is expected to fail — the
+        # independence proof in this mode is aggregator health below.
+        info(f"bmkg endpoint while bmkg stopped: HTTP {st} (expected failure, not a verdict)")
+    elif 200 <= st < 300:
+        passed(f"unrelated BMKG request succeeds while {REBUILD_SERVICE} is stopped")
+    else:
+        failed(f"unrelated BMKG request failed while {REBUILD_SERVICE} stopped (HTTP {st})")
+    st, _ = http_get(f"http://127.0.0.1:{agg_port}/health")
+    if 200 <= st < 300:
+        passed(f"aggregator health succeeds while {REBUILD_SERVICE} is stopped")
+    else:
+        failed(f"aggregator health failed while {REBUILD_SERVICE} is stopped")
+    st, _ = http_get(f"http://127.0.0.1:{rebuilt_port}/health")
+    if 200 <= st < 300:
+        info(f"{REBUILD_SERVICE} endpoint unexpectedly still serves while stopped "
+             f"(HTTP {st}; continuing to rebuild)")
+    else:
+        passed(f"{REBUILD_SERVICE} is down while stopped as expected (HTTP {st or 'conn-refused'})")
     info(f"rebuilding only {REBUILD_SERVICE} (docker compose up -d --build --no-deps {REBUILD_SERVICE})")
     rebuild = compose_main("up", "-d", "--build", "--no-deps", REBUILD_SERVICE)
     if rebuild.returncode == 0:
@@ -365,7 +477,6 @@ def main() -> int:
         failed("rebuild command failed")
         info((rebuild.stderr or "")[-2000:])
 
-    rebuilt_port = bmkg_port if REBUILD_SERVICE == "bmkg" else pvmbg_port
     info(f"waiting for {REBUILD_SERVICE} health on 127.0.0.1:{rebuilt_port} "
          f"(timeout {REBUILD_TIMEOUT_SECS:g}s)")
 
