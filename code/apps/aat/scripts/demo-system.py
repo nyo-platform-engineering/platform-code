@@ -1,5 +1,5 @@
 """Verify M1 polling, degradation, isolation and fan-out on a running Compose stack.
-No sustained load test. Implementation assisted by Codex; see README.
+No sustained load test.
 Run on a dedicated demo project: this script toggles PVMBG and restarts services.
 """
 import argparse

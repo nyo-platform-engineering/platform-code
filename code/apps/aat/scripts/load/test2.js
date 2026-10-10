@@ -1,4 +1,4 @@
-// M1 P2.2: sustained real HTTP traffic. Implementation assisted by Codex.
+// M1 P2.2: sustained real HTTP traffic.
 import http from 'k6/http';
 import { sleep, fail } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';

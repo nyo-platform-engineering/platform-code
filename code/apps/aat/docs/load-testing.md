@@ -1,5 +1,9 @@
 # Load testing M1 P2.2
 
+Skrip k6 adalah `scripts/load/test2.js` (sebelumnya `m1.js`), khusus Problem 2.
+Untuk seluruh kriteria Problem 2, jalankan `python3 tests/test-problem-2.py`;
+petunjuk ada di [panduan tests](../tests/README.md).
+
 Pengujian memakai k6 lokal dan seluruh stack Docker: Client API, Auth, Aggregator,
 PostgreSQL, kedua mock, NATS dan dua consumer. Producer tetap polling dan
 mempublikasikan event selama load. Hasil ini adalah hasil mesin lokal satu

@@ -1,5 +1,4 @@
 """Verify part 1 over HTTP using manual ingestion; automatic polling belongs to part 3.
-Implementation assisted by Codex; see README for the team's AI declaration.
 """
 import argparse
 import datetime as dt

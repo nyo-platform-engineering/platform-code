@@ -4,7 +4,9 @@ Go + Gin, PostgreSQL, dan GORM. Tersedia: mock BMKG/PVMBG, pemetaan HazardEvent,
 penyimpanan, polling otomatis beserta pencatatan kesehatan sumber, API internal
 Aggregator, Auth Service, Client-Facing API, NATS JetStream, dashboard updater,
 dan field notifier. Load testing sustained M1 tersedia di
-[panduan load testing](docs/load-testing.md). Laporan PDF M1 belum dibuat; audit implementasi tidak menggantikan laporan pengumpulan.
+[panduan load testing](docs/load-testing.md). Test per problem tersedia di
+[panduan integration tests](tests/README.md), termasuk `test-problem-2.py` dan
+`test-problem-3.py`. Laporan PDF M1 belum dibuat; audit implementasi tidak menggantikan laporan pengumpulan.
 
 Hasil pencocokan ketiga bagian terhadap spesifikasi M1 tersedia di
 [audit M1](docs/m1-audit.md); cara mengulang demo terintegrasi di
@@ -165,8 +167,6 @@ Tes bagian 2 mencakup field sesuai identitas, refresh/replay, concurrency, dan
 penyajian stale dengan upstream simulasi. Polling otomatis, outbox, dan JetStream
 delivery kini tersedia. Load test terintegrasi memakai k6, 50 VU selama 65 detik;
 lihat [metode dan hasil](docs/load-testing.md).
-Implementasi dibantu Codex; anggota perlu memahami, memverifikasi, dan mendeklarasikan
-penggunaannya dalam laporan.
 
 Untuk demonstrasi pub-sub, penghentian dan pemulihan consumer, serta penambahan
 subscriber baru, ikuti [panduan Problem 5](docs/demo-events.md).

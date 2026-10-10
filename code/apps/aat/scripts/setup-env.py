@@ -1,5 +1,4 @@
 """Prepare local M1 configuration without printing or rotating existing secrets.
-Implementation assisted by Codex; see README.
 """
 import argparse
 from datetime import datetime, timezone

@@ -1,4 +1,4 @@
-# Integration test scripts (Problem 1, 4 & 5)
+# Integration test scripts (Problem 1–5)
 
 ## Problem 1 — demo Python
 
@@ -8,6 +8,133 @@ Dari `code/apps/aat`:
 ```sh
 python3 tests/test-problem-1.py
 ```
+
+## Problem 2 dan 3
+
+Keduanya membutuhkan Python 3 dan Docker Compose v2. Problem 2 juga memakai k6
+lokal untuk load testing.
+
+### Persiapan dan cara menjalankan
+
+Buat `.env` terlebih dahulu:
+
+```sh
+python3 scripts/setup-env.py
+```
+
+Untuk Problem 2, atur kedua nilai ini di `.env`:
+
+```dotenv
+PVMBG_DELAY_MIN_MS=3000
+PVMBG_DELAY_MAX_MS=3000
+```
+
+Pertahankan `START_TIME` dan kredensial yang sudah ada, lalu nyalakan stack:
+
+```sh
+docker compose -p aat-part1 --env-file .env -f compose.yaml -f compose.client.yaml up -d --build
+python3 tests/test-problem-2.py
+python3 tests/test-problem-3.py
+```
+
+Jika stack sudah berjalan saat delay diubah, buat ulang hanya PVMBG agar
+konfigurasi baru diterapkan:
+
+```sh
+docker compose -p aat-part1 --env-file .env -f compose.yaml -f compose.client.yaml up -d --no-deps pvmbg
+```
+
+Alur pengujian ada di masing-masing file Python. `test_helpers.py` menyediakan
+helper HTTP, pembacaan `.env`, pemeriksaan Docker, dan penyimpanan hasil.
+
+### Problem 2: konkurensi dan ketersediaan
+
+Test ini memeriksa:
+
+- Delay PVMBG pada container yang berjalan tetap 3 detik, termasuk pengukuran
+  langsung ke mock. Mengedit `.env` saja belum mengubah container yang aktif.
+- Request BMKG-only dan PVMBG-only dikirim bersamaan, sebanyak 20 pasangan.
+  BMKG p95 harus di bawah 300 ms. Client API membaca Canonical Store melalui
+  Aggregator sementara polling kedua sumber tetap berjalan.
+- Load 50 VU selama 65 detik, tanpa jeda antar-request dan memakai keep-alive.
+  `scripts/load-test.py` menjalankan `scripts/load/test2.js` dan mencatat koneksi
+  TCP paralel, throughput, p50/p95/p99, error rate, jumlah 429, serta kondisi
+  container. Error di luar penolakan terkontrol harus di bawah 1%.
+- Saat outage dinyalakan lewat `POST /admin/outage`, PVMBG mengembalikan 503.
+  Polling BMKG tetap maju dan data seismik tetap fresh. Data vulkanik tersimpan
+  masih dapat dibaca dengan `sources[].status=stale`, `stale=true`, dan
+  `last_success_at`.
+- Setelah outage dimatikan, PVMBG kembali fresh tanpa perubahan container ID,
+  waktu mulai, atau restart count.
+
+Outage dimatikan melalui `finally`, termasuk ketika pemeriksaan gagal. Jalankan
+pada stack demo tanpa test lain yang ikut mengubah keadaan PVMBG.
+
+### Problem 3: autentikasi dan hak akses
+
+Test ini memeriksa:
+
+- Kredensial BMKG dan PVMBG valid pada sumbernya sendiri, lalu ditolak dengan
+  401/403 saat dipakai pada sumber lain.
+- Media (`public`) hanya menerima tujuh field Ringkasan dari kedua sumber.
+  Permintaan field Mentah, termasuk query campuran Ringkasan/Mentah, ditolak.
+  Token Media juga ditolak oleh mock dan API internal Aggregator.
+- Tim Lapangan (`responder`) login sekali dan membaca data setiap lima detik
+  sampai access token kedaluwarsa alami. TTL default adalah 60 detik. Refresh
+  menghasilkan token baru dengan hak akses yang sama, sementara token lama
+  tetap ditolak. Penggunaan ulang refresh token lama mencabut sesi tersebut.
+- Kredensial berbeda antar-domain, `.env.example` ter-track, dan `.env` diabaikan
+  Git. Nilai secret saat ini diperiksa pada file AAT dan riwayat Git AAT yang
+  masih dapat diakses. Kode Go produksi juga diperiksa untuk literal kredensial.
+
+Audit kredensial ini bukan pemindai secret lengkap. Kredensial lama yang berbeda
+dari nilai `.env` saat ini masih perlu diperiksa terpisah. Kredensial khusus unit
+test dan string protokol `Bearer` diperbolehkan.
+
+### Hasil dan konfigurasi
+
+Setiap run membuat folder baru `docs/evidence/problem-2-<id>/` atau
+`problem-3-<id>/`. Hasil utama ada di `result.json`; hasil k6 ada di subfolder
+`load/`. Token dan secret tidak disimpan dalam hasil.
+
+```sh
+python3 tests/test-problem-2.py --vus 50 --seconds 65
+python3 tests/test-problem-3.py --timeout 120 --output-dir docs/evidence/problem-3-demo
+python3 tests/test-problem-2.py --help
+```
+
+`--output-dir` harus menunjuk folder baru agar hasil sebelumnya tetap tersimpan.
+Argumen CLI mengalahkan nilai environment.
+
+| Environment | Default | Keterangan |
+| --- | --- | --- |
+| `PROJECT` / `COMPOSE_PROJECT_NAME` | `aat-part1` | Nama project stack; `COMPOSE_PROJECT_NAME` diprioritaskan |
+| `ENV_FILE` | `.env` | File konfigurasi |
+| `TIMEOUT_SECS` | `90` | Batas waktu menunggu kondisi polling |
+| `CURL_TIMEOUT_SECS` | `10` | Timeout request; harus lebih dari 3 detik |
+| `LATENCY_SAMPLES` (P2) | `20` | Minimal 20 pasangan request |
+| `LOAD_VUS` (P2) | `50` | Minimal 50 VU |
+| `LOAD_SECONDS` (P2) | `65` | Minimal 60 detik |
+
+Untuk laporan, jelaskan goroutine polling yang terpisah, batas konkurensi
+Client/Auth, pool DB, timeout, dan freshness Canonical Store pada Problem 2.
+Pada Problem 3, jelaskan allowlist field di server, pemisahan kredensial, token
+acak yang disimpan sebagai hash, TTL, rotasi, dan pencabutan sesi saat replay.
+Detail tersedia di [kontrak client](../docs/client-contract.md) dan
+[panduan load testing](../docs/load-testing.md).
+
+### Jika test 2–3 gagal
+
+- `START_TIME` belum ada: jalankan `python3 scripts/setup-env.py` sebelum
+  menyalakan stack. Nilai yang sudah ada tetap dipertahankan.
+- Docker tidak dapat diakses: buka Docker Desktop dan periksa `docker version`.
+- Container tidak ditemukan: pastikan stack aktif dengan project, file Compose,
+  dan `.env` yang sama dengan test.
+- Delay PVMBG belum 3 detik: atur min/max di `.env`, lalu buat ulang PVMBG sebelum
+  menjalankan Problem 2.
+
+Pesan kegagalan menampilkan diagnostik perintah dengan nilai kredensial
+disamarkan. Detail pemeriksaan ada di output terminal dan hasil JSON.
 
 ## Problem 4 & 5
 

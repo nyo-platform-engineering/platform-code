@@ -1,5 +1,5 @@
 """Run sustained k6 M1 P2.2 traffic and independently verify container survival.
-Implementation assisted by Codex; see README. Never writes secrets into results.
+Never writes secrets into results.
 """
 import argparse
 import datetime as dt
@@ -106,7 +106,7 @@ environment.update({'LOAD_CLIENT_URL': url, 'LOAD_AUTH_URL': auth_url,
                     'LOAD_VUS': str(args.vus), 'LOAD_SECONDS': str(args.seconds),
                     'LOAD_LIMIT': str(args.limit), 'LOAD_RUN_ID': run_id,
                     'LOAD_SUMMARY_PATH': str(summary_path)})
-argv = ['k6', 'run', '--quiet', '--no-usage-report', str(ROOT / 'scripts/load/m1.js')]
+argv = ['k6', 'run', '--quiet', '--no-usage-report', str(ROOT / 'scripts/load/test2.js')]
 started_at = dt.datetime.now(dt.timezone.utc).isoformat()
 start = time.monotonic()
 observations = []
