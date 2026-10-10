@@ -8,9 +8,8 @@ dan field notifier. Load testing sustained M1 tersedia di
 [panduan integration tests](tests/README.md), termasuk `test-problem-2.py` dan
 `test-problem-3.py`. Laporan PDF M1 belum dibuat; audit implementasi tidak menggantikan laporan pengumpulan.
 
-Hasil pencocokan ketiga bagian terhadap spesifikasi M1 tersedia di
-[audit M1](docs/m1-audit.md); cara mengulang demo terintegrasi di
-[demo sistem](docs/demo-system.md).
+Petunjuk demo tersedia di [demo data](docs/demo.md),
+[demo akses client](docs/demo-client.md), dan [demo event](docs/demo-events.md).
 
 ## Alur data
 
@@ -28,7 +27,17 @@ PostgreSQL berada di network internal tanpa port host.
 
 ## Menjalankan
 
-Memerlukan Docker Compose v2. Jalankan dari root repository:
+Prasyarat:
+
+- Docker Engine aktif dalam mode Linux containers dan Docker Compose v2.
+- Python 3 untuk script konfigurasi dan integration test; jika command di mesin
+  Anda adalah `python`, ganti `python3` pada contoh berikut dengan `python`.
+- Go 1.25+ hanya untuk menjalankan unit test atau service langsung di host;
+  build container sudah menyediakan Go melalui Dockerfile.
+- k6 untuk load test Problem 2. Demo manual berbasis shell memakai Bash,
+  `curl`, dan `jq`; integration test Python tidak membutuhkan `jq`.
+
+Jalankan dari root repository:
 
 ```sh
 cd code/apps/aat
@@ -39,9 +48,38 @@ docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build
 docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml ps
 ```
 
-Konfigurasi ada di [.env.example](.env.example). Port host default:
-BMKG `8081`, PVMBG `8082`, Aggregator `8083`; semuanya terikat localhost.
-Setiap service menyediakan `GET /health` tanpa autentikasi.
+Script membuat `.env` dari [.env.example](.env.example), menghasilkan delapan
+secret berbeda, dan mengisi `START_TIME`. Kredensial dan timestamp yang sudah
+ada dipertahankan. `.env` tidak ikut di-commit; semua placeholder secret pada
+`.env.example` harus diganti sebelum service dijalankan.
+
+Tunggu health check dan polling pertama selesai sebelum pengujian; periksa
+`ps` dan `docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml logs --tail 30 aggregator`.
+Setiap service aplikasi menyediakan `GET /health` tanpa autentikasi;
+NATS menyediakan `/healthz` pada port monitoring `8222`.
+
+### Port dan perubahan konfigurasi
+
+| Service | Port host default | Variabel `.env` |
+| --- | --- | --- |
+| BMKG | `127.0.0.1:8081` | `BMKG_PORT` |
+| PVMBG | `127.0.0.1:8082` | `PVMBG_PORT` |
+| BNPB Client-Facing API | `127.0.0.1:8080` | `CLIENT_PORT` |
+| Aggregator | `127.0.0.1:8083` | `AGGREGATOR_PORT` |
+| Auth Service | `127.0.0.1:8084` | `AUTH_PORT` |
+| NATS / monitoring | `127.0.0.1:4222` / `127.0.0.1:8222` | Mapping tetap pada `compose.yaml` |
+
+PostgreSQL dan consumer tidak mempublikasikan port host. Untuk mengganti port,
+edit variabel terkait di `.env`, misalnya `CLIENT_PORT=8090`, lalu jalankan ulang:
+
+```sh
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d
+```
+
+Client API kemudian diakses melalui `http://localhost:8090`. Port container dan
+URL antarservice tetap sama; variabel `*_PORT` di atas hanya mengubah port host.
+Perubahan environment lain juga membutuhkan pembuatan ulang container melalui
+`up -d`; mengedit `.env` saja belum mengubah container yang sedang berjalan.
 
 ### Menjalankan bagian 2
 
@@ -52,7 +90,7 @@ python3 scripts/setup-client-env.py
 docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build
 ```
 
-Auth Service tersedia di `http://localhost:8084`, Client API di
+Dengan port default, Auth Service tersedia di `http://localhost:8084`, Client API di
 `http://localhost:8080`. Endpoint data client adalah `GET /hazards` dengan Bearer
 access token. Identitas demo: `public` (Media, tujuh field Ringkasan), `responder` (Tim Lapangan,
 seluruh field), dan `analyst` (BNPB Internal, seluruh field). Default TTL access
@@ -65,6 +103,11 @@ Client API menyajikan `sources[].status` dan `sources[].stale`, berdasarkan
 tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
 429 saat semua slot terpakai.
 
+## Variabel konfigurasi
+
+Variabel berikut tersedia dalam `.env.example` dan dibaca Compose dari `.env`.
+Nilai secret contoh bukan kredensial untuk menjalankan service.
+
 | Konfigurasi                                         | Default / ketentuan                                                  |
 | --------------------------------------------------- | -------------------------------------------------------------------- |
 | `BMKG_API_KEY`, `PVMBG_TOKEN`, `AGGREGATOR_TOKEN`   | Wajib, berbeda; token Aggregator hanya untuk internal                |
@@ -76,6 +119,26 @@ tanggung jawabnya. Pembatasan concurrency berlaku per proses, dengan penolakan
 | `DB_MAX_CONNS`                                      | `5` per Aggregator                                                   |
 | `POLL_INTERVAL_SECONDS`, `POLL_TIMEOUT_MS`          | `3`, `4000`; interval dan batas waktu polling Aggregator             |
 | `NATS_URL`                                          | `nats://nats:4222`; alamat broker untuk Aggregator dan consumers     |
+| `BMKG_PORT`, `PVMBG_PORT`, `AGGREGATOR_PORT` | `8081`, `8082`, `8083`; port host API sumber dan Aggregator |
+| `AUTH_PORT`, `CLIENT_PORT` | `8084`, `8080`; port host Auth dan BNPB Client-Facing API |
+| `AUTH_INTERNAL_TOKEN` | Wajib; secret introspeksi Client API → Auth, berbeda dari kredensial sumber dan Aggregator |
+| `PUBLIC_CLIENT_SECRET` | Wajib; kredensial Media dengan identitas `public` |
+| `RESPONDER_CLIENT_SECRET` | Wajib; kredensial Tim Lapangan dengan identitas `responder` |
+| `ANALYST_CLIENT_SECRET` | Wajib; kredensial BNPB Internal dengan identitas `analyst` |
+| `ACCESS_TTL_SECONDS` | `60`; masa berlaku access token dalam detik |
+| `REFRESH_TTL_SECONDS` | `3600`; masa berlaku sesi refresh dalam detik, minimal sama dengan TTL access |
+| `AUTH_MAX_SESSIONS` | `1000`; batas sesi Auth dalam memori |
+| `AUTH_MAX_CONCURRENT` | `32`; batas request bersamaan per proses Auth |
+| `CLIENT_MAX_CONCURRENT` | `16`; batas request bersamaan per proses Client API |
+| `UPSTREAM_TIMEOUT_MS` | `3000`; batas waktu total request upstream dalam satu request Client API |
+| `STALE_AFTER_SECONDS` | `60`; ambang umur polling sukses terakhir untuk penanda stale |
+
+Secret Auth internal dan ketiga client minimal 32 karakter serta harus berbeda.
+`scripts/setup-env.py` menyiapkannya secara otomatis. Jika service dijalankan
+langsung di host, konfigurasi tambahan adalah `DATABASE_URL` untuk Aggregator,
+`BMKG_URL`, `PVMBG_URL`, `AUTH_URL`, dan `AGGREGATOR_URL` untuk alamat upstream.
+Di Compose, nilai-nilai tersebut sudah disediakan melalui environment service;
+mengubah port host tidak perlu mengubah URL internal.
 
 Mock memiliki 20 seed record hingga `START_TIME` (dibulatkan ke bawah sesuai interval),
 lalu menghasilkan satu record per interval setelahnya hingga waktu saat ini. Pertahankan `START_TIME` dan
@@ -91,6 +154,9 @@ sebelum rebuild; timestamp yang sudah ada dan kredensial tidak diubah.
 | BMKG — `X-BMKG-Key`                    | `GET /seismic-events`, `GET /tsunami-warnings`; keduanya menerima `?since=`          |
 | PVMBG — Bearer `PVMBG_TOKEN`           | `GET /volcanic-reports?since=`, `POST /admin/schema-version`, `POST /admin/outage`   |
 | Aggregator — Bearer `AGGREGATOR_TOKEN` | `POST /internal/ingest/bmkg`, `POST /internal/ingest/pvmbg`, `GET /internal/hazards` |
+| Auth — kredensial client / refresh token | `POST /auth/token`, `POST /auth/refresh` |
+| Auth internal — Bearer `AUTH_INTERNAL_TOKEN` | `POST /internal/introspect` |
+| Client API — Bearer access token | `GET /hazards` |
 
 Body admin: `{"enabled":true|false}`. Body ingest BMKG:
 `{"seismic_events":[...],"tsunami_warnings":[...]}`; PVMBG: `{"volcanic_reports":[...]}`.
@@ -141,6 +207,42 @@ data tersebut perlu dipindahkan ke kolom bertipe sebelum memakai versi ini.
 PostgreSQL dipilih untuk constraint dan transaksi plus JSONB; SQLite membatasi replikasi
 berbasis file, sedangkan MongoDB menambah model operasional berbeda.
 
+## Skenario pengujian P1–P5
+
+Jalankan satu per satu dari `code/apps/aat` pada stack yang sudah aktif agar
+perubahan schema, outage, dan restart antartest tidak saling mengganggu.
+
+| Problem | Cara memicu | Yang diperiksa |
+| --- | --- | --- |
+| P1 — interoperabilitas | `python3 tests/test-problem-1.py`; tekan Enter saat diminta | Mapping kedua sumber; toggle schema PVMBG tanpa restart; `confidence_level` masuk `attributes` |
+| P2 — concurrency dan availability | Atur delay PVMBG 3 detik seperti contoh berikut, lalu `python3 tests/test-problem-2.py` | BMKG-only p95 <300 ms; load ≥50 VU selama ≥60 detik; metrik throughput/latensi/error/429; outage, stale, dan pemulihan |
+| P3 — autentikasi | `python3 tests/test-problem-3.py` | Kredensial silang ditolak; field Media dibatasi; access token kedaluwarsa alami, refresh, dan penolakan token lama |
+| P4 — service dan storage | `python3 tests/test-problem-4.py` | Stop/rebuild PVMBG tanpa restart service lain; atribut dinamis tanpa migrasi; isolasi Canonical Store |
+| P5 — pub-sub | `python3 tests/test-problem-5.py` | Dua consumer independen; stop/resume consumer dan backlog; container subscriber ketiga tanpa perubahan producer; deduplikasi |
+
+Persiapan P2: ubah dua nilai berikut di `.env`, lalu buat ulang hanya PVMBG:
+
+```dotenv
+PVMBG_DELAY_MIN_MS=3000
+PVMBG_DELAY_MAX_MS=3000
+```
+
+```sh
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --no-deps pvmbg
+python3 tests/test-problem-2.py --vus 50 --seconds 65
+```
+
+Pertahankan TTL access default 60 detik untuk demo P3. P4 menghentikan dan
+me-rebuild PVMBG; P5 menghentikan sementara dashboard updater dan menambahkan
+`test-consumer` melalui `compose.consumer.yaml` dengan project yang sama.
+Secara default P5 membiarkan container tambahan tersebut berjalan.
+
+Detail prasyarat dan hasil ada di [panduan integration tests](tests/README.md).
+Demo manual tersedia untuk [schema/outage/kredensial silang](docs/demo.md),
+[login/field/refresh](docs/demo-client.md), dan
+[stop/resume/penambahan subscriber](docs/demo-events.md).
+Untuk mengulang load test saja, ikuti [panduan k6](docs/load-testing.md).
+
 ## Tes dan operasional
 
 Memerlukan Go 1.25+. Dari direktori AAT:
@@ -153,9 +255,9 @@ AAT_TEST_DATABASE_URL='postgres://user:password@localhost/testdb?sslmode=disable
   go test ./aggregator/internal/controller -run TestAutoMigrateAndIngestion -v
 
 # Rebuild satu service tanpa restart service lain.
-docker compose -p aat-part1 up -d --build --no-deps pvmbg
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build --no-deps pvmbg
 # Hentikan stack; data PostgreSQL tetap tersimpan.
-docker compose -p aat-part1 down
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml down
 ```
 
 Untuk menjalankan di host: `go run ./<service>/cmd/server` setelah mengekspor env.
