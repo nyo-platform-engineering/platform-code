@@ -41,7 +41,9 @@ begin
     end
 
     if %w[go-demo telemetry-ui].include?(name)
-      api.call(Net::HTTP::Put, "/projects/#{project.fetch('id')}", { ci_push_repository_for_job_token_allowed: true })
+      unless project['ci_push_repository_for_job_token_allowed']
+        api.call(Net::HTTP::Put, "/projects/#{project.fetch('id')}", { ci_push_repository_for_job_token_allowed: true })
+      end
       if name == 'go-demo' && ENV['LOCAL_IMAGE_TAG']
         content = "image:\n  repository: local/go-demo\n  tag: #{ENV.fetch('LOCAL_IMAGE_TAG')}\n  digest: ''\nimagePullSecrets:\n  - name: go-demo-registry\n"
         api.call(Net::HTTP::Post, "/projects/#{project.fetch('id')}/repository/commits", {

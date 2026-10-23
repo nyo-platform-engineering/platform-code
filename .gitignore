@@ -1,3 +1,4 @@
 .test-cache/
 .test-modcache/
 .DS_Store
+.env

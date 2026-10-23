@@ -4,8 +4,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export MSYS_NO_PATHCONV=1
 kube() { kubectl --context "k3d-${CLUSTER_NAME:-dev}" "$@"; }
 prepare() {
+  local existing
   kube create namespace gitlab --dry-run=client -o yaml | kube apply -f -
-  if ! kube get secret gitlab-local-auth -n gitlab >/dev/null 2>&1; then
+  existing="$(kube get secret gitlab-local-auth -n gitlab --ignore-not-found -o name)"
+  if [[ -z "$existing" ]]; then
     local password object_key
     password="$(openssl rand -hex 24)"
     object_key="$(openssl rand -hex 24)"
@@ -15,13 +17,16 @@ prepare() {
   fi
   local object_key
   object_key="$(kube get secret gitlab-local-auth -n gitlab -o go-template='{{index .data "secretkey" | base64decode}}')"
-  if ! kube get secret gitlab-object-storage -n gitlab >/dev/null 2>&1; then
+  existing="$(kube get secret gitlab-object-storage -n gitlab --ignore-not-found -o name)"
+  if [[ -z "$existing" ]]; then
     kube create secret generic gitlab-object-storage -n gitlab --from-literal="connection=$(printf 'provider: AWS\nregion: us-east-1\naws_access_key_id: gitlab\naws_secret_access_key: %s\nendpoint: http://gitlab-minio:9000\npath_style: true\n' "$object_key")"
   fi
-  if ! kube get secret gitlab-object-storage-backup -n gitlab >/dev/null 2>&1; then
+  existing="$(kube get secret gitlab-object-storage-backup -n gitlab --ignore-not-found -o name)"
+  if [[ -z "$existing" ]]; then
     kube create secret generic gitlab-object-storage-backup -n gitlab --from-literal="config=$(printf '[default]\naccess_key = gitlab\nsecret_key = %s\nhost_base = gitlab-minio:9000\nhost_bucket = gitlab-minio:9000\nuse_https = False\n' "$object_key")"
   fi
-  if ! kube get secret gitlab-registry-storage -n gitlab >/dev/null 2>&1; then
+  existing="$(kube get secret gitlab-registry-storage -n gitlab --ignore-not-found -o name)"
+  if [[ -z "$existing" ]]; then
     kube create secret generic gitlab-registry-storage -n gitlab --from-literal="config=$(printf 's3:\n  accesskey: gitlab\n  secretkey: %s\n  bucket: registry\n  region: us-east-1\n  regionendpoint: http://gitlab-minio:9000\n  secure: false\n  v4auth: true\n  pathstyle: true\nredirect:\n  disable: true\n' "$object_key")"
   fi
 }
@@ -82,12 +87,22 @@ projects() {
 }
 deploy() {
   kube create namespace dev --dry-run=client -o yaml | kube apply -f -
-  local app credentials
+  local app credentials repository registry
   for app in ${APP_NAME:-go-demo telemetry-ui}; do
     [[ "$app" == go-demo || "$app" == telemetry-ui ]] || { echo 'Unsupported APP_NAME' >&2; return 1; }
-    if ! kube get secret "$app-repository" -n argocd >/dev/null 2>&1 || \
-       ! kube get secret "$app-registry" -n dev >/dev/null 2>&1; then
-      credentials="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- env "APP_NAME=$app" gitlab-rails runner - < scripts/gitlab-deploy.rb)"
+    # Only NotFound means missing; connection/authorization errors must stop setup.
+    repository="$(kube get secret "$app-repository" -n argocd --ignore-not-found -o json)"
+    registry="$(kube get secret "$app-registry" -n dev --ignore-not-found -o json)"
+    if [[ -z "$repository" || -z "$registry" ]]; then
+      if [[ -n "$repository" || -n "$registry" ]]; then
+        # Resume a partially applied pair without rotating its deploy token.
+        credentials="$(printf '{"app":"%s","repository":%s,"registry":%s}\n' \
+          "$app" "${repository:-null}" "${registry:-null}" | \
+          kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- \
+            ruby -e "$(cat scripts/gitlab-credentials.rb)")"
+      else
+        credentials="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- env "APP_NAME=$app" gitlab-rails runner - < scripts/gitlab-deploy.rb)"
+      fi
       printf '%s\n' "$credentials" | tail -n 1 | kube apply --server-side -f -
     fi
     if [[ "$app" == telemetry-ui ]]; then
@@ -103,7 +118,7 @@ runner() {
   local configured output auth
   # Registration requires a ready webservice and completed database migrations.
   kube rollout status deployment/gitlab-webservice-default -n gitlab --timeout=600s
-  configured="$(kube get secret gitlab-gitlab-runner-secret -n gitlab -o go-template='{{if index .data "runner-token"}}yes{{end}}' 2>/dev/null || true)"
+  configured="$(kube get secret gitlab-gitlab-runner-secret -n gitlab --ignore-not-found -o go-template='{{if index .data "runner-token"}}yes{{end}}')"
   if [[ "$configured" != yes ]]; then
     kube rollout status deployment/gitlab-toolbox -n gitlab --timeout=300s
     output="$(kube exec -i -n gitlab deployment/gitlab-toolbox -c toolbox -- gitlab-rails runner - < scripts/gitlab-runner.rb)"
@@ -119,8 +134,27 @@ runner() {
   kube rollout status deployment/gitlab-gitlab-runner -n gitlab --timeout=300s
   echo 'Kubernetes runner authentication configured.'
 }
+storage_ready() {
+  # Image builds can outlast the bucket Job's deadline on first startup.
+  # Argo CD recreates failed Jobs removed here once the images are available.
+  local job failed jobs attempt
+  for ((attempt=0; attempt<120; attempt++)); do
+    kube get statefulset gitlab-minio -n gitlab >/dev/null 2>&1 && break
+    sleep 5
+  done
+  kube rollout status statefulset/gitlab-minio -n gitlab --timeout=300s
+  jobs="$(kube get jobs -n gitlab -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+  while IFS= read -r job; do
+    [[ "$job" == gitlab-create-buckets-* ]] || continue
+    failed="$(kube get job "$job" -n gitlab -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}')"
+    if [[ "$failed" == True ]]; then
+      kube delete job "$job" -n gitlab
+    fi
+  done <<< "$jobs"
+  ready gitlab-services
+}
 ready() {
-  local app="${1:-gitlab}" state
+  local app="${1:-gitlab}" state attempt
   kube annotate application "$app" -n argocd argocd.argoproj.io/refresh=hard --overwrite
   echo "Waiting for Argo CD to reconcile $app and finish its rollout..."
   for ((attempt=0; attempt<120; attempt++)); do
@@ -138,6 +172,7 @@ case "${1:-up}" in
   onboard)
     [[ "${APP_NAME:-}" == go-demo || "${APP_NAME:-}" == telemetry-ui ]] || { echo 'Set APP_NAME to go-demo or telemetry-ui' >&2; exit 1; }
     bash scripts/gitlab-minio.sh
+    storage_ready
     code
     runner
     projects
@@ -151,6 +186,7 @@ case "${1:-up}" in
     bash scripts/gitlab-minio.sh
     kube apply --server-side -f argo-apps/platform/02-cd/gitlab-services/app.yaml
     kube apply --server-side -f argo-apps/platform/03-cd/gitlab/app.yaml
+    storage_ready
     echo 'Waiting for the GitLab app-code PVC...'
     for ((attempt=0; attempt<120; attempt++)); do
       kube get pvc gitlab-app-code -n gitlab >/dev/null 2>&1 && break

@@ -58,7 +58,7 @@ tasks:
       - "bash scripts/bootstrap.sh up"
       - task: links
   gitlab:
-    desc: Prepare GitLab, upload app code, and import projects (override ACTION for operations)
+    desc: Set up or resume GitLab safely, preserving existing projects and credentials
     vars:
       ACTION: '{{.ACTION | default "up"}}'
     cmds:

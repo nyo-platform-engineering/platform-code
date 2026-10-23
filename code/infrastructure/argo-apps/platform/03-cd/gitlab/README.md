@@ -28,6 +28,14 @@ runs database migrations, so the page may take several minutes to become ready.
 Credentials are generated locally in Kubernetes Secrets and never committed.
 `task up` also prepares the dependency credentials on a new cluster.
 
+`task gitlab` can be rerun after success or an interrupted setup. It reuses
+storage credentials, runner registration, built MinIO images, and existing
+deployment credentials. If only one deployment Secret was created, the next
+run restores its partner using the same token. Failed bucket jobs are retried
+after MinIO is ready. Existing repositories and their history are preserved;
+only changed CI configuration and a missing deployment values file are committed.
+Use normal Git pushes to update other files in an existing project.
+
 On first startup, the runner may retry registration while GitLab migrations
 and the webservice initialize. `task gitlab ACTION=runner` waits for the
 webservice, provisions the authentication token, restarts the runner when
@@ -150,3 +158,6 @@ both images into k3d. It needs Go, Git, Docker, kubectl, and k3d. Source revisio
 are pinned in `scripts/gitlab-minio.sh`; image labels preserve their provenance.
 No database volumes are deleted. Argo CD continues to manage MinIO and bucket
 creation. Repeat after deleting/recreating the cluster or adding nodes.
+Setup waits for MinIO and retries failed bucket creation jobs before continuing.
+If an earlier image build outlasted the bucket job's deadline, rerun `task gitlab`
+to create the missing buckets and let the registry recover.
