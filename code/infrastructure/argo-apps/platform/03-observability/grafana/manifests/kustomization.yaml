@@ -5,6 +5,9 @@ configMapGenerator:
   - name: grafana-policy-reports
     files:
       - kyverno-policy-reports.json
+  - name: grafana-platform-overview
+    files:
+      - platform-overview.json
 generatorOptions:
   disableNameSuffixHash: true
   labels:

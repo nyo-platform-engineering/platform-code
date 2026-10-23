@@ -26,8 +26,18 @@ dashboardProviders:
         updateIntervalSeconds: 10
         options:
           path: /var/lib/grafana/dashboards/policies
+      - name: platform
+        orgId: 1
+        folder: Platform
+        type: file
+        disableDeletion: false
+        editable: false
+        updateIntervalSeconds: 10
+        options:
+          path: /var/lib/grafana/dashboards/platform
 dashboardsConfigMaps:
   policies: grafana-policy-reports
+  platform: grafana-platform-overview
 initChownData:
   # This established PVC already belongs to Grafana (UID 472). Its private
   # output directories cannot be traversed by the chart's restricted chown init.
@@ -55,6 +65,8 @@ datasources:
         access: proxy
         url: http://mimir:9009/prometheus
         isDefault: true
+        jsonData:
+          timeInterval: 60s
       - name: ClickHouse
         uid: clickhouse
         type: grafana-clickhouse-datasource
