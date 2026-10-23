@@ -31,6 +31,7 @@ spec:
       max_connections: 4096
       keep_alive_timeout: 64
       max_concurrent_queries: 100
+      access_control_improvements/settings_constraints_replace_previous: true
       prometheus/endpoint: /metrics
       prometheus/port: 9363
       prometheus/metrics: true
@@ -39,6 +40,12 @@ spec:
       prometheus/status_info: true
     profiles:
       readonly/readonly: 1
+      # The Go client sends a deadline; searches also set read limits.
+      # Keep writes and all other setting changes blocked.
+      readonly/constraints/max_execution_time/changeable_in_readonly: true
+      readonly/constraints/max_rows_to_read/changeable_in_readonly: true
+      readonly/constraints/max_bytes_to_read/changeable_in_readonly: true
+      readonly/constraints/read_overflow_mode/changeable_in_readonly: true
     users:
       app/password:
         valueFrom:
