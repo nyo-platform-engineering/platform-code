@@ -14,6 +14,11 @@ lint:
 
 test:
   stage: test
+  variables:
+    CGO_ENABLED: '1'
+  before_script:
+    # SQLite-backed isolation tests use go-sqlite3's C bindings.
+    - apk add --no-cache build-base
   script:
     - cd backend
     - go test ./...

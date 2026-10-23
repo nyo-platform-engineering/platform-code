@@ -7,11 +7,12 @@ COPY frontend/ ./
 RUN pnpm build
 
 FROM golang:1.27.1-alpine AS go-build
+RUN apk add --no-cache build-base
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-RUN go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /telemetry-ui .
+RUN CGO_ENABLED=1 go test ./... && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /telemetry-ui .
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates
