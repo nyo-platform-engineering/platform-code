@@ -64,6 +64,21 @@ toolbox volume alone does not update existing application source in GitLab.
 After deploy succeeds, open Go demo using `task links`. For the default ports,
 it's at `http://go.localhost`.
 
+The cluster deployment exports traces and correlated logs to its OpenTelemetry
+collector with `tenant.id=local`, matching Signal Deck's local organization.
+Open `http://go.localhost/demo` and use the buttons, or run from
+`code/infrastructure`:
+
+```bash
+task demo-traffic                    # continuous traffic; Ctrl-C to stop
+task demo-traffic -- --count 20       # bounded smoke test
+```
+
+Open `http://telemetry.localhost/traces` or `/logs`, choose a recent time range,
+and select `go-demo`. The bot generates successful, slow, and failed requests.
+Telemetry appears after the SDK and collector batches flush. Quiet services
+eventually disappear from recent time ranges until they receive new requests.
+
 ## Build locally instead
 
 With the cluster and GitLab project configured, run from `code/apps` or

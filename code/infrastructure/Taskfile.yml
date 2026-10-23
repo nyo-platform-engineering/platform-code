@@ -67,6 +67,10 @@ tasks:
     desc: Build pinned upstream MinIO images and import them into k3d
     cmds:
       - bash scripts/gitlab-minio.sh
+  demo-traffic:
+    desc: Generate success, slow, and error requests for the deployed Go demo
+    cmds:
+      - 'python3 ../apps/dev/traffic.py --url "http://go.localhost:{{.HTTP_PORT}}" {{.CLI_ARGS}}'
   onboard:
     desc: Import an app into GitLab and configure its GitOps credentials
     vars:
