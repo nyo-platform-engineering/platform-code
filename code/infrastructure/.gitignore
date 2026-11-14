@@ -1,2 +1,8 @@
 settings.local.yml
 Taskfile.local.yml
+.state/
+local/.vagrant/
+.env
+.env.runtime
+values.local.yaml
+**/__pycache__/

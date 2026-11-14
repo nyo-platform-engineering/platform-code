@@ -4,88 +4,77 @@ fullnameOverride: grafana
 image:
   tag: 12.3.2
 adminUser: admin
-adminPassword: admin
-resources: {}
-plugins:
-  - grafana-clickhouse-datasource@4.21.3
-envValueFrom:
-  CLICKHOUSE_APP_PASSWORD:
-    secretKeyRef:
-      name: clickhouse-credentials
-      key: appPassword
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 256Mi
 dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1
     providers:
-      - name: policies
-        orgId: 1
-        folder: Policies
-        type: file
-        disableDeletion: false
-        editable: false
-        updateIntervalSeconds: 10
-        options:
-          path: /var/lib/grafana/dashboards/policies
-      - name: platform
-        orgId: 1
-        folder: Platform
-        type: file
-        disableDeletion: false
-        editable: false
-        updateIntervalSeconds: 10
-        options:
-          path: /var/lib/grafana/dashboards/platform
+    - name: aat
+      orgId: 1
+      folder: AAT
+      type: file
+      disableDeletion: false
+      editable: false
+      updateIntervalSeconds: 10
+      options:
+        path: /var/lib/grafana/dashboards/aat
 dashboardsConfigMaps:
-  policies: grafana-policy-reports
-  platform: grafana-platform-overview
+  aat: grafana-aat
 initChownData:
-  # This established PVC already belongs to Grafana (UID 472). Its private
-  # output directories cannot be traversed by the chart's restricted chown init.
   enabled: false
   resources: {}
 service:
   port: 3000
   targetPort: 3000
+  type: NodePort
+  nodePort: 30300
 persistence:
   enabled: true
   storageClassName: local-path
   size: 1Gi
 ingress:
-  enabled: true
-  ingressClassName: traefik
-  hosts:
-    - grafana.localhost
+  enabled: false
 datasources:
   datasources.yaml:
     apiVersion: 1
     datasources:
-      - name: Mimir
-        uid: mimir
-        type: prometheus
-        access: proxy
-        url: http://mimir:9009/prometheus
-        isDefault: true
-        jsonData:
-          timeInterval: 60s
-      - name: ClickHouse
-        uid: clickhouse
-        type: grafana-clickhouse-datasource
-        access: proxy
-        editable: true
-        jsonData:
-          host: clickhouse.monitoring.svc.cluster.local
-          port: 9000
-          protocol: native
-          username: app
-          defaultDatabase: otel
-          configMode: classic
-          logs:
-            defaultDatabase: otel
-            defaultTable: otel_logs
-            otelEnabled: true
-          traces:
-            defaultDatabase: otel
-            defaultTable: otel_traces
-            otelEnabled: true
-        secureJsonData:
-          password: $CLICKHOUSE_APP_PASSWORD
+    - name: Mimir
+      uid: mimir
+      type: prometheus
+      access: proxy
+      url: http://mimir:9009/prometheus
+      isDefault: true
+      jsonData:
+        timeInterval: 30s
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo:3200
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          tags:
+          - key: k8s.namespace.name
+            value: k8s_namespace_name
+        serviceMap:
+          datasourceUid: mimir
+        nodeGraph:
+          enabled: true
+podLabels:
+  role: other
+nodeSelector:
+  kubernetes.io/hostname: aat-control
+admin:
+  existingSecret: grafana-admin
+  userKey: username
+  passwordKey: password

@@ -1,5 +1,6 @@
 podLabels:
   platform.local/owner: platform-team
+  role: store
 global:
   commonLabels:
     platform.local/owner: platform-team
@@ -7,7 +8,11 @@ fullnameOverride: tempo
 replicas: 1
 tempo:
   tag: 2.9.0
-  resources: {}
+  resources:
+    requests:
+      memory: 512Mi
+    limits:
+      memory: 1Gi
   memBallastSizeMbs: 0
   retention: 72h
   ingester:
@@ -31,3 +36,5 @@ persistence:
   storageClassName: local-path
   size: 5Gi
   enableStatefulSetAutoDeletePVC: false
+nodeSelector:
+  kubernetes.io/hostname: aat-control

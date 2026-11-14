@@ -1,0 +1,86 @@
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: tcp
+      port: {{ $service.port }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        role: {{ $service.role }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $service.uid }}
+        runAsGroup: {{ $service.uid }}
+        fsGroup: {{ $service.uid }}
+      containers:
+        - name: {{ $name }}
+          image: {{ $service.image | quote }}
+          {{- with $service.args }}
+          args: {{ . | toJson }}
+          {{- end }}
+          {{- with $service.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: tcp
+              containerPort: {{ $service.port }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            {{- toYaml $service.resources | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $service.probe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml $service.probe | nindent 12 }}
+            initialDelaySeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: {{ $service.mountPath }}
+            - name: tmp
+              mountPath: /tmp
+            {{- with $service.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- with $service.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        storageClassName: local-path
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ $service.size }}
+{{- end }}

@@ -1,14 +1,26 @@
 podLabels:
   platform.local/owner: platform-team
+  role: other
 customLabels:
   platform.local/owner: platform-team
 fullnameOverride: kube-state-metrics
 replicas: 1
-resources: {}
-collectors: [pods]
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+collectors:
+- pods
+- deployments
+- horizontalpodautoscalers
 metricAllowlist:
-  - kube_pod_status_ready
-  - kube_pod_container_status_restarts_total
+- kube_pod_status_ready
+- kube_pod_container_status_restarts_total
+- kube_deployment_status_replicas_available
+- kube_deployment_spec_replicas
+- kube_horizontalpodautoscaler_status_current_replicas
+- kube_horizontalpodautoscaler_status_desired_replicas
 prometheusScrape: false
 selfMonitor:
   enabled: false

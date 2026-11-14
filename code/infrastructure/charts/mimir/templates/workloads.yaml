@@ -46,7 +46,10 @@ spec:
       labels:
         platform.local/owner: platform-team
         app.kubernetes.io/name: mimir
+        role: store
     spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
       securityContext:
         runAsUser: 10001
         runAsGroup: 10001
@@ -54,6 +57,8 @@ spec:
       containers:
         - name: mimir
           image: {{ .Values.image }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           workingDir: /data
           args: [-config.file=/etc/local/config.yaml, -target=all]
           ports:

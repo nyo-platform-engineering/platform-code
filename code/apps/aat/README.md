@@ -272,3 +272,54 @@ lihat [metode dan hasil](docs/load-testing.md).
 
 Untuk demonstrasi pub-sub, penghentian dan pemulihan consumer, serta penambahan
 subscriber baru, ikuti [panduan Problem 5](docs/demo-events.md).
+
+## Deployment Kubernetes lokal — M2
+
+Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan tiga VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`; perubahan source membutuhkan build/publikasi image dan pembaruan digest.
+
+Workload berada pada namespace `sistem-informasi-kebencanaan-bnpb`. PostgreSQL dan NATS JetStream dipasang melalui `charts/aat-dependencies` di infrastructure, dengan volume `local-path`. NetworkPolicy membatasi PostgreSQL ke Aggregator dan NATS ke Aggregator/consumer.
+
+| Role pod | Request / limit memory |
+| --- | --- |
+| aggregator | 256Mi / 512Mi |
+| store / broker | 512Mi / 1Gi |
+| api / consumer / other | 128Mi / 256Mi |
+| mock | 64Mi / 128Mi |
+
+Aggregator default tiga replica yang tersebar menurut hostname, rolling update `maxUnavailable: 0`, dan PDB `minAvailable: 2`. Auth tetap satu replica karena sesi image baseline berada dalam memori proses. HPA Aggregator opsional 3–5 replica: tambahkan `../../argo-apps/dev/aat/aggregator/autoscaling.yaml` ke `spec.source.helm.valueFiles` pada Application Aggregator, lalu commit/push. Lepaskan overlay tersebut sebelum pengujian scale manual.
+
+Dari `code/infrastructure`, setelah prasyarat cluster disiapkan:
+
+```bash
+task up
+task logs APP=aggregator
+task scale REPLICAS=5
+task scale REPLICAS=2
+task scale REPLICAS=3
+```
+
+Client API tersedia di `http://192.168.56.10:30080`, Auth di `http://192.168.56.10:30084`. Untuk akses Aggregator dari host:
+
+```bash
+KUBECONFIG=$PWD/.state/kubeconfig kubectl -n sistem-informasi-kebencanaan-bnpb port-forward svc/aggregator 8083:8083
+```
+
+Bootstrap menyimpan kredensial pada `.env.runtime` (permission 0600), membuat Secret `aat-runtime`, serta mempertahankan `START_TIME` mock melalui ConfigMap `aat-clock` dan `.state/mock-start-time`. Nilai dipertahankan saat deploy ulang dan dapat dipulihkan dari cluster. Token asisten untuk integrasi lanjutan tercantum pada `.env.example` infrastructure dan perlu diisi sesuai sesi tugas.
+
+Dashboard Grafana **AAT — layanan dan runtime lokal** menampilkan throughput, rasio 5xx, dan p95 dari log request JSON (`msg=request`, `service`, `status`, `latency_ms`), serta CPU/memori/replica dari cAdvisor dan kube-state-metrics. Cari `correlation_id` melalui Loki. Trace membutuhkan instrumentasi serta propagasi context aplikasi; environment `OTEL_*` saja tidak menginstrumentasi binary Go.
+
+Image baseline dan konfigurasi cluster belum membuktikan kelulusan P1–P5 M2. Sharding/replikasi storage, koordinasi leader/fencing, Feed Satelit, Audit API, serta bukti load/failure/recovery masih membutuhkan implementasi dan pengujian aplikasi. Checklist lokal ada di `task.local.md`.
+
+Tester Agent memakai manifest pada commit yang dirujuk PDF dan image aslinya. Jalankan dari `code/infrastructure`:
+
+```bash
+task tester:install
+task tester:list
+task tester:practice SCENARIO=nama-dari-list
+task vm:suspend-worker NODE=aat-worker-1
+task vm:resume-worker NODE=aat-worker-1
+```
+
+Gunakan worker untuk gangguan awal karena cluster hanya mempunyai satu control plane. Skenario ujian memerlukan token/kunci asisten; catat log Tester Agent serta bukti kernel terpisah dan spesifikasi host untuk laporan.
+
+Sensor Pantai belum dideploy karena contoh manifest pada PDF lokal kosong. Setelah kontraknya tersedia, gunakan image `sustuna/sensor-pantai@sha256:51fbd90d3891ad6e9f5768ad330ffb65205644cb29e50da65c7538f2e0b4397d`, namespace aplikasi, label `role=sensor`, dan memory 128Mi/256Mi.

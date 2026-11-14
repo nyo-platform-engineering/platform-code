@@ -120,18 +120,6 @@ data:
     CREATE EXTENSION IF NOT EXISTS amcheck;
     CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  labels:
-    platform.local/owner: platform-team
-  name: gitlab-app-code
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: {{ .Values.appCodeSize }}
----
 apiVersion: batch/v1
 kind: Job
 metadata:

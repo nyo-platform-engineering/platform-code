@@ -1,0 +1,4 @@
+# Reuse digest dari infrastructure-main.zip; tidak membangun ulang aplikasi.
+image:
+  tag: f09444230b93-20261101T132419Z-p4892
+  digest: sha256:ac463e18388f69c6957fec71d08af1d2ee09dd5864c72a108b53ae1e7a2b6976

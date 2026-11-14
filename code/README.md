@@ -1,98 +1,16 @@
-# Application and platform code
+# Application and infrastructure code
 
-This page helps you decide where code and configuration belong. For commands
-to run the stack, start with the [repository guide](../README.md).
-
-This directory keeps application code and infrastructure together to simplify
-the local demo. The monorepo makes it easy to build a service, deploy it through
-Argo CD, and explore the platform from one checkout. At scale, application
-source belongs in separate repositories so teams can develop, test, and
-release their services independently.
-
-## Directory roles
-
-| Directory | Responsibility |
-| --- | --- |
-| `apps/` | Service source code, application tests, Dockerfiles, and local image tasks. |
-| `infrastructure/` | Local cluster bootstrap, shared platform services, cluster policies, reusable workload charts, and GitOps deployment configuration. |
+`apps/` berisi source, Dockerfile, test, dan dokumentasi masing-masing aplikasi. `infrastructure/` berisi cluster k3s lokal pada tiga VM, deployment melalui Argo CD, dan observabilitas LGTM.
 
 ```text
-code/
-  apps/
-    Taskfile.yml                 local application build/import tasks
-    go-demo/                     example service, tests, and Dockerfile
-  infrastructure/
-    Taskfile.yml                 cluster lifecycle and operations
-    scripts/                     local k3d bootstrap
-    argo-apps/platform/           Argo CD, networking, observability, and Kyverno
-    argo-apps/dev/                development app registration and Helm values
-    charts/                      reusable deployment and platform charts
-    tests/                       infrastructure policy tests
+apps/                            aplikasi dan panduan penggunaannya
+infrastructure/local/            definisi VM dan provisioning node
+infrastructure/argo-apps/root.yaml  root app-of-apps
+infrastructure/argo-apps/platform/  Application komponen platform
+infrastructure/argo-apps/dev/       registrasi aplikasi dan Helm values
+infrastructure/charts/           chart Helm
+infrastructure/scripts/          bootstrap dan operasi
+infrastructure/tests/            pemeriksaan konfigurasi infrastructure
 ```
 
-`apps/` defines what a service does and how its container is built.
-The [AAT assignment](apps/aat/README.md) also lives here and runs independently
-with Docker Compose, including hazard storage and client authentication.
-`infrastructure/` defines where it runs and how it connects to the platform.
-For example, Go demo source lives in `apps/go-demo/`, while its image reference,
-probes, and HTTPRoute settings live in `infrastructure/argo-apps/dev/go-demo/`.
-Argo CD reads the committed deployment configuration from Git.
-After GitLab CI is enabled, the image override lives in `deploy/values.yaml`
-in the local GitLab app project; Argo CD reads it alongside the base settings.
-
-## Local workflow
-
-Windows uses Git Bash; macOS uses your normal Terminal and a running Linux
-Docker engine. `task setup` selects winget or Homebrew for CLI installation.
-See the [OS setup instructions](infrastructure/README.md#tools-and-first-run).
-Optional `infrastructure/settings.local.yml` settings and `Taskfile.local.yml` tasks
-let each developer choose Docker connections, ports, and runtime commands
-without editing shared files. Colima is the documented Mac example.
-
-From `code/infrastructure`:
-
-```bash
-task up          # bootstrap the local cluster and print service links
-task gitlab      # import app projects, configure CI, and start the pipeline
-task status      # inspect pods, apps, resource usage, and sizing
-task go-demo     # optional local build/import instead of publishing through CI
-```
-
-The application task lives in `apps/Taskfile.yml` and is also included by the
-infrastructure Taskfile. Local k3d image imports keep the demo simple without
-requiring an image registry. See [infrastructure setup](infrastructure/README.md)
-and [Go demo details](apps/go-demo/README.md).
-See [local GitLab](infrastructure/argo-apps/platform/03-cd/gitlab/README.md) for access, persistent
-storage, mount settings, and Go demo's lint/test/build/deploy pipeline.
-
-## Repository model as the platform grows
-
-Each service would move to its own application repository, containing its
-source, tests, Dockerfile, and CI pipeline. The platform repository would keep
-shared services, policies, charts, and environment deployment configuration.
-Separating source repositories does not require moving each service's deployment
-values out of the platform repository.
-
-The local demo already uses separate Git sources: GitHub holds platform
-configuration and local GitLab holds the imported app project and CI image
-override. At scale, teams can keep that split or centralize environment image
-references in the platform repository.
-
-A delivery flow with centralized environment values would be:
-
-1. Application CI tests the service and publishes its container to a registry.
-2. A deployment change updates the environment's image reference in the platform
-   repository, using a unique release tag or digest.
-3. Argo CD reconciles that Git change into the target cluster.
-
-Clusters then pull images from the registry rather than using local imports.
-The platform's Argo CD Applications reference deployment charts and values;
-they do not need the application's source checkout. An application-owned chart
-could instead be published separately and referenced by the platform.
-
-This repository demonstrates the boundaries in one place. A production rollout
-would also revisit the local defaults: single replicas, filesystem-backed
-telemetry storage, and the audit policy against CPU/memory sizing. Repository
-separation alone does not make the cluster highly available or production-ready.
-
-Continue with [infrastructure setup](infrastructure/README.md) or [Go demo](apps/go-demo/README.md).
+Setup dan operasi cluster dijelaskan di [README infrastructure](infrastructure/README.md). Kontrak service, image, dependency, dan pengujian aplikasi dijelaskan pada README aplikasi masing-masing di `apps/`.
