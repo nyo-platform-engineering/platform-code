@@ -1,0 +1,7 @@
+# CI updates this file in the local GitLab project after a successful build.
+image:
+  repository: local/go-demo
+  tag: dev1
+  digest: ''
+imagePullSecrets:
+  - name: go-demo-registry

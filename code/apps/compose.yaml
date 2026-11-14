@@ -1,0 +1,50 @@
+name: platform-apps-dev
+
+services:
+  clickhouse:
+    image: altinity/clickhouse-server:26.3.33.10001.altinitystable
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./dev/clickhouse-users.xml:/etc/clickhouse-server/users.d/local-dev.xml:ro
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: [CMD, clickhouse-client, --user, app, --password, local-clickhouse-app, --query, "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.160.0
+    command: ["--config=/etc/otelcol-contrib/local.yaml"]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13133:13133"
+    environment:
+      CLICKHOUSE_PASSWORD: local-clickhouse-otel
+    volumes:
+      - ./dev/otel-collector.yaml:/etc/otelcol-contrib/local.yaml:ro
+    mem_limit: 256m
+    cpus: 1
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+volumes:
+  clickhouse-data:

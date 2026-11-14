@@ -1,0 +1,11 @@
+{{- if eq .Values.authMode "oauth" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "telemetry-ui.fullname" . }}-organizations
+  labels:
+    {{- include "telemetry-ui.labels" . | nindent 4 }}
+data:
+  organizations.json: |-
+    {{- toPrettyJson .Values.organizations | nindent 4 }}
+{{- end }}

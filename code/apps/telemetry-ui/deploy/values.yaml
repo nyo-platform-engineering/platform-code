@@ -1,0 +1,7 @@
+# GitLab CI replaces this initial image selection after its first successful build.
+image:
+  repository: registry.localhost/root/telemetry-ui
+  tag: bootstrap
+  digest: ""
+imagePullSecrets:
+  - name: telemetry-ui-registry

@@ -1,0 +1,41 @@
+<clickhouse>
+  <!-- Disposable local credentials. Host ports are published only on loopback. -->
+  <profiles>
+    <local_readonly>
+      <!-- Read-only queries; allow the Go driver to set its deadline-derived timeout. -->
+      <readonly>2</readonly>
+      <max_execution_time>5</max_execution_time>
+      <max_threads>2</max_threads>
+      <max_result_rows>10000</max_result_rows>
+      <max_memory_usage>268435456</max_memory_usage>
+    </local_readonly>
+  </profiles>
+  <users>
+    <default>
+      <networks replace="replace">
+        <ip>127.0.0.1</ip>
+        <ip>::1</ip>
+      </networks>
+    </default>
+    <app>
+      <password>local-clickhouse-app</password>
+      <networks><ip>::/0</ip></networks>
+      <profile>local_readonly</profile>
+      <quota>default</quota>
+      <grants>
+        <query>GRANT SELECT ON otel.*</query>
+      </grants>
+    </app>
+    <otelcollector>
+      <password>local-clickhouse-otel</password>
+      <networks><ip>::/0</ip></networks>
+      <profile>default</profile>
+      <quota>default</quota>
+      <grants>
+        <query>GRANT ALL ON otel.*</query>
+        <query>GRANT CREATE DATABASE ON *.*</query>
+        <query>GRANT SELECT ON system.*</query>
+      </grants>
+    </otelcollector>
+  </users>
+</clickhouse>

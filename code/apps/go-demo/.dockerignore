@@ -1,0 +1,6 @@
+README.md
+*.exe
+go-demo
+*.tar
+.task
+.gitignore

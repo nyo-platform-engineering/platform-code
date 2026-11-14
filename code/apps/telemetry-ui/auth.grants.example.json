@@ -1,0 +1,29 @@
+[
+  {
+    "provider": "google",
+    "subject": "replace-with-google-sub",
+    "organizationId": "local",
+    "permissions": [
+      "observability:traces:read",
+      "observability:logs:read",
+      "observability:admin:read"
+    ]
+  },
+  {
+    "provider": "google",
+    "googleDomain": "your-company.example",
+    "organizationId": "local",
+    "permissions": [
+      "observability:traces:read",
+      "observability:logs:read"
+    ]
+  },
+  {
+    "provider": "github",
+    "subject": "replace-with-numeric-github-id",
+    "organizationId": "local",
+    "permissions": [
+      "observability:traces:read"
+    ]
+  }
+]
