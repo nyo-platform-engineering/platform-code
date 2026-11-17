@@ -1,18 +1,19 @@
 podLabels:
   platform.local/owner: platform-team
+  role: other
 fullnameOverride: radar
 ingress:
+  enabled: false
+httpRoute:
   enabled: true
-  className: traefik
-  hosts:
-    - host: radar.localhost
-      paths:
-        - path: /
-          pathType: Prefix
+  parentRefs:
+    - name: local
+      namespace: traefik
+      sectionName: web
+  hostnames:
+    - radar.localhost
 resources:
   requests:
-    cpu: null
-    memory: null
+    memory: 128Mi
   limits:
-    cpu: null
-    memory: null
+    memory: 256Mi

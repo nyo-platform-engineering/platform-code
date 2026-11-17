@@ -25,8 +25,10 @@ Satu control plane berarti API dan scheduler belum memiliki redundansi. Storage 
 | OpenTelemetry cluster collector | Menerima OTLP dan meneruskan setiap sinyal ke backend yang sesuai |
 | OpenTelemetry daemon collector | Membaca log pod dan metrik cAdvisor pada setiap node |
 | kube-state-metrics | Metrik status resource Kubernetes |
+| Traefik / Gateway API | Gateway HTTP bersama, routing berdasarkan hostname `.localhost` |
+| Radar | UI untuk melihat resource, relasi, dan status cluster Kubernetes |
 
-Controller NetworkPolicy bawaan k3s tetap aktif. Traefik dan ServiceLB bawaan dinonaktifkan; akses dari host memakai NodePort atau port-forward. Loki, Tempo, dan Mimir memakai volume lokal dengan retensi 72 jam; Grafana memakai PVC 1 GiB.
+Controller NetworkPolicy bawaan k3s tetap aktif. Traefik dan ServiceLB bawaan dinonaktifkan; Argo CD memasang Traefik terpisah dengan Gateway API. Akses dari host memakai tunnel loopback ke gateway atau NodePort. Loki, Tempo, dan Mimir memakai volume lokal dengan retensi 72 jam; Grafana memakai PVC 1 GiB.
 
 ## Setup
 
@@ -58,11 +60,58 @@ Root menemukan Application secara rekursif pada `argo-apps/platform/`, dengan fi
 
 ## Akses dan operasi
 
+Setelah Argo CD selesai merekonsiliasi konfigurasi dari Git, jalankan pada terminal terpisah:
+
+```bash
+task gateway
+```
+
+Perintah ini menunggu Traefik dan Gateway siap, lalu meneruskan port loopback laptop
+ke Service Traefik di cluster VM. Biarkan terminal terbuka; Ctrl+C menutup tunnel.
+Port default `80` memakai `sudo` untuk proses port-forward. Untuk port tanpa sudo
+atau jika port 80 sudah dipakai, jalankan `task gateway PORT=8080` dan tambahkan
+`:8080` pada URL di bawah. `task up` tidak menjalankan tunnel di background.
+
+Nama `.localhost` mengarah ke loopback laptop, bukan IP VM. Browser modern
+umumnya menanganinya langsung; bila resolver lokal tidak mendukung subdomain ini,
+tambahkan hostname yang dipakai ke `/etc/hosts` dengan alamat `127.0.0.1`.
+Tidak perlu mengubah DNS jaringan atau mengarahkan `.localhost` ke IP VM.
+
+Alur request: browser → loopback laptop → port-forward → Traefik → HTTPRoute
+berdasarkan hostname → Service → Pod. Gateway `local` memiliki listener HTTP
+`web` pada port container 8000, yang diekspos Service pada port 80 dan NodePort
+30088. Route berada pada namespace backend masing-masing; listener mengizinkan
+route lintas namespace. Radar mengelola HTTPRoute melalui chart-nya. Dashboard
+Traefik memakai IngressRoute untuk service internal `api@internal`.
+
 | Layanan | Akses default |
 | --- | --- |
-| Grafana | http://192.168.56.10:30300; user `admin`, password dari `task password` |
-| Argo CD | `task argocd:ui`, lalu http://localhost:8088; user `admin`, password dari `task password APP=argocd` |
+| Client | http://client.localhost |
+| Auth | http://auth.localhost |
+| Radar | http://radar.localhost |
+| Grafana | http://grafana.localhost; user `admin`, password dari `task password` |
+| Argo CD | http://argocd.localhost; user `admin`, password dari `task password APP=argocd` |
+| Traefik dashboard | http://traefik.localhost/dashboard/ |
 | OTLP internal | `otel-collector-cluster.monitoring.svc.cluster.local`, HTTP 4318 / gRPC 4317 |
+
+NodePort lama tetap tersedia: Client `http://192.168.56.10:30080`, Auth
+`http://192.168.56.10:30084`, dan Grafana `http://192.168.56.10:30300`.
+`task argocd:ui` tetap membuka Argo CD melalui `http://localhost:8088`.
+Untuk menguji gateway langsung tanpa tunnel:
+
+```bash
+curl -H 'Host: radar.localhost' http://192.168.56.10:30088/
+```
+
+Gateway API CRD versi `v1.5.1` dipasang oleh Application `gateway-api` dari repo
+upstream. Application tersebut tidak melakukan auto-prune CRD bersama. Application
+Traefik, Radar, dan gateway memakai retry agar instalasi pertama dapat pulih saat
+CRD atau namespace backend belum tersedia. Periksa `task status` dan, untuk routing:
+
+```bash
+kubectl --kubeconfig .state/kubeconfig get gateway -n traefik
+kubectl --kubeconfig .state/kubeconfig get httproute -A
+```
 
 ```bash
 task status               # node, Application, dan workload

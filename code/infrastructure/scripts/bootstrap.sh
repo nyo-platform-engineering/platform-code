@@ -39,7 +39,6 @@ bootstrap_argocd() {
   kube rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
 }
 deploy() {
-  [[ -z "${LGTM_VALUES:-}" ]] || { echo 'Set LGTM overrides in the individual argo-apps/platform observability values.yaml files and push them to Git.' >&2; return 1; }
   prepare
   bootstrap_argocd
   kube apply -f argo-apps/root.yaml
@@ -48,8 +47,44 @@ deploy() {
 }
 links() {
   local address="${AAT_NODE_ADDRESS:-${AAT_NETWORK_PREFIX:-192.168.56}.10}"
-  printf 'Client: http://%s:30080\nAuth: http://%s:30084\nGrafana: http://%s:30300 (admin / task password)\nArgo CD: task argocd:ui (admin / task password APP=argocd)\n' "$address" "$address" "$address"
+  local port="${GATEWAY_PORT:-80}" suffix=""
+  if [[ "$port" != 80 ]]; then suffix=":$port"; fi
+  printf 'With task gateway running (PORT=%s):\n' "$port"
+  printf '  http://%s.localhost%s\n' client "$suffix" auth "$suffix" radar "$suffix" grafana "$suffix" argocd "$suffix"
+  printf '  http://traefik.localhost%s/dashboard/\n' "$suffix"
+  printf 'Direct VM access:\n'
+  printf 'Client: http://%s:30080\n' "$address"
+  printf 'Auth: http://%s:30084\n' "$address"
+  printf 'Grafana: http://%s:30300 (admin / task password)\n' "$address"
+  printf 'Argo CD: task argocd:ui (admin / task password APP=argocd)\n'
 }
+
+gateway() {
+  local port="${1:-80}" kubectl_bin
+  if [[ ! "$port" =~ ^[1-9][0-9]{0,4}$ ]] || (( port > 65535 )); then
+    echo 'Gateway PORT must be 1..65535.' >&2
+    return 2
+  fi
+  if [[ ! -f "$KUBECONFIG" ]]; then
+    echo 'Kubeconfig missing. Run task up first.' >&2
+    return 1
+  fi
+  kubectl_bin="$(command -v kubectl)"
+  kube rollout status deployment/traefik -n traefik --timeout=300s
+  kube wait --for=condition=Programmed gateway/local -n traefik --timeout=180s
+  GATEWAY_PORT="$port" links
+  echo 'Keep this terminal open; Ctrl+C stops local gateway access.'
+  # Only the loopback listener needs elevated privileges for a low port.
+  # Pass the explicit lab kubeconfig even when sudo changes the environment.
+  if (( port < 1024 && EUID != 0 )); then
+    echo 'Binding a port below 1024 uses sudo. Use PORT=8080 to avoid sudo.'
+    exec sudo "$kubectl_bin" --kubeconfig "$KUBECONFIG" port-forward \
+      --address localhost -n traefik service/traefik "$port:80"
+  fi
+  exec "$kubectl_bin" --kubeconfig "$KUBECONFIG" port-forward \
+    --address localhost -n traefik service/traefik "$port:80"
+}
+
 case "${1:-help}" in
   doctor) doctor; bash scripts/vm.sh doctor ;;
   up) doctor; export KUBECONFIG="$root/.state/kubeconfig"; bash scripts/vm.sh up; deploy ;;
@@ -64,8 +99,15 @@ case "${1:-help}" in
     kube get applications -n argocd
     kube get pods,services,statefulsets,hpa,pdb -n "$namespace" -o wide
     kube get pods -n monitoring -o wide
+    kube get pods,services -n traefik -o wide
+    kube get pods,services -n radar -o wide
     ;;
-  links) links ;;
+  links)
+    links
+    ;;
+  gateway)
+    gateway "${2:-80}"
+    ;;
   password)
     case "${2:-grafana}" in
       grafana) cat .state/grafana-password ;;
@@ -88,6 +130,11 @@ case "${1:-help}" in
     kube scale deployment/aggregator -n "$namespace" --replicas="$2"
     kube rollout status deployment/aggregator -n "$namespace" --timeout=180s
     ;;
-  logs) kube logs -n "$namespace" -l "app.kubernetes.io/instance=${2:-aggregator}" --all-containers --tail=100 --follow ;;
-  *) echo 'task --list | task up | task deploy | task status | task links' ;;
+  logs)
+    kube logs -n "$namespace" -l "app.kubernetes.io/instance=${2:-aggregator}" \
+      --all-containers --tail=100 --follow
+    ;;
+  *)
+    echo 'task --list | task up | task deploy | task status | task gateway | task links'
+    ;;
 esac

@@ -40,6 +40,10 @@ tasks:
   links:
     desc: Show local VM service URLs
     cmds: [bash scripts/bootstrap.sh links]
+  gateway:
+    desc: Serve *.localhost through Traefik (PORT=80; sudo for ports below 1024)
+    cmds:
+      - 'bash scripts/bootstrap.sh gateway "{{.PORT | default "80"}}"'
   password:
     desc: Show the admin password (APP=grafana or argocd)
     cmds:
