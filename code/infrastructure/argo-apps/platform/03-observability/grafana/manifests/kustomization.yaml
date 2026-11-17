@@ -5,6 +5,7 @@ configMapGenerator:
 - name: grafana-aat
   files:
   - aat.json
+  - node-utilization.json
 generatorOptions:
   disableNameSuffixHash: true
   labels:
