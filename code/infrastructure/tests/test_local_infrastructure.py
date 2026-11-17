@@ -94,14 +94,14 @@ class WorkloadTests(unittest.TestCase):
         repo = ROOT.parents[1]
         applications = list(load_module("check-lgtm").platform_applications())
         self.assertTrue(all(app["kind"] == "Application" for app in applications))
-        self.assertEqual(len(applications), 9)
+        self.assertEqual(len(applications), 13)
         self.assertFalse((ROOT / "argo-apps/platform/kustomization.yaml").exists())
         self.assertEqual({app["metadata"]["name"] for app in applications},
                          {"argocd", "loki", "tempo", "mimir", "grafana", "otel-collector-cluster",
-                          "otel-collector-daemon", "kube-state-metrics", "dev-apps"})
+                          "otel-collector-daemon", "kube-state-metrics", "dev-apps",
+                          "gateway-api", "traefik", "radar", "gateway"})
         for folder in ("03-cd/gitlab", "02-cd/gitlab-services", "03-observability/clickhouse",
-                       "00-network/traefik", "02-monitoring/radar", "02-policy/kyverno",
-                       "03-policy/policies", "03-observability/policy-reporter", "04-network/gateway"):
+                       "02-policy/kyverno", "03-policy/policies", "03-observability/policy-reporter"):
             self.assertTrue((ROOT / "argo-apps/platform" / folder / "app.yaml.disabled").exists())
             self.assertFalse((ROOT / "argo-apps/platform" / folder / "app.yaml").exists())
         self.assertFalse((ROOT / "charts/lgtm").exists())
@@ -124,6 +124,30 @@ class WorkloadTests(unittest.TestCase):
                     self.assertEqual(entry["valueFrom"]["secretKeyRef"]["name"], "aat-runtime")
                 if name in ("bmkg", "pvmbg"):
                     self.assertIn({"configMapRef": {"name": "aat-clock"}}, container["envFrom"])
+
+    def test_gateway_routes_match_service_ports_and_cross_namespace_listener(self):
+        platform = ROOT / "argo-apps/platform"
+        folder = platform / "04-network/gateway/manifests"
+        gateway = yaml.safe_load((folder / "gateway.yaml").read_text())
+        listener = gateway["spec"]["listeners"][0]
+        self.assertEqual(listener["allowedRoutes"]["namespaces"]["from"], "All")
+        routes = list(yaml.safe_load_all((folder / "routes.yaml").read_text()))
+        self.assertEqual({r["spec"]["hostnames"][0] for r in routes},
+                         {"client.localhost", "auth.localhost", "grafana.localhost", "argocd.localhost"})
+        services = {(doc["metadata"].get("namespace", NAMESPACE), doc["metadata"]["name"]):
+                    {port["port"] for port in doc["spec"]["ports"]}
+                    for docs in self.services.values() for doc in docs if doc["kind"] == "Service"}
+        grafana = yaml.safe_load((platform / "03-observability/grafana/values.yaml").read_text())
+        services[("monitoring", "grafana")] = {grafana["service"]["port"]}
+        services[("argocd", "argocd-server")] = {80}
+        for route in routes:
+            parent = route["spec"]["parentRefs"][0]
+            self.assertEqual((parent["namespace"], parent["name"], parent["sectionName"]),
+                             (gateway["metadata"]["namespace"], gateway["metadata"]["name"], listener["name"]))
+            for rule in route["spec"]["rules"]:
+                for backend in rule["backendRefs"]:
+                    key = route["metadata"]["namespace"], backend["name"]
+                    self.assertIn(backend["port"], services[key])
 
     def test_three_aggregators_spread_across_nodes_and_safe_rollout(self):
         deployment = next(d for d in self.services["aggregator"] if d["kind"] == "Deployment")

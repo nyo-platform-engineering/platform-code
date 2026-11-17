@@ -109,6 +109,48 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse((root / "calls").exists())
 
+    def test_gateway_uses_lab_kubeconfig_and_only_loopback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, env = self.make_lab(folder)
+            result = subprocess.run(
+                ["bash", str(root / "scripts/bootstrap.sh"), "gateway", "8080"],
+                env=env, check=True, capture_output=True, text=True,
+            )
+            calls = (root / "calls").read_text().splitlines()
+            self.assertIn("rollout status deployment/traefik", calls[0])
+            self.assertIn("--for=condition=Programmed gateway/local", calls[1])
+            self.assertIn("--kubeconfig " + str(root / "external.yaml"), calls[-1])
+            self.assertIn("port-forward --address localhost -n traefik service/traefik 8080:80", calls[-1])
+            self.assertIn("http://radar.localhost:8080", result.stdout)
+
+    def test_gateway_rejects_invalid_ports_before_cluster_access(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, env = self.make_lab(folder)
+            for port in ("0", "65536", "-1", "080", "8080:80", "abc"):
+                with self.subTest(port=port):
+                    result = subprocess.run(
+                        ["bash", str(root / "scripts/bootstrap.sh"), "gateway", port],
+                        env=env, capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertFalse((root / "calls").exists())
+
+    @unittest.skipIf(os.geteuid() == 0, "sudo is only used by non-root users")
+    def test_gateway_default_port_passes_explicit_kubeconfig_through_sudo(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, env = self.make_lab(folder)
+            sudo = root / "bin/sudo"
+            sudo.write_text('#!/bin/sh\nprintf "sudo invoked\\n" >> "$CALL_LOG"\nexec "$@"\n')
+            sudo.chmod(0o755)
+            subprocess.run(
+                ["bash", str(root / "scripts/bootstrap.sh"), "gateway"],
+                env=env, check=True, capture_output=True,
+            )
+            calls = (root / "calls").read_text().splitlines()
+            self.assertEqual(calls[-2], "sudo invoked")
+            self.assertIn("--kubeconfig " + str(root / "external.yaml"), calls[-1])
+            self.assertIn("port-forward --address localhost -n traefik service/traefik 80:80", calls[-1])
+
 
 if __name__ == "__main__":
     unittest.main()

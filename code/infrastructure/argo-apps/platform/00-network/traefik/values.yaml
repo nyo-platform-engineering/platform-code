@@ -3,14 +3,26 @@ commonLabels:
 deployment:
   podLabels:
     platform.local/owner: platform-team
+    role: other
   replicas: 1
 providers:
   kubernetesGateway:
     enabled: true
+    statusAddress:
+      hostname: localhost
+      service:
+        enabled: false
 gateway:
   enabled: false
 service:
-  type: LoadBalancer
+  spec:
+    type: NodePort
+ports:
+  web:
+    nodePort: 30088
+  websecure:
+    expose:
+      default: false
 ingressRoute:
   dashboard:
     enabled: true
@@ -18,4 +30,8 @@ ingressRoute:
     entryPoints: [web]
 accessLog:
   enabled: true
-resources: {}
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 256Mi
