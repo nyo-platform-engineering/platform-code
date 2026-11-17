@@ -1,4 +1,5 @@
-# Reuse digest dari infrastructure-main.zip; tidak membangun ulang aplikasi.
+# Published from AAT source commit 00ff960de0191e8f4fcb656c5a662c9fd49028c9.
 image:
-  tag: f09444230b93-20261101T132419Z-p4892
-  digest: sha256:a3c051fa5a8cb8c40ad895dc88cb94d1cc904da80b91a2e77d32f916763a8e15
+  repository: ghcr.io/nyo-platform-engineering/aat-apps/aggregator
+  tag: sha-00ff960de0191e8f4fcb656c5a662c9fd49028c9
+  digest: sha256:a0e4fd250e57a2b4d1c6dbad2d8f1801e3937251dec2ebb60ad021861df0bc25
