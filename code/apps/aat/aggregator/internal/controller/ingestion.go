@@ -38,16 +38,47 @@ func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch ma
 			continue
 		}
 
+		// Feed events stay in one ordered list because their order changes fire membership.
+		if source == "SATELIT" && key == "satellite_events" {
+			continue
+		}
+
 		return nil, Invalid{fmt.Errorf("unexpected batch key %s", key)}
 	}
 
 	tx := ctrl.DB.WithContext(ctx).Begin()
-	err := tx.Error
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	defer tx.Rollback()
+
+	var events []model.HazardEvent
+	var err error
+	if source == "SATELIT" {
+		events, err = ctrl.satelliteHazards(tx, batch["satellite_events"])
+	} else {
+		events, err = agencyHazards(tx, source, batch)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	defer tx.Rollback()
+	changedEvents, err := saveHazards(ctx, tx, events)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	return changedEvents, nil
+}
+
+// agencyHazards maps BMKG and PVMBG batches, storing the raw BMKG records they correlate with.
+func agencyHazards(tx *gorm.DB, source string, batch map[string][]model.Record) ([]model.HazardEvent, error) {
+	var err error
 
 	// Validate the source records and collect the event IDs that need locking.
 	affectedEvents := map[string]bool{}
@@ -150,17 +181,23 @@ func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch ma
 		}
 	}
 
-	// Save changed hazards and queue their messages in the same transaction.
+	return events, nil
+}
+
+// saveHazards stores changed hazards and queues their messages in the caller's transaction.
+// An event is matched on (source, source_ref_id) and keeps its first hazard_id, so a
+// later change to occurred_at updates the event instead of creating a second one.
+func saveHazards(ctx context.Context, tx *gorm.DB, events []model.HazardEvent) ([]model.HazardEvent, error) {
 	changedEvents := []model.HazardEvent{}
 	for _, hazard := range events {
 		result := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "id"}},
+			Columns: []clause.Column{{Name: "source"}, {Name: "source_ref_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"source", "source_ref_id", "hazard_type", "severity", "area_name",
+				"hazard_type", "severity", "area_name",
 				"latitude", "longitude", "occurred_at", "ingested_at", "attributes",
 			}),
 			Where: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: hazardChanged}}},
-		}).Create(&hazard)
+		}, clause.Returning{Columns: []clause.Column{{Name: "id"}}}).Create(&hazard)
 
 		if result.Error != nil {
 			return nil, result.Error
@@ -183,10 +220,6 @@ func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch ma
 
 			changedEvents = append(changedEvents, hazard)
 		}
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, err
 	}
 
 	return changedEvents, nil

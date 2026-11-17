@@ -14,6 +14,7 @@ func NewHandler(ctrl *controller.Controller, token string) http.Handler {
 	mux.GET("/health", ctrl.Health)
 	private.GET("/internal/hazards", ctrl.Hazards)
 	private.GET("/internal/source-status", ctrl.SourceStatus)
+	private.GET("/internal/satellite/stats", ctrl.SatelliteStatsHandler)
 	private.POST("/internal/ingest/bmkg", ctrl.Ingest("BMKG"))
 	private.POST("/internal/ingest/pvmbg", ctrl.Ingest("PVMBG"))
 

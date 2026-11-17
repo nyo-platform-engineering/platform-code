@@ -47,6 +47,11 @@ func main() {
 
 	// Check the connection and create or update the model tables.
 	ctrl := &controller.Controller{DB: db}
+	lateness := httpkit.Integer("SATELLITE_ALLOWED_LATENESS_MINUTES", int(controller.DefaultSatelliteLateness/time.Minute))
+	if lateness < 1 {
+		panic("SATELLITE_ALLOWED_LATENESS_MINUTES must be positive")
+	}
+	ctrl.SatelliteLateness = time.Duration(lateness) * time.Minute
 	if err := ctrl.Ping(startupCtx); err != nil {
 		panic(err)
 	}
