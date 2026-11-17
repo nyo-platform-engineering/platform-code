@@ -33,7 +33,10 @@ def render(chart, release, *values):
 
 
 def load_module(name):
-    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    folder = ROOT / "scripts"
+    if name in ("runtime", "topology"):
+        folder = folder / "up"
+    spec = importlib.util.spec_from_file_location(name, folder / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

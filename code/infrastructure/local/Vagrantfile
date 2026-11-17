@@ -2,7 +2,7 @@
 prefix = ENV.fetch("AAT_NETWORK_PREFIX", "192.168.56")
 abort "Invalid AAT_NETWORK_PREFIX" unless prefix.match?(/\A\d{1,3}\.\d{1,3}\.\d{1,3}\z/) && prefix.split(".").all? { |n| n.to_i <= 255 }
 token = File.expand_path("../.state/cluster-token", __dir__)
-abort "Run task up or scripts/vm.sh up first (cluster token missing)" unless File.file?(token)
+abort "Run task up first (cluster token missing)" unless File.file?(token)
 
 Vagrant.configure("2") do |config|
   config.vm.box = ENV.fetch("AAT_VM_BOX", "bento/ubuntu-24.04")
