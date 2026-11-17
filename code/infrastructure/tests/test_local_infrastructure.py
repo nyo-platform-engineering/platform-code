@@ -59,7 +59,7 @@ class WorkloadTests(unittest.TestCase):
                 pod = deployment["spec"]["template"]
                 self.assertEqual(pod["metadata"]["labels"]["role"], role)
                 container = pod["spec"]["containers"][0]
-                self.assertRegex(container["image"], r"^ghcr.io/yonatan-nyo/aat-apps/.+@sha256:[a-f0-9]{64}$")
+                self.assertRegex(container["image"], rf"^ghcr.io/[a-z0-9-]+/aat-apps/{name}@sha256:[a-f0-9]{{64}}$")
                 self.assertEqual(container["resources"]["requests"]["memory"], request)
                 self.assertEqual(container["resources"]["limits"]["memory"], limit)
                 self.assertFalse(pod["spec"]["automountServiceAccountToken"])

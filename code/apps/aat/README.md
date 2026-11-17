@@ -275,7 +275,34 @@ subscriber baru, ikuti [panduan Problem 5](docs/demo-events.md).
 
 ## Deployment Kubernetes lokal — M2
 
-Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan tiga VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`; perubahan source membutuhkan build/publikasi image dan pembaruan digest.
+Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan tiga VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`. Workflow
+[GitHub Actions AAT](../../../.github/workflows/aat-ci.yml) membuild service yang
+berubah di `main`, publish ke GHCR, lalu memperbarui digest GitOps agar Argo CD
+melakukan rollout. Tidak ada job test atau build pada PR. Build manual tersedia
+melalui Actions → AAT — build and deploy → Run workflow pada `main`.
+
+Helper CI berada di `.github/scripts/aat/`, dengan nama sesuai tugasnya:
+
+| File | Tanggung jawab |
+| --- | --- |
+| `service_build_config.py` | Daftar service, folder source, dan dependensi build bersama |
+| `detect_changed_services.py` | Memilih service yang perlu dibuild dari perubahan Git |
+| `save_published_image_digest.py` | Menyimpan digest hasil publish sebagai artifact JSON |
+| `update_gitops_image_pins.py` | Memvalidasi artifact dan memperbarui pin image GitOps |
+| `commit_and_push_image_pins.sh` | Commit/push pin ke main dengan autentikasi sementara dan retry |
+
+CI hanya menggunakan `GITHUB_TOKEN` sementara dengan izin per job; tidak memakai
+PAT, kubeconfig, atau Secret aplikasi. Image GHCR harus public agar VM bisa pull
+secara anonim; pin tidak diubah jika akses tersebut gagal. Izinkan workflow
+memakai `packages: write` dan `contents: write` sesuai job. Push digest memakai
+push biasa ke `main`, jadi aturan branch protection tetap berlaku.
+
+Semua action dipin ke commit penuh, credential Git tidak dipersist di checkout,
+dan credential Docker dibersihkan sebelum helper metadata berjalan. Perubahan
+workflow, helper CI, serta Dockerfile yang masuk `main` tetap harus direview:
+orang yang bisa mengubah workflow di main juga bisa mengubah batas akses token.
+Konfigurasi workflow tidak memberi jaminan absolut terhadap kompromi maintainer
+atau action yang sudah dipercaya.
 
 Workload berada pada namespace `sistem-informasi-kebencanaan-bnpb`. PostgreSQL dan NATS JetStream dipasang melalui `charts/aat-dependencies` di infrastructure, dengan volume `local-path`. NetworkPolicy membatasi PostgreSQL ke Aggregator dan NATS ke Aggregator/consumer.
 

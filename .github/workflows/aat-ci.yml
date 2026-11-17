@@ -1,0 +1,144 @@
+name: AAT — build and deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'code/apps/aat/**'
+      - '.github/workflows/aat-ci.yml'
+      - '.github/scripts/aat/**'
+  workflow_dispatch:
+
+# Build only after code reaches main (or a manual run on main), not again on PRs.
+# Main builds may overlap; the digest updater handles newer commits safely.
+permissions:
+  contents: read
+
+jobs:
+  # 1. Decide which deployed services need new images.
+  plan:
+    name: Select changed services
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.services.outputs.matrix }}
+      has_images: ${{ steps.services.outputs.has_images }}
+    steps:
+      - name: Check out source and history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select Dockerfiles affected by this change
+        id: services
+        run: python3 .github/scripts/aat/detect_changed_services.py
+
+  # 2. Build and publish only the changed services on main.
+  images:
+    name: Build ${{ matrix.service }}
+    needs: [plan]
+    if: needs.plan.outputs.has_images == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      # Upload only the small digest artifact, not a separate Docker build record.
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Name the image in this organization's GHCR namespace
+        id: image
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: echo "repository=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/aat-apps/$SERVICE" >> "$GITHUB_OUTPUT"
+      - name: Create a private temporary Docker credential directory
+        run: |
+          install -d -m 700 "$RUNNER_TEMP/aat-docker-auth"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/aat-docker-auth" >> "$GITHUB_ENV"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish the service image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: code/apps/aat
+          file: ${{ matrix.dockerfile }}
+          # Source was already checked out; do not give BuildKit a Git auth token.
+          github-token: ''
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.repository }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=aat-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=aat-${{ matrix.service }}
+      - name: Remove registry credentials before running repository helpers
+        if: always()
+        run: |
+          if [[ -n "${DOCKER_CONFIG:-}" ]]; then
+            docker logout ghcr.io
+            rm -f "$DOCKER_CONFIG/config.json"
+          fi
+      - name: Record the published digest for GitOps
+        env:
+          SERVICE: ${{ matrix.service }}
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: python3 .github/scripts/aat/save_published_image_digest.py
+      - name: Upload the image digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ matrix.service }}
+          path: image-metadata/${{ matrix.service }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # 3. Commit immutable pins to main. Argo CD deploys them without cluster
+  # credentials in Actions. GITHUB_TOKEN pushes do not recursively start CI.
+  gitops:
+    name: Update Argo CD image digests
+    needs: [plan, images]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      BUILD_COMMIT: ${{ github.sha }}
+      BUILD_MATRIX: ${{ needs.plan.outputs.matrix }}
+    steps:
+      - name: Check out main for the GitOps commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download the published image digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/aat-image-metadata
+      - name: Verify images, update pins, and push safely to main
+        env:
+          IMAGE_METADATA_DIR: ${{ runner.temp }}/aat-image-metadata
+          # Passed only to this step, never stored in Git config or image artifacts.
+          GITOPS_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/aat/commit_and_push_image_pins.sh
