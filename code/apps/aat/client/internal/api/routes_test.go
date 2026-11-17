@@ -271,3 +271,35 @@ func TestRequestedFieldsEnforceM1Permissions(t *testing.T) {
 		})
 	}
 }
+
+func TestM2SourcesAndHazardTypesPassThrough(t *testing.T) {
+	const fire = `{"hazard_id":"haz-2","source":"SATELIT","source_ref_id":"fire-1","hazard_type":"WILDFIRE","severity":"SIAGA","area_name":"Kalimantan Tengah","latitude":-2.5,"longitude":113.8,"occurred_at":"2026-11-12T02:43:00Z","ingested_at":"2026-11-12T02:51:08Z","attributes":{"detection_count":6}}`
+	const coastal = `{"hazard_id":"haz-3","source":"SENSOR_PANTAI","source_ref_id":"obs-1","hazard_type":"COASTAL","severity":"AWAS","area_name":"Sumatera Barat","latitude":-0.9,"longitude":100.3,"occurred_at":"2026-11-12T02:43:00Z","ingested_at":"2026-11-12T02:43:05Z","attributes":{}}`
+	page := func(items ...string) string { return `{"items":[` + strings.Join(items, ",") + `],"next_after":""}` }
+	for _, tc := range []struct {
+		name, query, data, wantType string
+		want                        int
+	}{
+		{"unfiltered", "", page(fire, coastal), "COASTAL", 200},
+		{"satelit_filter", "?source=SATELIT", page(fire), "WILDFIRE", 200},
+		{"sensor_pantai_filter", "?source=SENSOR_PANTAI", page(coastal), "COASTAL", 200},
+		{"unknown_source_filter", "?source=NASA", page(fire), "", 400},
+		{"unknown_hazard_type", "", page(strings.Replace(fire, `"WILDFIRE"`, `"FLOOD"`, 1)), "", 503},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := handlerFor(t, func(r *http.Request) (*http.Response, error) {
+				if r.URL.Host == "auth" {
+					return response(200, `{"active":true,"client_id":"analyst"}`), nil
+				}
+				return response(200, tc.data), nil
+			})
+			w := invoke(h, "/hazards"+tc.query, "Bearer token")
+			if w.Code != tc.want {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			if tc.wantType != "" && !strings.Contains(w.Body.String(), `"`+tc.wantType+`"`) {
+				t.Fatal("M2 hazard dropped:", w.Body.String())
+			}
+		})
+	}
+}

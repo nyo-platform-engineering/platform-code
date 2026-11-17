@@ -23,14 +23,27 @@ type Hazard struct {
 
 func identityKnown(id string) bool { return id == "public" || id == "responder" || id == "analyst" }
 
+func knownSource(source string) bool {
+	switch source {
+	case "BMKG", "PVMBG", "SATELIT", "SENSOR_PANTAI":
+		return true
+	}
+	return false
+}
+
+func knownHazardType(hazardType string) bool {
+	switch hazardType {
+	case "SEISMIC", "VOLCANIC", "WILDFIRE", "COASTAL":
+		return true
+	}
+	return false
+}
+
 func (h Hazard) valid() bool {
 	if h.ID == "" || h.Ref == "" || h.Area == "" || h.Occurred.IsZero() || h.Ingested.IsZero() || h.Attributes == nil {
 		return false
 	}
-	if h.Source != "BMKG" && h.Source != "PVMBG" {
-		return false
-	}
-	if h.Type != "SEISMIC" && h.Type != "VOLCANIC" {
+	if !knownSource(h.Source) || !knownHazardType(h.Type) {
 		return false
 	}
 	if h.Severity != "NORMAL" && h.Severity != "WASPADA" && h.Severity != "SIAGA" && h.Severity != "AWAS" {

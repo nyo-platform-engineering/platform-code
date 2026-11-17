@@ -106,7 +106,7 @@ func validQuery(q url.Values) bool {
 		}
 		switch key {
 		case "source":
-			if values[0] != "BMKG" && values[0] != "PVMBG" {
+			if !knownSource(values[0]) {
 				return false
 			}
 		case "limit":

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"aat/aggregator/internal/model"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,7 +19,7 @@ func (ctrl *Controller) Hazards(c *gin.Context) {
 		limit, err = strconv.Atoi(query.Get("limit"))
 	}
 
-	if err != nil || limit < 1 || limit > 1000 || (source != "" && source != "BMKG" && source != "PVMBG") {
+	if err != nil || limit < 1 || limit > 1000 || (source != "" && !model.ValidSource(source)) {
 		c.JSON(400, map[string]string{"error": "invalid source or limit (1..1000)"})
 		return
 	}
