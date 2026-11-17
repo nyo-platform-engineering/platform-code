@@ -5,6 +5,9 @@ additionalLabels:
   platform.local/owner: platform-team
 fullnameOverride: otel-collector-daemon
 mode: daemonset
+# Share the VM network namespace so network scrapes describe the node interfaces.
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
 image:
   repository: otel/opentelemetry-collector-contrib
   tag: 0.160.0
@@ -35,6 +38,33 @@ alternateConfig:
     file_storage:
       directory: /var/lib/otelcol
   receivers:
+    # One agent per node reads the VM's OS counters through a read-only mount.
+    hostmetrics:
+      collection_interval: 30s
+      root_path: /hostfs
+      scrapers:
+        cpu: {}
+        load: {}
+        memory:
+          metrics:
+            system.memory.limit:
+              enabled: true
+            system.linux.memory.available:
+              enabled: true
+        filesystem:
+          # Only the VM root disk; omit pod mounts and virtual filesystems.
+          include_mount_points:
+            mount_points: ['/']
+            match_type: strict
+        disk:
+          exclude:
+            devices: ['^(loop|ram|fd).*']
+            match_type: regexp
+        network:
+          # Physical VM NICs remain; pod bridges/tunnels would double-count traffic.
+          exclude:
+            interfaces: ['^(lo|veth.*|cali.*|cni.*|flannel.*|docker.*|br-.*)$']
+            match_type: regexp
     filelog:
       include:
       - /var/log/pods/*/*/*.log
@@ -67,6 +97,13 @@ alternateConfig:
             regex: container_cpu_usage_seconds_total|container_memory_working_set_bytes
             action: keep
   processors:
+    # Put node identity on each host datapoint so Mimir preserves it as a label.
+    # Keep this separate from container metrics and application telemetry.
+    transform/node:
+      metric_statements:
+      - context: datapoint
+        statements:
+        - set(attributes["node"], "${env:NODE_NAME}")
     memory_limiter:
       check_interval: 1s
       limit_mib: 192
@@ -99,6 +136,15 @@ alternateConfig:
     - health_check
     - file_storage
     pipelines:
+      metrics/host:
+        receivers:
+        - hostmetrics
+        processors:
+        - memory_limiter
+        - transform/node
+        - batch
+        exporters:
+        - otlp_http
       logs:
         receivers:
         - filelog
@@ -150,6 +196,10 @@ extraEnvs:
     fieldRef:
       fieldPath: status.hostIP
 extraVolumes:
+- name: host-root
+  hostPath:
+    path: /
+    type: Directory
 - name: pod-logs
   hostPath:
     path: /var/log/pods
@@ -159,6 +209,10 @@ extraVolumes:
     path: /var/lib/aat-otelcol
     type: DirectoryOrCreate
 extraVolumeMounts:
+- name: host-root
+  mountPath: /hostfs
+  readOnly: true
+  mountPropagation: HostToContainer
 - name: pod-logs
   mountPath: /var/log/pods
   readOnly: true
