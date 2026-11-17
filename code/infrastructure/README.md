@@ -42,9 +42,36 @@ task up
 
 `task up` membuat/menyalakan VM, memasang k3s, menunggu node Ready, menyiapkan namespace serta Secret runtime, memasang Argo CD bila belum ada, lalu menerapkan `argo-apps/root.yaml`. Workload berikutnya direkonsiliasi Argo CD secara asinkron. Bootstrap tidak memasang paket host; download box, k3s, chart, dan image memerlukan internet.
 
+Startup dikoordinasikan oleh `scripts/bootstrap.sh`, dengan langkah terpisah di
+`scripts/up/`:
+
+| Script | Tanggung jawab |
+| --- | --- |
+| `1-vms.sh` | Menjalankan Vagrant dan mengekspor kubeconfig langsung dari VM |
+| `2-cluster.sh` | Menunggu node, memeriksa topologi, menyiapkan namespace dan Secret |
+| `3-argocd.sh` | Memasang Argo CD bila belum ada dan menunggu rollout |
+| `4-apps.sh` | Mendaftarkan root Application, menunggu gateway, dan menjalankan listener background `.localhost` |
+
+Setiap script memiliki `preflight_check()` sendiri: langkah VM memeriksa tooling
+Vagrant/libvirt/KVM, langkah cluster memastikan ketiga node VM tersedia dan Ready,
+langkah Argo CD memastikan API Kubernetes siap, dan langkah aplikasi menunggu CRD
+Application tersedia. `task doctor` hanya menjalankan preflight VM tanpa menyalakan
+atau mengubah guest.
+
+`common.sh` menyediakan environment, kubeconfig, dan helper bersama. Helper Python
+untuk topologi dan kredensial (`topology.py` dan `runtime.py`) juga berada di
+`scripts/up/`. Script startup tidak memanggil script di luar direktori tersebut;
+`scripts/vm.sh` menyediakan perintah operasi VM dan meneruskan startup ke `1-vms.sh`.
+`task up` menjalankan langkah 1–4; `task deploy` menjalankan 2–4.
+Setiap langkah dapat dipanggil dengan `bash`
+untuk diagnosis; nomor menunjukkan urutan tanggung jawab, bukan glob eksekusi.
+
 Commit/push konfigurasi terlebih dahulu. Application membaca `https://github.com/nyo-platform-engineering/platform-code.git` pada revision `main`. Untuk fork atau branch lain, sesuaikan URL/revision pada root dan child Applications. Repository private membutuhkan kredensial pada Argo CD.
 
-Untuk cluster VM yang sudah tersedia:
+`task up` selalu menggunakan tiga VM Vagrant/libvirt dan kubeconfig lab di
+`.state/kubeconfig`. Tidak ada mode startup tanpa VM.
+
+Untuk hanya menjalankan deployment ke cluster yang sudah tersedia:
 
 ```bash
 KUBECONFIG=/path/cluster-vm.yaml task deploy
@@ -60,24 +87,33 @@ Root menemukan Application secara rekursif pada `argo-apps/platform/`, dengan fi
 
 ## Akses dan operasi
 
-Setelah Argo CD selesai merekonsiliasi konfigurasi dari Git, jalankan pada terminal terpisah:
+`task up` menunggu Traefik dan Gateway siap, lalu menjalankan listener `.localhost`
+di background. Terminal boleh ditutup; listener tetap hidup sampai dihentikan,
+prosesnya berakhir, atau laptop dimatikan. Menjalankan ulang startup dengan
+konfigurasi yang sama memakai proses yang sudah ada.
 
 ```bash
-task gateway
+task up                   # start/reuse VM, aplikasi, dan listener
+task status               # status cluster dan listener
+task vm:halt              # hentikan listener dan matikan VM, pertahankan disk
 ```
 
-Perintah ini menunggu Traefik dan Gateway siap, lalu meneruskan port loopback laptop
-ke Service Traefik di cluster VM. Biarkan terminal terbuka; Ctrl+C menutup tunnel.
-Port default `80` memakai `sudo` untuk proses port-forward. Untuk port tanpa sudo
-atau jika port 80 sudah dipakai, jalankan `task gateway PORT=8080` dan tambahkan
-`:8080` pada URL di bawah. `task up` tidak menjalankan tunnel di background.
+Port default `80` meminta sudo untuk bind, lalu helper Python melepas privilege
+root dan menjalankan listener sebagai user pemanggil. Stop/status tidak memerlukan
+sudo atau koneksi Kubernetes. Gunakan `task up PORT=8080` untuk port tinggi, lalu tambahkan `:8080` pada URL.
+Untuk mengganti port/tujuan listener yang sudah hidup, jalankan `task vm:halt`
+lalu `task up` dengan konfigurasi baru. PID dan identitas proses disimpan di `.state/gateway.json`;
+log berada di `.state/gateway.log`. Listener lama yang sudah mati dapat dimulai ulang.
+
+`task vm:halt` menghentikan listener sebelum mematikan VM. `task destroy` menghentikan
+listener setelah perintah penghancuran VM selesai; konfirmasi Vagrant tetap berlaku.
 
 Nama `.localhost` mengarah ke loopback laptop, bukan IP VM. Browser modern
 umumnya menanganinya langsung; bila resolver lokal tidak mendukung subdomain ini,
 tambahkan hostname yang dipakai ke `/etc/hosts` dengan alamat `127.0.0.1`.
 Tidak perlu mengubah DNS jaringan atau mengarahkan `.localhost` ke IP VM.
 
-Alur request: browser → loopback laptop → port-forward → Traefik → HTTPRoute
+Alur request: browser → loopback laptop → proxy TCP ke NodePort VM → Traefik → HTTPRoute
 berdasarkan hostname → Service → Pod. Gateway `local` memiliki listener HTTP
 `web` pada port container 8000, yang diekspos Service pada port 80 dan NodePort
 30088. Route berada pada namespace backend masing-masing; listener mengizinkan
@@ -97,7 +133,7 @@ Traefik memakai IngressRoute untuk service internal `api@internal`.
 NodePort lama tetap tersedia: Client `http://192.168.56.10:30080`, Auth
 `http://192.168.56.10:30084`, dan Grafana `http://192.168.56.10:30300`.
 `task argocd:ui` tetap membuka Argo CD melalui `http://localhost:8088`.
-Untuk menguji gateway langsung tanpa tunnel:
+Untuk menguji gateway langsung tanpa listener lokal:
 
 ```bash
 curl -H 'Host: radar.localhost' http://192.168.56.10:30088/

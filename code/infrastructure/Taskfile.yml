@@ -8,14 +8,16 @@ tasks:
   default:
     cmds: [task --list]
   doctor:
-    desc: Check local tools and VM/KVM prerequisites
+    desc: Check VM startup tools and libvirt/KVM prerequisites
     cmds: [bash scripts/bootstrap.sh doctor]
   up:
-    desc: Start three separate-kernel local VMs and deploy AAT plus LGTM
-    cmds: [bash scripts/bootstrap.sh up]
+    desc: Start three local VMs and deploy AAT plus LGTM
+    cmds:
+      - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/bootstrap.sh up {{.CLI_ARGS}}'
   deploy:
     desc: Bootstrap Argo CD and register root.yaml on the explicit VM cluster
-    cmds: [bash scripts/bootstrap.sh deploy]
+    cmds:
+      - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/bootstrap.sh deploy'
   prepare:
     desc: Prepare namespaces and runtime Secrets before Argo CD sync
     cmds: [bash scripts/bootstrap.sh prepare]
@@ -25,7 +27,7 @@ tasks:
       PYTHON: '{{.PYTHON | default "/usr/bin/python3"}}'
     cmds:
       - '{{.PYTHON}} -m unittest discover -s tests -p "test_local_*.py" -v'
-      - bash -n scripts/bootstrap.sh scripts/vm.sh local/provision-node.sh
+      - for script in scripts/bootstrap.sh scripts/vm.sh scripts/up/*.sh local/provision-node.sh; do bash -n "$script" || exit; done
   images:
     desc: Pull all seven reused image digests into the local Docker engine
     cmds: [bash scripts/bootstrap.sh images]
@@ -40,10 +42,6 @@ tasks:
   links:
     desc: Show local VM service URLs
     cmds: [bash scripts/bootstrap.sh links]
-  gateway:
-    desc: Serve *.localhost through Traefik (PORT=80; sudo for ports below 1024)
-    cmds:
-      - 'bash scripts/bootstrap.sh gateway "{{.PORT | default "80"}}"'
   password:
     desc: Show the admin password (APP=grafana or argocd)
     cmds:
@@ -88,5 +86,6 @@ tasks:
     cmds:
       - 'bash scripts/vm.sh resume-worker "{{.NODE | default "aat-worker-1"}}"'
   vm:destroy:
+    aliases: [destroy]
     desc: Delete the lab VMs and their disks (Vagrant asks for confirmation)
     cmds: [bash scripts/vm.sh destroy]
