@@ -7,11 +7,25 @@ ingress:
 httpRoute:
   enabled: true
   parentRefs:
-    - name: local
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: local
       namespace: traefik
       sectionName: web
   hostnames:
     - radar.localhost
+  # Match Kubernetes' defaulted HTTPRoute references to avoid perpetual OutOfSync.
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: radar
+          port: 9280
+          weight: 1
 resources:
   requests:
     memory: 128Mi
