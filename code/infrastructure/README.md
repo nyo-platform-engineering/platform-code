@@ -6,11 +6,13 @@ Cluster pengembangan lokal menggunakan **k3s pada tiga VM libvirt/KVM**. Setiap 
 
 | Node | Peran | vCPU | RAM | IP default |
 | --- | --- | ---: | ---: | --- |
-| Control plane | API, scheduler, workload, backend observabilitas | 2 | 6 GiB | 192.168.56.10 |
-| Worker 1 | Workload | 2 | 4 GiB | 192.168.56.11 |
-| Worker 2 | Workload | 2 | 4 GiB | 192.168.56.12 |
+| Control plane | API, scheduler, workload, backend observabilitas | 2 | 4 GiB | 192.168.56.10 |
+| Worker 1 | Workload | 2 | 2 GiB | 192.168.56.11 |
+| Worker 2 | Workload | 2 | 2 GiB | 192.168.56.12 |
 
-Ketiga VM berada pada satu host fisik, dengan total alokasi guest 6 vCPU dan 14 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+Ketiga VM berada pada satu host fisik, dengan total alokasi guest 6 vCPU dan 8 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+
+Untuk menerapkan perubahan RAM pada VM yang sudah ada, jalankan `task down` lalu `task up`. Provider libvirt memperbarui alokasi RAM ketika menyalakan guest yang sudah berhenti; disk dan data cluster tetap dipakai. Tidak perlu `task destroy`. Environment variable `AAT_CONTROL_MEMORY` dan `AAT_WORKER_MEMORY`, jika disetel, menggantikan default RAM tersebut (dalam MiB).
 
 Satu control plane berarti API dan scheduler belum memiliki redundansi. Storage `local-path` terikat pada disk node; perpindahan pod ke node lain tidak mereplikasi datanya. Backend observabilitas ditempatkan pada control plane melalui `nodeSelector`.
 
