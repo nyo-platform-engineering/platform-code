@@ -8,6 +8,10 @@ fullnameOverride: argocd
 configs:
   params:
     server.insecure: true
+    # Keep startup reconciliation bursts small on the three-VM lab.
+    controller.status.processors: '5'
+    controller.operation.processors: '2'
+    reposerver.parallelism.limit: '2'
 server:
   replicas: 1
   resources:
@@ -17,16 +21,18 @@ server:
     enabled: false
 controller:
   replicas: 1
+  # Cluster discovery/cache exceeded the previous 256Mi limit during startup.
   resources:
-    requests: {memory: 128Mi}
-    limits: {memory: 256Mi}
+    requests: {memory: 512Mi}
+    limits: {memory: 1Gi}
   metrics:
     enabled: true
 repoServer:
   replicas: 1
+  # Helm/Git child processes need burst headroom beyond the server's idle usage.
   resources:
-    requests: {memory: 128Mi}
-    limits: {memory: 256Mi}
+    requests: {memory: 256Mi}
+    limits: {memory: 1Gi}
 dex:
   enabled: false
 notifications:
