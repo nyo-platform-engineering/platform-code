@@ -1,0 +1,5 @@
+apiVersion: v2
+name: aat-dependencies
+version: 0.1.0
+description: PostgreSQL and JetStream baseline with local storage and storage isolation
+type: application

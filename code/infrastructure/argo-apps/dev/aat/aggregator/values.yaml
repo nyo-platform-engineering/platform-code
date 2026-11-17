@@ -1,0 +1,104 @@
+# Runtime AAT lokal; batas memori mengikuti Lampiran B M2.
+fullnameOverride: aggregator
+replicaCount: 3
+containerPorts:
+- name: http
+  containerPort: 8083
+  protocol: TCP
+service:
+  enabled: true
+  ports:
+  - name: http
+    port: 8083
+    targetPort: http
+    protocol: TCP
+  type: ClusterIP
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+livenessProbe:
+  tcpSocket:
+    port: http
+startupProbe:
+  tcpSocket:
+    port: http
+  failureThreshold: 30
+  periodSeconds: 5
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: '1'
+    memory: 512Mi
+image:
+  repository: ghcr.io/yonatan-nyo/aat-apps/aggregator
+volumes:
+- name: tmp
+  emptyDir: {}
+volumeMounts:
+- name: tmp
+  mountPath: /tmp
+autoscaling:
+  enabled: false
+  minReplicas: 3
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
+podLabels:
+  role: aggregator
+config:
+  BMKG_URL: http://bmkg:8081
+  PVMBG_URL: http://pvmbg:8082
+  NATS_URL: nats://nats:4222
+  DB_MAX_CONNS: '5'
+  POLL_INTERVAL_SECONDS: '3'
+  POLL_TIMEOUT_MS: '4000'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-cluster.monitoring.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_SERVICE_NAME: aggregator
+  OTEL_RESOURCE_ATTRIBUTES: service.namespace=sistem-informasi-kebencanaan-bnpb
+env:
+- name: DATABASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: DATABASE_URL
+- name: AGGREGATOR_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: AGGREGATOR_TOKEN
+- name: BMKG_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: BMKG_API_KEY
+- name: PVMBG_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: PVMBG_TOKEN
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: DoNotSchedule
+  nodeTaintsPolicy: Honor
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/instance: aggregator

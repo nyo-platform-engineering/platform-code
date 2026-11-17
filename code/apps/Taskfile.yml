@@ -70,20 +70,10 @@ tasks:
       IMAGE_TAG: '{{.IMAGE_TAG | default "dev1"}}'
     cmds:
       - docker build --tag "local/telemetry-ui:{{.IMAGE_TAG}}" .
-  go-demo:
-    desc: Build, save, import into k3d, and restart the Go demo
+  go-demo-build:
+    desc: Build the Go demo application image
     dir: '{{.TASKFILE_DIR}}/go-demo'
     vars:
-      CLUSTER_NAME: '{{.CLUSTER_NAME | default "dev"}}'
       IMAGE_TAG: '{{.IMAGE_TAG | default "dev1"}}'
-      IMAGE: 'local/go-demo:{{.IMAGE_TAG}}'
-      ARCHIVE: 'go-demo-{{.IMAGE_TAG}}.tar'
-      NODE_ARCH:
-        sh: 'kubectl --context "k3d-{{.CLUSTER_NAME}}" get nodes -o jsonpath="{.items[0].status.nodeInfo.architecture}"'
     cmds:
-      - docker build --platform "linux/{{.NODE_ARCH}}" --tag "{{.IMAGE}}" .
-      - docker image save --output "{{.ARCHIVE}}" "{{.IMAGE}}"
-      - k3d image import "{{.IMAGE}}" --cluster "{{.CLUSTER_NAME}}"
-      - 'CLUSTER_NAME="{{.CLUSTER_NAME}}" IMAGE_TAG="{{.IMAGE_TAG}}" bash ../../infrastructure/scripts/gitlab.sh local-image'
-      - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout restart deployment/go-demo --namespace dev
-      - kubectl --context "k3d-{{.CLUSTER_NAME}}" rollout status deployment/go-demo --namespace dev --timeout=45s
+      - docker build --tag "local/go-demo:{{.IMAGE_TAG}}" .

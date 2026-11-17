@@ -4,8 +4,8 @@ This small chart lets us keep local GitLab integration in the repo while using
 the official GitLab Helm chart for GitLab itself. It contains a dependency,
 not a separate implementation of GitLab.
 
-For setup, passwords, projects, and CI, use the
-[GitLab guide](../../argo-apps/platform/03-cd/gitlab/README.md).
+For retained component configuration and scope, use the
+[legacy GitLab guide](../../argo-apps/platform/03-cd/gitlab/README.md).
 This page is for changing the chart dependency or its values.
 
 ## Find the configuration

@@ -20,18 +20,6 @@
   "graphTooltip": 1,
   "links": [
     {
-      "title": "Traces",
-      "url": "http://telemetry.localhost/traces?service=go-demo&minutes=15",
-      "type": "link",
-      "targetBlank": true
-    },
-    {
-      "title": "Logs",
-      "url": "http://telemetry.localhost/logs?service=go-demo&minutes=15",
-      "type": "link",
-      "targetBlank": true
-    },
-    {
       "title": "Policy details",
       "url": "/d/kyverno-policy-reports",
       "type": "link",

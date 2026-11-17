@@ -1,35 +1,20 @@
 podLabels:
   platform.local/owner: platform-team
+  role: consumer
 additionalLabels:
   platform.local/owner: platform-team
 fullnameOverride: otel-collector-cluster
 mode: deployment
-replicaCount: 1
 image:
   repository: otel/opentelemetry-collector-contrib
   tag: 0.160.0
 command:
   name: otelcol-contrib
-resources: {}
-initContainers:
-  - name: wait-for-clickhouse
-    image: busybox:1.37.0
-    command: [sh, -ec]
-    args:
-      - |
-        until nslookup clickhouse.monitoring.svc.cluster.local >/dev/null 2>&1 && nc -z clickhouse.monitoring.svc.cluster.local 9000; do
-          echo "waiting for ClickHouse DNS and native port"
-          sleep 2
-        done
-    resources: {}
-extraEnvs:
-  - name: CLICKHOUSE_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: clickhouse-credentials
-        key: ingestPassword
-service:
-  enabled: true
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 256Mi
 ports:
   jaeger-compact:
     enabled: false
@@ -39,100 +24,68 @@ ports:
     enabled: false
   zipkin:
     enabled: false
-config:
+alternateConfig:
+  extensions:
+    health_check:
+      endpoint: 0.0.0.0:13133
   receivers:
-    jaeger: null
-    zipkin: null
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
     prometheus:
       config:
         scrape_configs:
-          - job_name: policy-reporter
-            scrape_interval: 30s
-            scrape_timeout: 10s
-            static_configs:
-              - targets: [policy-reporter.monitoring.svc.cluster.local:8080]
-            metric_relabel_configs:
-              - source_labels: [__name__]
-                regex: 'policy_report_result|cluster_policy_report_result'
-                action: keep
-          - job_name: clickhouse
-            scrape_interval: 60s
-            scrape_timeout: 10s
-            static_configs:
-              - targets: [clickhouse:9363]
-            metric_relabel_configs:
-              - source_labels: [__name__]
-                regex: 'process_cpu_seconds_total|process_resident_memory_bytes|go_goroutines'
-                action: keep
-          - job_name: kube-state-metrics
-            scrape_interval: 60s
-            scrape_timeout: 10s
-            static_configs:
-              - targets: [kube-state-metrics:8080]
-            metric_relabel_configs:
-              - source_labels: [__name__]
-                regex: 'kube_pod_status_ready|kube_pod_container_status_restarts_total'
-                action: keep
-              # Keep one readiness series per pod; restart counters have no condition.
-              - source_labels: [condition]
-                regex: 'true|'
-                action: keep
-              - regex: uid
-                action: labeldrop
-          - job_name: argocd
-            scrape_interval: 60s
-            scrape_timeout: 10s
-            static_configs:
-              - targets: [argocd-application-controller-metrics.argocd.svc.cluster.local:8082]
-            metric_relabel_configs:
-              - source_labels: [__name__]
-                regex: 'argocd_app_info|argocd_app_sync_total'
-                action: keep
-              - regex: '__name__|name|namespace|health_status|sync_status|phase|job|instance'
-                action: labelkeep
+        - job_name: kube-state-metrics
+          scrape_interval: 30s
+          static_configs:
+          - targets:
+            - kube-state-metrics:8080
   processors:
-    memory_limiter: null
-    filter/minimal:
-      error_mode: ignore
-      metric_conditions:
-        # Matching conditions DROP metrics; negate the small allowlist.
-        # Prometheus counters may lose their _total suffix during conversion.
-        - 'not IsMatch(metric.name, "^(up|policy_report_result|cluster_policy_report_result|process_cpu_seconds(_total)?|process_resident_memory_bytes|go_goroutines|argocd_app_info|argocd_app_sync(_total)?|kube_pod_status_ready|kube_pod_container_status_restarts(_total)?|http[.]server[.](request[.]duration|duration|active_requests))$")'
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 192
+      spike_limit_mib: 32
     batch:
       timeout: 5s
-      send_batch_size: 256
-      send_batch_max_size: 512
+      send_batch_size: 128
+      send_batch_max_size: 256
   exporters:
-    debug: null
-    prometheus_remote_write/mimir:
+    prometheus_remote_write:
       endpoint: http://mimir:9009/api/v1/push
-    clickhouse:
-      endpoint: tcp://clickhouse:9000?dial_timeout=10s&compress=lz4&enable_json_type=1
-      database: otel
-      username: otelcollector
-      password: ${env:CLICKHOUSE_PASSWORD}
-      async_insert: true
-      ttl: 72h
-      create_schema: true
-      logs_table_name: otel_logs
-      traces_table_name: otel_traces
-      timeout: 5s
-      retry_on_failure:
-        enabled: true
-        initial_interval: 5s
-        max_interval: 30s
-        max_elapsed_time: 300s
+    otlp_http/loki:
+      endpoint: http://loki:3100/otlp
+    otlp_http/tempo:
+      endpoint: http://tempo:4318
   service:
+    extensions:
+    - health_check
     pipelines:
       metrics:
-        receivers: [prometheus, otlp]
-        processors: [filter/minimal, batch]
-        exporters: [prometheus_remote_write/mimir]
-      traces:
-        receivers: [otlp]
-        processors: [batch]
-        exporters: [clickhouse]
+        receivers:
+        - otlp
+        - prometheus
+        processors:
+        - memory_limiter
+        - batch
+        exporters:
+        - prometheus_remote_write
       logs:
-        receivers: [otlp]
-        processors: [batch]
-        exporters: [clickhouse]
+        receivers:
+        - otlp
+        processors:
+        - memory_limiter
+        - batch
+        exporters:
+        - otlp_http/loki
+      traces:
+        receivers:
+        - otlp
+        processors:
+        - memory_limiter
+        - batch
+        exporters:
+        - otlp_http/tempo
+replicaCount: 1

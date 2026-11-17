@@ -4,8 +4,8 @@ Use this chart to turn app settings into a Kubernetes Deployment, with an
 optional Service, HTTPRoute, and persistent volume. Each Helm release deploys
 one application. App-specific configuration belongs
 in `argo-apps/<environment>/<app>/values.yaml`; application repositories under
-`code/apps` contain source code and Dockerfiles. The Go demo uses this chart
-through `argo-apps/dev/go-demo/app.yaml`.
+`code/apps` contain source code and Dockerfiles. AAT services use this chart
+through `argo-apps/dev/aat/<service>/app.yaml`.
 
 For cluster setup, start with the [infrastructure guide](../../README.md).
 For adding an app, follow the [development apps guide](../../argo-apps/dev/README.md).
@@ -15,13 +15,17 @@ For adding an app, follow the [development apps guide](../../argo-apps/dev/READM
 From `code/infrastructure`:
 
 ```bash
-helm lint charts/deployment -f argo-apps/dev/go-demo/values.yaml
-helm template go-demo charts/deployment -n dev -f argo-apps/dev/go-demo/values.yaml
+helm lint charts/deployment \
+  -f argo-apps/dev/aat/aggregator/values.yaml \
+  -f argo-apps/dev/aat/aggregator/image.yaml
+helm template aggregator charts/deployment -n sistem-informasi-kebencanaan-bnpb \
+  -f argo-apps/dev/aat/aggregator/values.yaml \
+  -f argo-apps/dev/aat/aggregator/image.yaml
 ```
 
 These commands validate and print manifests without changing the cluster.
-They render the base Go demo settings; the live app also reads its image
-override from GitLab.
+They render the same runtime values and immutable image reference used by the
+local deployment and Argo CD registration.
 
 A minimal values file looks like this:
 
@@ -42,7 +46,7 @@ an existing Secret through `imagePullSecrets`. For an immutable image, set
 | `image` | Required repository and tag, or digest; pull policy |
 | `replicaCount`, `strategy` | Deployment replicas and update strategy |
 | `command`, `args`, `containerPorts` | Container entry point and exposed ports |
-| `env`, `envFrom` | Variables, Secret/ConfigMap references |
+| `config`, `env`, `envFrom` | ConfigMap data, variables, Secret/ConfigMap references |
 | `readinessProbe`, `livenessProbe`, `startupProbe` | Optional Kubernetes probes |
 | `podSecurityContext`, `securityContext` | Pod and container identity/security |
 | `service` | Optional Service with configurable type and multiple ports |
@@ -76,9 +80,9 @@ labels:
 
 The cluster-wide ownership policy starts in Audit mode and reports Pods and
 workload templates with missing, empty, or invalid owners. It admits those
-workloads while ownership gaps are being fixed. After deploying the policy, run
-`bash tests/ownership.sh` from `code/infrastructure` to test the Go demo values
-with server dry runs in `dev`, `kube-system`, and `kyverno`.
+workloads while ownership gaps are being fixed. The ownership policy belongs to the legacy platform configuration. The AAT
+entry point uses the required `role` labels and does not install that policy.
+Use `task check` for the current AAT workload contracts.
 
 ## Expose an HTTP app
 
@@ -101,8 +105,9 @@ choose a strategy compatible with their access mode (for example `Recreate`
 for a single-replica ReadWriteOnce volume). Existing claims are referenced
 without creating or managing another PVC.
 
-The chart creates no Secrets or ConfigMaps. Use `envFrom`, `env.valueFrom`, or
-additional volumes to reference those managed elsewhere under `argo-apps`.
+The `config` map creates a per-service ConfigMap, loaded through `envFrom`.
+Secrets are managed separately; use `env.valueFrom`, `envFrom`, or additional
+volumes to reference them. AAT credentials are reconciled by `task prepare`.
 
 Push chart or values changes to the repository Argo CD reads to apply them.
 [Back to the repository guide](../../../../README.md).

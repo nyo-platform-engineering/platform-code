@@ -3,30 +3,48 @@ global:
     platform.local/owner: platform-team
   podLabels:
     platform.local/owner: platform-team
+    role: other
 fullnameOverride: argocd
 configs:
   params:
     server.insecure: true
 server:
   replicas: 1
+  resources:
+    requests: {memory: 128Mi}
+    limits: {memory: 256Mi}
   ingress:
-    enabled: true
-    ingressClassName: traefik
-    hostname: argocd.localhost
+    enabled: false
 controller:
   replicas: 1
+  resources:
+    requests: {memory: 128Mi}
+    limits: {memory: 256Mi}
   metrics:
     enabled: true
 repoServer:
   replicas: 1
+  resources:
+    requests: {memory: 128Mi}
+    limits: {memory: 256Mi}
 dex:
   enabled: false
 notifications:
   enabled: false
 applicationSet:
   replicas: 1
+  resources:
+    requests: {memory: 128Mi}
+    limits: {memory: 256Mi}
   readinessProbe:
     enabled: true
 redis:
+  resources:
+    requests: {memory: 128Mi}
+    limits: {memory: 256Mi}
   readinessProbe:
     enabled: true
+redisSecretInit:
+  resources:
+    requests: {memory: 128Mi}
+    limits: {memory: 256Mi}

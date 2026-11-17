@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    port: 5432
+    uid: 70
+    size: 2Gi
+    mountPath: /var/lib/postgresql/data
+    env:
+    - name: POSTGRES_USER
+      valueFrom:
+        secretKeyRef:
+          name: aat-runtime
+          key: POSTGRES_USER
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: aat-runtime
+          key: POSTGRES_PASSWORD
+    - name: POSTGRES_DB
+      valueFrom:
+        secretKeyRef:
+          name: aat-runtime
+          key: POSTGRES_DB
+    - name: PGDATA
+      value: /var/lib/postgresql/data/pgdata
+    probe:
+      exec:
+        command:
+        - sh
+        - -c
+        - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+    volumes:
+    - name: run
+      emptyDir: {}
+    volumeMounts:
+    - name: run
+      mountPath: /var/run/postgresql
+    role: store
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: '1'
+        memory: 1Gi
+  nats:
+    image: nats:2.11-alpine
+    port: 4222
+    uid: 10001
+    size: 1Gi
+    mountPath: /data
+    args:
+    - -js
+    - -sd
+    - /data
+    - -m
+    - '8222'
+    probe:
+      httpGet:
+        path: /healthz
+        port: 8222
+    role: broker
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: '1'
+        memory: 1Gi

@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aat-dependencies-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+    targetRevision: main
+    path: code/infrastructure/charts/aat-dependencies
+    helm:
+      releaseName: aat-dependencies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sistem-informasi-kebencanaan-bnpb
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true

@@ -1,130 +1,88 @@
 version: '3'
+silent: true
 includes:
-  apps:
-    taskfile: ../apps/Taskfile.yml
-    dir: ../apps
-    flatten: true
   local:
     taskfile: Taskfile.local.yml
     optional: true
-vars:
-  LOCAL_SETTINGS_YAML:
-    sh: 'if test -f settings.local.yml; then cat settings.local.yml; else printf "{}"; fi'
-  LOCAL_SETTINGS:
-    ref: 'fromYaml .LOCAL_SETTINGS_YAML'
-  CLUSTER_NAME: '{{.CLUSTER_NAME | default .LOCAL_SETTINGS.CLUSTER_NAME | default "dev"}}'
-  HTTP_PORT: '{{.HTTP_PORT | default .LOCAL_SETTINGS.HTTP_PORT | default "80"}}'
-  HTTPS_PORT: '{{.HTTPS_PORT | default .LOCAL_SETTINGS.HTTPS_PORT | default "443"}}'
-  API_PORT: '{{.API_PORT | default .LOCAL_SETTINGS.API_PORT | default "6550"}}'
-  K3S_IMAGE: '{{.K3S_IMAGE | default .LOCAL_SETTINGS.K3S_IMAGE | default "rancher/k3s:v1.34.5-k3s1"}}'
-  KUBECTL_VERSION: '{{.KUBECTL_VERSION | default .LOCAL_SETTINGS.KUBECTL_VERSION | default "v1.34.5"}}'
-  GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION | default .LOCAL_SETTINGS.GATEWAY_API_VERSION | default "v1.5.1"}}'
-  IMAGE_TAG: '{{.IMAGE_TAG | default .LOCAL_SETTINGS.IMAGE_TAG | default "dev1"}}'
-  DOCKER_CONTEXT: '{{.DOCKER_CONTEXT | default .LOCAL_SETTINGS.DOCKER_CONTEXT | default ""}}'
-  APP_CODE_DIR: '{{.APP_CODE_DIR | default .LOCAL_SETTINGS.APP_CODE_DIR | default "../apps"}}'
-  NAMESPACE: monitoring
-  TAIL: '50'
-  FOLLOW: 'true'
-env:
-  DOCKER_CONTEXT: '{{.DOCKER_CONTEXT}}'
-  CLUSTER_NAME: '{{.CLUSTER_NAME}}'
-  HTTP_PORT: '{{.HTTP_PORT}}'
-  HTTPS_PORT: '{{.HTTPS_PORT}}'
-  API_PORT: '{{.API_PORT}}'
-  K3S_IMAGE: '{{.K3S_IMAGE}}'
-  KUBECTL_VERSION: '{{.KUBECTL_VERSION}}'
-  GATEWAY_API_VERSION: '{{.GATEWAY_API_VERSION}}'
-  APP_CODE_DIR: '{{.APP_CODE_DIR}}'
-silent: true
 tasks:
   default:
-    cmds:
-      - task --list
-  setup:
-    desc: Install k3d, Helm, and kubectl on Windows, macOS, or Linux
-    platforms: [windows, darwin, linux]
-    cmds:
-      - cmd: winget install --id k3d.k3d --exact --accept-package-agreements --accept-source-agreements
-        platforms: [windows]
-      - cmd: winget install --id Helm.Helm --exact --accept-package-agreements --accept-source-agreements
-        platforms: [windows]
-      - cmd: brew install k3d helm kubernetes-cli
-        platforms: [darwin]
-      - cmd: bash scripts/setup-linux.sh
-        platforms: [linux]
+    cmds: [task --list]
+  doctor:
+    desc: Check local tools and VM/KVM prerequisites
+    cmds: [bash scripts/bootstrap.sh doctor]
   up:
-    desc: Create k3d, bootstrap Argo CD, and register the platform application
-    cmds:
-      - "bash scripts/bootstrap.sh up"
-      - task: links
-  gitlab:
-    desc: Set up or resume GitLab safely, preserving existing projects and credentials
+    desc: Start three separate-kernel local VMs and deploy AAT plus LGTM
+    cmds: [bash scripts/bootstrap.sh up]
+  deploy:
+    desc: Bootstrap Argo CD and register root.yaml on the explicit VM cluster
+    cmds: [bash scripts/bootstrap.sh deploy]
+  prepare:
+    desc: Prepare namespaces and runtime Secrets before Argo CD sync
+    cmds: [bash scripts/bootstrap.sh prepare]
+  check:
+    desc: Run offline render, resource, isolation, bootstrap, and secret tests
     vars:
-      ACTION: '{{.ACTION | default "up"}}'
+      PYTHON: '{{.PYTHON | default "/usr/bin/python3"}}'
     cmds:
-      - 'bash scripts/gitlab.sh "{{.ACTION}}"'
-  gitlab-storage-images:
-    desc: Build pinned upstream MinIO images and import them into k3d
-    cmds:
-      - bash scripts/gitlab-minio.sh
-  demo-traffic:
-    desc: Generate success, slow, and error requests for the deployed Go demo
-    cmds:
-      - 'python3 ../apps/dev/traffic.py --url "http://go.localhost:{{.HTTP_PORT}}" {{.CLI_ARGS}}'
-  onboard:
-    desc: Import an app into GitLab and configure its GitOps credentials
+      - '{{.PYTHON}} -m unittest discover -s tests -p "test_local_*.py" -v'
+      - bash -n scripts/bootstrap.sh scripts/vm.sh local/provision-node.sh
+  images:
+    desc: Pull all seven reused image digests into the local Docker engine
+    cmds: [bash scripts/bootstrap.sh images]
+  check:containers:
+    desc: Render registered platform charts and validate LGTM with temporary containers
     vars:
-      APP: '{{.APP | default "telemetry-ui"}}'
-    cmds:
-      - 'APP_NAME="{{.APP}}" bash scripts/gitlab.sh onboard'
-  down:
-    desc: Delete cluster and its data
-    cmds:
-      - "k3d cluster delete {{.CLUSTER_NAME}}"
-  restart:
-    desc: Delete data and recreate cluster
-    cmds:
-      - task: down
-      - task: up
+      PYTHON: '{{.PYTHON | default "/usr/bin/python3"}}'
+    cmds: ['{{.PYTHON}} scripts/check-lgtm.py']
   status:
-    desc: Show pods, Argo CD apps, resource usage, and sizing checks
-    cmds:
-      - kubectl --context k3d-{{.CLUSTER_NAME}} get pods -A
-      - "kubectl --context k3d-{{.CLUSTER_NAME}} get applications -n argocd"
-      - kubectl --context k3d-{{.CLUSTER_NAME}} top nodes
-      - kubectl --context k3d-{{.CLUSTER_NAME}} top pods -A --sort-by=memory
-      - "bash scripts/bootstrap.sh resources"
+    desc: Show nodes, AAT workloads, and LGTM health
+    cmds: [bash scripts/bootstrap.sh status]
   links:
-    desc: Show local service URLs and login details
-    vars:
-      URL_PORT: '{{if ne .HTTP_PORT "80"}}:{{.HTTP_PORT}}{{end}}'
-    cmds:
-      - |
-        printf '%-12s %s\n' \
-          'Argo CD' 'http://argocd.localhost{{.URL_PORT}} (admin / task password)' \
-          'Grafana' 'http://grafana.localhost{{.URL_PORT}} (admin / admin)' \
-          'Radar' 'http://radar.localhost{{.URL_PORT}}' \
-          'Traefik' 'http://traefik.localhost{{.URL_PORT}}/dashboard/' \
-          'Go demo' 'http://go.localhost{{.URL_PORT}}' \
-          'Telemetry UI' 'http://telemetry.localhost{{.URL_PORT}}' \
-          'GitLab' 'http://gitlab.localhost{{.URL_PORT}} (root / task password)' \
-          'Registry' 'http://registry.localhost{{.URL_PORT}}' \
-          'GitLab KAS' 'ws://kas.localhost{{.URL_PORT}}'
+    desc: Show local VM service URLs
+    cmds: [bash scripts/bootstrap.sh links]
   password:
-    desc: Show initial Argo CD and GitLab passwords (override APP for one)
-    vars:
-      APP: '{{.APP | default "all"}}'
+    desc: Show the admin password (APP=grafana or argocd)
     cmds:
-      - 'bash scripts/bootstrap.sh password "{{.APP}}"'
-  test-labels:
-    desc: Test Go demo ownership admission with server dry runs across namespaces
-    cmds:
-      - bash tests/ownership.sh
+      - 'bash scripts/bootstrap.sh password "{{.APP | default "grafana"}}"'
+  argocd:ui:
+    desc: Open a localhost tunnel to Argo CD on port 8088
+    cmds: [bash scripts/bootstrap.sh argocd-ui]
   logs:
-    desc: Follow app logs (default otel-collector-cluster; override APP and NAMESPACE)
-    vars:
-      APP: '{{.APP | default "otel-collector-cluster"}}'
-      LABEL_NAME: '{{if hasPrefix "otel-collector" .APP}}opentelemetry-collector{{else}}{{.APP}}{{end}}'
-      SELECTOR: 'app.kubernetes.io/name={{.LABEL_NAME}}{{if hasPrefix "otel-collector" .APP}},app.kubernetes.io/instance={{.APP}}{{end}}'
+    desc: Follow one AAT service (APP=aggregator by default)
     cmds:
-      - 'kubectl --context "k3d-{{.CLUSTER_NAME}}" logs -n "{{.NAMESPACE}}" -l "{{.SELECTOR}}" --all-containers=true --tail={{.TAIL}} --follow={{.FOLLOW}}'
+      - 'bash scripts/bootstrap.sh logs "{{.APP | default "aggregator"}}"'
+  scale:
+    desc: Manually scale Aggregator during P2 (REPLICAS=2..5)
+    requires:
+      vars: [REPLICAS]
+    cmds:
+      - 'bash scripts/bootstrap.sh scale "{{.REPLICAS}}"'
+  tester:install:
+    desc: Install the exact official Tester Agent manifest from the PDF
+    cmds: [bash scripts/bootstrap.sh tester-install]
+  tester:list:
+    desc: List available Tester Agent scenarios
+    cmds: [bash scripts/bootstrap.sh tester-list]
+  tester:practice:
+    desc: Run a chosen practice disruption (SCENARIO=name)
+    requires:
+      vars: [SCENARIO]
+    cmds:
+      - 'bash scripts/bootstrap.sh tester-practice "{{.SCENARIO}}"'
+  vm:status:
+    desc: Show Vagrant guest status
+    cmds: [bash scripts/vm.sh status]
+  vm:halt:
+    desc: Shut down the lab VMs while retaining their disks
+    cmds: [bash scripts/vm.sh halt]
+  vm:suspend-worker:
+    desc: Freeze a selected worker for testing (NODE=aat-worker-1 by default)
+    cmds:
+      - 'bash scripts/vm.sh suspend-worker "{{.NODE | default "aat-worker-1"}}"'
+  vm:resume-worker:
+    desc: Resume the selected frozen worker
+    cmds:
+      - 'bash scripts/vm.sh resume-worker "{{.NODE | default "aat-worker-1"}}"'
+  vm:destroy:
+    desc: Delete the lab VMs and their disks (Vagrant asks for confirmation)
+    cmds: [bash scripts/vm.sh destroy]

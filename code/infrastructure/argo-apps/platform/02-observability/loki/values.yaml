@@ -3,6 +3,7 @@ deploymentMode: SingleBinary
 loki:
   podLabels:
     platform.local/owner: platform-team
+    role: store
   image:
     tag: 3.6.3
   auth_enabled: false
@@ -12,22 +13,27 @@ loki:
     type: filesystem
   schemaConfig:
     configs:
-      - from: "2024-01-01"
-        store: tsdb
-        object_store: filesystem
-        schema: v13
-        index:
-          prefix: index_
-          period: 24h
+    - from: '2024-01-01'
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
   limits_config:
     retention_period: 72h
+    allow_structured_metadata: true
   compactor:
     working_directory: /var/loki/compactor
     retention_enabled: true
     delete_request_store: filesystem
 singleBinary:
   replicas: 1
-  resources: {}
+  resources:
+    requests:
+      memory: 512Mi
+    limits:
+      memory: 1Gi
   persistence:
     enabled: true
     storageClass: local-path
@@ -35,6 +41,8 @@ singleBinary:
     enableStatefulSetAutoDeletePVC: false
     whenDeleted: Retain
     whenScaled: Retain
+  nodeSelector:
+    kubernetes.io/hostname: aat-control
 read:
   replicas: 0
 write:

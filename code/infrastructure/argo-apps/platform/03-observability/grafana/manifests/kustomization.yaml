@@ -2,12 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: monitoring
 configMapGenerator:
-  - name: grafana-policy-reports
-    files:
-      - kyverno-policy-reports.json
-  - name: grafana-platform-overview
-    files:
-      - platform-overview.json
+- name: grafana-aat
+  files:
+  - aat.json
 generatorOptions:
   disableNameSuffixHash: true
   labels:

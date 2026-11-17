@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aat-auth-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nyo-platform-engineering/platform-code.git
+    targetRevision: main
+    path: code/infrastructure/charts/deployment
+    helm:
+      releaseName: auth
+      valueFiles:
+      - ../../argo-apps/dev/aat/auth/values.yaml
+      - ../../argo-apps/dev/aat/auth/image.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sistem-informasi-kebencanaan-bnpb
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+    - RespectIgnoreDifferences=true
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas

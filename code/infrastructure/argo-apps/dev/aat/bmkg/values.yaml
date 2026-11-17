@@ -1,0 +1,75 @@
+# Runtime AAT lokal; batas memori mengikuti Lampiran B M2.
+fullnameOverride: bmkg
+replicaCount: 1
+containerPorts:
+- name: http
+  containerPort: 8081
+  protocol: TCP
+service:
+  enabled: true
+  ports:
+  - name: http
+    port: 8081
+    targetPort: http
+    protocol: TCP
+  type: ClusterIP
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+livenessProbe:
+  tcpSocket:
+    port: http
+startupProbe:
+  tcpSocket:
+    port: http
+  failureThreshold: 30
+  periodSeconds: 5
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: '1'
+    memory: 128Mi
+image:
+  repository: ghcr.io/yonatan-nyo/aat-apps/bmkg
+volumes:
+- name: tmp
+  emptyDir: {}
+volumeMounts:
+- name: tmp
+  mountPath: /tmp
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 60
+podLabels:
+  role: mock
+config:
+  BMKG_DELAY_MS: '100'
+  EVENT_INTERVAL_SECONDS: '10'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-cluster.monitoring.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_SERVICE_NAME: bmkg
+  OTEL_RESOURCE_ATTRIBUTES: service.namespace=sistem-informasi-kebencanaan-bnpb
+envFrom:
+- configMapRef:
+    name: aat-clock
+env:
+- name: BMKG_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: BMKG_API_KEY
