@@ -10,6 +10,13 @@ vm() {
 }
 
 case "${1:-help}" in
+  manager)
+    if ! command -v virt-manager >/dev/null; then
+      echo 'virt-manager is missing. Install it before running task vm:manager.' >&2
+      exit 1
+    fi
+    exec virt-manager --connect qemu:///system
+    ;;
   doctor)
     bash scripts/up/1-vms.sh --check-only
     ;;
@@ -45,6 +52,6 @@ case "${1:-help}" in
     fi
     ;;
   *)
-    echo 'Usage: scripts/vm/main.sh doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker [worker]'
+    echo 'Usage: scripts/vm/main.sh manager|doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker [worker]'
     ;;
 esac

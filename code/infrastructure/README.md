@@ -51,6 +51,9 @@ Taskfile memanggil entry point `main.sh` pada folder masing-masing:
 | `status` | `scripts/status/main.sh` |
 | `links` | `scripts/links/main.sh` |
 | `password` | `scripts/password/main.sh` |
+| `context` | `scripts/context/main.sh` |
+| `k9s` | `scripts/k9s/main.sh` |
+| `vm:manager` | `scripts/vm/main.sh manager` |
 | `tester:*` | `scripts/tester/main.sh` dengan aksi install/list/practice |
 | `down` (alias `vm:down`, `vm:halt`) | `scripts/vm/main.sh halt` |
 | `destroy` (alias `vm:destroy`) | `scripts/vm/main.sh destroy` |
@@ -102,6 +105,24 @@ Root menemukan Application secara rekursif pada `argo-apps/platform/`, dengan fi
 `dev-apps` mendaftarkan workload development dari `argo-apps/dev/`. Ubah chart, values, dan image melalui Git. Namespace, dependency, Secret, serta petunjuk operasi khusus aplikasi didokumentasikan bersama source aplikasi di `../apps/`.
 
 ## Akses dan operasi
+
+Untuk memakai cluster VM dari kubectl/K9s dan melihat guest melalui GUI:
+
+```bash
+task context       # import/refresh context aat-local ke ~/.kube/config
+task k9s           # refresh context, lalu buka K9s pada semua namespace
+task vm:manager    # buka Virtual Machine Manager pada qemu:///system
+```
+
+Import menyimpan cluster, user, dan context dengan nama `aat-local`, sehingga
+tidak bertabrakan dengan nama `default` milik k3s. Context lain dan pilihan aktif
+yang sudah ada dipertahankan; jika belum ada pilihan aktif, `aat-local` dipilih.
+K9s selalu memilih `aat-local` secara eksplisit. Kubeconfig tujuan dan backup
+`~/.kube/config.before-aat-local` disimpan dengan permission 0600.
+Jalankan ulang `task context` setelah kubeconfig lab berubah atau cluster dibuat
+ulang. Gunakan `KUBE_CONTEXT_FILE` atau `KUBE_CONTEXT_NAME` bila ingin lokasi/nama
+lain. Perintah membutuhkan kubectl/Python; K9s dan virt-manager harus terpasang
+untuk UI masing-masing. `task up` tetap menggunakan `.state/kubeconfig` milik lab.
 
 `task up` menunggu Traefik dan Gateway siap, lalu menjalankan listener `.localhost`
 di background. Terminal boleh ditutup; listener tetap hidup sampai dihentikan,

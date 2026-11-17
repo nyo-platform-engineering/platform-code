@@ -18,6 +18,15 @@ tasks:
     desc: Show the admin password (APP=grafana or argocd)
     cmds:
       - 'bash scripts/password/main.sh "{{.APP | default "grafana"}}"'
+  context:
+    desc: Register the VM cluster as aat-local in your kubeconfig
+    cmds: [bash scripts/context/main.sh]
+  k9s:
+    desc: Open K9s on aat-local across all namespaces
+    cmds: [bash scripts/k9s/main.sh]
+  vm:manager:
+    desc: Open Virtual Machine Manager on the system libvirt connection
+    cmds: [bash scripts/vm/main.sh manager]
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
     cmds: [bash scripts/tester/main.sh install]
