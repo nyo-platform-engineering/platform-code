@@ -23,7 +23,12 @@ Vagrant.configure("2") do |config|
           provider.cpu_model = "qemu64"
         end
         provider.cpus = ENV.fetch("AAT_VM_CPUS", "2").to_i
-        provider.memory = ENV.fetch(index == 0 ? "AAT_CONTROL_MEMORY" : "AAT_WORKER_MEMORY", index == 0 ? "6144" : "4096").to_i
+        # RAM is in MiB: 4 GiB for the control plane, 2 GiB for each worker.
+        if index == 0
+          provider.memory = ENV.fetch("AAT_CONTROL_MEMORY", "4096").to_i
+        else
+          provider.memory = ENV.fetch("AAT_WORKER_MEMORY", "2048").to_i
+        end
         provider.default_prefix = "aat-m2"
       end
       node.vm.provision "file", source: token, destination: "/tmp/aat-k3s-token"
