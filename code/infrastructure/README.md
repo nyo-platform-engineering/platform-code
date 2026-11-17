@@ -30,6 +30,8 @@ Satu control plane berarti API dan scheduler belum memiliki redundansi. Storage 
 
 Controller NetworkPolicy bawaan k3s tetap aktif. Traefik dan ServiceLB bawaan dinonaktifkan; Argo CD memasang Traefik terpisah dengan Gateway API. Akses dari host memakai tunnel loopback ke gateway atau NodePort. Loki, Tempo, dan Mimir memakai volume lokal dengan retensi 72 jam; Grafana memakai PVC 1 GiB.
 
+Request CPU platform memakai `1,4 × rata-rata teramati`, sedangkan memory memakai `1,4 × peak teramati`, dibulatkan ke atas ke millicore dan Mi. Angka request ditulis langsung di masing-masing `values.yaml` yang dipakai Argo CD. CPU memakai rata-rata seluruh sampel rate satu menit yang tersedia dalam jendela enam jam, dievaluasi setiap 30 detik dan dibobot berdasarkan jumlah sampel antar-replika serta container lama; memory memakai nilai terbesar antara high-water container saat ini dan histori working set. Histori belum mencakup seluruh startup sebelum collector aktif, sehingga angka ini perlu diukur ulang setelah startup dan beban yang representatif. Pengukuran dilakukan pada 17 November 2026; cakupan CPU mengikuti histori yang tersedia dalam jendela tersebut; request tidak berubah otomatis. Memory limit tetap menyediakan ruang lonjakan; resource AAT tetap mengikuti ketentuan tugas.
+
 ## Setup
 
 Prasyarat: Linux x86_64, akses `/dev/kvm`, QEMU/libvirt, Vagrant dengan plugin `vagrant-libvirt`, Bash, Python 3, Task, kubectl, dan Helm. Docker diperlukan untuk pemeriksaan container opsional. Pengujian konfigurasi memakai PyYAML (`python3-yaml` pada Ubuntu).

@@ -27,7 +27,8 @@ httpRoute:
           port: 9280
           weight: 1
 resources:
-  requests:
-    memory: 128Mi
+  # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+  requests: {cpu: 3m, memory: 86Mi}
   limits:
+    cpu: 500m
     memory: 256Mi

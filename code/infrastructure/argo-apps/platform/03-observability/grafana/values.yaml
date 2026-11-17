@@ -5,8 +5,8 @@ image:
   tag: 12.3.2
 adminUser: admin
 resources:
-  requests:
-    memory: 128Mi
+  # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+  requests: {cpu: 4m, memory: 234Mi}
   limits:
     memory: 256Mi
 dashboardProviders:
