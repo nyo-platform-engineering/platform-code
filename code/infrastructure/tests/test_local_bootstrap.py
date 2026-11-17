@@ -29,7 +29,8 @@ with open(os.environ["CALL_LOG"], "a") as log:
     log.write("gateway " + " ".join(sys.argv[1:]) + "\\n")
 ''')
         # Startup must use the numbered step, never this legacy entry point.
-        (root / "scripts/vm.sh").write_text('exit 99\n')
+        (root / "scripts/vm").mkdir()
+        (root / "scripts/vm/main.sh").write_text('exit 99\n')
         (root / "bin/vagrant").write_text('''#!/bin/sh
 printf 'vagrant %s\\n' "$*" >> "$CALL_LOG"
 if [ "${VAGRANT_FAIL:-}" = 1 ]; then exit 1; fi
@@ -247,11 +248,11 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
     def test_vm_shutdown_stops_the_gateway(self):
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
-            shutil.copy(ROOT / "scripts/vm.sh", root / "scripts/vm.sh")
-            subprocess.run(["bash", str(root / "scripts/vm.sh"), "halt"], env=env, check=True, capture_output=True)
+            shutil.copy(ROOT / "scripts/vm/main.sh", root / "scripts/vm/main.sh")
+            subprocess.run(["bash", str(root / "scripts/vm/main.sh"), "halt"], env=env, check=True, capture_output=True)
             self.assertEqual((root / "calls").read_text().splitlines(), ["gateway stop", "vagrant halt"])
             (root / "calls").unlink()
-            subprocess.run(["bash", str(root / "scripts/vm.sh"), "destroy"], env=env, check=True, capture_output=True)
+            subprocess.run(["bash", str(root / "scripts/vm/main.sh"), "destroy"], env=env, check=True, capture_output=True)
             self.assertEqual((root / "calls").read_text().splitlines(), ["vagrant destroy", "gateway stop"])
 
 

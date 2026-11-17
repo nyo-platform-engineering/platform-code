@@ -31,8 +31,10 @@ tasks:
     cmds:
       - 'bash scripts/tester/main.sh practice "{{.SCENARIO}}"'
   down:
+    aliases: [vm:down, vm:halt]
     desc: Shut down the lab VMs while retaining their disks
-    cmds: [bash scripts/down/main.sh]
+    cmds: [bash scripts/vm/main.sh halt]
   destroy:
+    aliases: [vm:destroy]
     desc: Delete the lab VMs and their disks (Vagrant asks for confirmation)
-    cmds: [bash scripts/destroy/main.sh]
+    cmds: [bash scripts/vm/main.sh destroy]

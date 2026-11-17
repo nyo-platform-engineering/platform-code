@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Manage Vagrant guests and export a kubeconfig for this lab only.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 root="$PWD"
 state="$root/.state"
 vm() {
@@ -45,6 +45,6 @@ case "${1:-help}" in
     fi
     ;;
   *)
-    echo 'Usage: vm.sh doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker [worker]'
+    echo 'Usage: scripts/vm/main.sh doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker [worker]'
     ;;
 esac

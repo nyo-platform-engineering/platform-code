@@ -52,8 +52,8 @@ Taskfile memanggil entry point `main.sh` pada folder masing-masing:
 | `links` | `scripts/links/main.sh` |
 | `password` | `scripts/password/main.sh` |
 | `tester:*` | `scripts/tester/main.sh` dengan aksi install/list/practice |
-| `down` | `scripts/down/main.sh` |
-| `destroy` | `scripts/destroy/main.sh` |
+| `down` (alias `vm:down`, `vm:halt`) | `scripts/vm/main.sh halt` |
+| `destroy` (alias `vm:destroy`) | `scripts/vm/main.sh destroy` |
 
 Startup dikoordinasikan oleh `scripts/up/main.sh`, dengan langkah terpisah di
 `scripts/up/`:
@@ -74,7 +74,7 @@ atau mengubah guest.
 `common.sh` menyediakan environment, kubeconfig, dan helper bersama. Helper Python
 untuk topologi dan kredensial (`topology.py` dan `runtime.py`) juga berada di
 `scripts/up/`. Script startup tidak memanggil script di luar direktori tersebut;
-`scripts/vm.sh` menyediakan perintah operasi VM dan meneruskan startup ke `1-vms.sh`.
+`scripts/vm/main.sh` menyediakan perintah operasi VM dan meneruskan startup ke `1-vms.sh`.
 `task up` menjalankan langkah 1–4. Untuk diagnosis, setiap langkah dapat
 dipanggil langsung dengan `bash`; nomor menunjukkan urutan tanggung jawab,
 bukan glob eksekusi.
