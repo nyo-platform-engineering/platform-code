@@ -111,7 +111,7 @@ def start(port, host, node_port):
     current = running_gateway()
     if current:
         if (current["port"], current["host"], current["node_port"]) != (port, host, node_port):
-            raise ValueError("A gateway with different settings is running. Run task vm:halt before changing gateway settings.")
+            raise ValueError("A gateway with different settings is running. Run task down before changing gateway settings.")
         print(f"Gateway already running on port {port} (PID {current['pid']}).")
         return
 
@@ -147,7 +147,7 @@ def start(port, host, node_port):
             if not ready.select(timeout=10) or pipe.read(5) != b"ready":
                 os.kill(pid, signal.SIGTERM)
                 raise RuntimeError(f"Gateway failed to start. See {LOG_FILE}.")
-    print(f"Gateway started on port {port} (PID {pid}). Stop with task vm:halt.")
+    print(f"Gateway started on port {port} (PID {pid}). Stop with task down.")
 
 
 def stop():

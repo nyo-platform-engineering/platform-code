@@ -1,91 +1,38 @@
 version: '3'
 silent: true
-includes:
-  local:
-    taskfile: Taskfile.local.yml
-    optional: true
 tasks:
-  default:
-    cmds: [task --list]
   doctor:
     desc: Check VM startup tools and libvirt/KVM prerequisites
-    cmds: [bash scripts/bootstrap.sh doctor]
+    cmds: [bash scripts/doctor/main.sh]
   up:
     desc: Start three local VMs and deploy AAT plus LGTM
     cmds:
-      - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/bootstrap.sh up {{.CLI_ARGS}}'
-  deploy:
-    desc: Bootstrap Argo CD and register root.yaml on the explicit VM cluster
-    cmds:
-      - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/bootstrap.sh deploy'
-  prepare:
-    desc: Prepare namespaces and runtime Secrets before Argo CD sync
-    cmds: [bash scripts/bootstrap.sh prepare]
-  check:
-    desc: Run offline render, resource, isolation, bootstrap, and secret tests
-    vars:
-      PYTHON: '{{.PYTHON | default "/usr/bin/python3"}}'
-    cmds:
-      - '{{.PYTHON}} -m unittest discover -s tests -p "test_local_*.py" -v'
-      - for script in scripts/bootstrap.sh scripts/vm.sh scripts/up/*.sh local/provision-node.sh; do bash -n "$script" || exit; done
-  images:
-    desc: Pull all seven reused image digests into the local Docker engine
-    cmds: [bash scripts/bootstrap.sh images]
-  check:containers:
-    desc: Render registered platform charts and validate LGTM with temporary containers
-    vars:
-      PYTHON: '{{.PYTHON | default "/usr/bin/python3"}}'
-    cmds: ['{{.PYTHON}} scripts/check-lgtm.py']
+      - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/up/main.sh {{.CLI_ARGS}}'
   status:
     desc: Show nodes, AAT workloads, and LGTM health
-    cmds: [bash scripts/bootstrap.sh status]
+    cmds: [bash scripts/status/main.sh]
   links:
     desc: Show local VM service URLs
-    cmds: [bash scripts/bootstrap.sh links]
+    cmds: [bash scripts/links/main.sh]
   password:
     desc: Show the admin password (APP=grafana or argocd)
     cmds:
-      - 'bash scripts/bootstrap.sh password "{{.APP | default "grafana"}}"'
-  argocd:ui:
-    desc: Open a localhost tunnel to Argo CD on port 8088
-    cmds: [bash scripts/bootstrap.sh argocd-ui]
-  logs:
-    desc: Follow one AAT service (APP=aggregator by default)
-    cmds:
-      - 'bash scripts/bootstrap.sh logs "{{.APP | default "aggregator"}}"'
-  scale:
-    desc: Manually scale Aggregator during P2 (REPLICAS=2..5)
-    requires:
-      vars: [REPLICAS]
-    cmds:
-      - 'bash scripts/bootstrap.sh scale "{{.REPLICAS}}"'
+      - 'bash scripts/password/main.sh "{{.APP | default "grafana"}}"'
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
-    cmds: [bash scripts/bootstrap.sh tester-install]
+    cmds: [bash scripts/tester/main.sh install]
   tester:list:
     desc: List available Tester Agent scenarios
-    cmds: [bash scripts/bootstrap.sh tester-list]
+    cmds: [bash scripts/tester/main.sh list]
   tester:practice:
     desc: Run a chosen practice disruption (SCENARIO=name)
     requires:
       vars: [SCENARIO]
     cmds:
-      - 'bash scripts/bootstrap.sh tester-practice "{{.SCENARIO}}"'
-  vm:status:
-    desc: Show Vagrant guest status
-    cmds: [bash scripts/vm.sh status]
-  vm:halt:
+      - 'bash scripts/tester/main.sh practice "{{.SCENARIO}}"'
+  down:
     desc: Shut down the lab VMs while retaining their disks
-    cmds: [bash scripts/vm.sh halt]
-  vm:suspend-worker:
-    desc: Freeze a selected worker for testing (NODE=aat-worker-1 by default)
-    cmds:
-      - 'bash scripts/vm.sh suspend-worker "{{.NODE | default "aat-worker-1"}}"'
-  vm:resume-worker:
-    desc: Resume the selected frozen worker
-    cmds:
-      - 'bash scripts/vm.sh resume-worker "{{.NODE | default "aat-worker-1"}}"'
-  vm:destroy:
-    aliases: [destroy]
+    cmds: [bash scripts/down/main.sh]
+  destroy:
     desc: Delete the lab VMs and their disks (Vagrant asks for confirmation)
-    cmds: [bash scripts/vm.sh destroy]
+    cmds: [bash scripts/destroy/main.sh]

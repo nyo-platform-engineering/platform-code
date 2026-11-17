@@ -15,8 +15,8 @@ class BootstrapTests(unittest.TestCase):
         (root / "scripts").mkdir()
         (root / ".state").mkdir()
         (root / "bin").mkdir()
-        shutil.copy(ROOT / "scripts/bootstrap.sh", root / "scripts/bootstrap.sh")
         shutil.copytree(ROOT / "scripts/up", root / "scripts/up")
+        shutil.copytree(ROOT / "scripts/doctor", root / "scripts/doctor")
         (root / "local").mkdir()
         argo = root / "argo-apps/platform/01-cd/argocd"
         argo.mkdir(parents=True)
@@ -68,10 +68,18 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
         env["GATEWAY_PORT"] = "8080"
         return root, env
 
+    def deploy(self, root, env, check=False):
+        # Exercise the real numbered scripts against the selected existing cluster.
+        return subprocess.run(
+            ["bash", "-c", "set -e; bash scripts/up/2-cluster.sh; "
+             "bash scripts/up/3-argocd.sh; bash scripts/up/4-apps.sh"],
+            cwd=root, env=env, check=check, capture_output=True, text=True,
+        )
+
     def test_deploy_seeds_argocd_then_applies_only_the_root(self):
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
-            subprocess.run(["bash", str(root / "scripts/bootstrap.sh"), "deploy"], env=env, check=True, capture_output=True)
+            self.deploy(root, env, check=True)
             calls = (root / "calls").read_text().splitlines()
             helm = [line for line in calls if line.startswith("helm ")]
             self.assertEqual(len(helm), 1)
@@ -86,7 +94,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
             env["ARGOCD_EXISTS"] = "1"
-            subprocess.run(["bash", str(root / "scripts/bootstrap.sh"), "deploy"], env=env, check=True, capture_output=True)
+            self.deploy(root, env, check=True)
             calls = (root / "calls").read_text()
             self.assertNotIn("helm ", calls)
             self.assertIn("apply -f argo-apps/root.yaml", calls)
@@ -95,7 +103,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
             env["ARGOCD_LOOKUP_FAIL"] = "1"
-            result = subprocess.run(["bash", str(root / "scripts/bootstrap.sh"), "deploy"], env=env, capture_output=True)
+            result = self.deploy(root, env)
             self.assertNotEqual(result.returncode, 0)
             calls = (root / "calls").read_text()
             self.assertNotIn("helm ", calls)
@@ -104,7 +112,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
     def test_up_targets_its_own_lab_even_with_external_kubeconfig(self):
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
-            subprocess.run(["bash", str(root / "scripts/bootstrap.sh"), "up"], env=env, check=True, capture_output=True)
+            subprocess.run(["bash", str(root / "scripts/up/main.sh")], env=env, check=True, capture_output=True)
             calls = (root / "calls").read_text()
             control = calls.index("vagrant up aat-control --provider=libvirt")
             workers = calls.index("vagrant up aat-worker-1 aat-worker-2 --provider=libvirt --no-parallel")
@@ -119,7 +127,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
             root, env = self.make_lab(folder)
             for option in ("--vm=false", "--vm=true", "unexpected"):
                 result = subprocess.run(
-                    ["bash", str(root / "scripts/bootstrap.sh"), "up", option],
+                    ["bash", str(root / "scripts/up/main.sh"), option],
                     env=env, capture_output=True,
                 )
                 self.assertEqual(result.returncode, 2)
@@ -129,7 +137,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
             subprocess.run(
-                ["bash", str(root / "scripts/bootstrap.sh"), "doctor"],
+                ["bash", str(root / "scripts/doctor/main.sh")],
                 env=env, check=True, capture_output=True,
             )
             self.assertEqual((root / "calls").read_text().splitlines(), ["vagrant plugin list"])
@@ -167,7 +175,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
             env["CONTAINER_CLUSTER"] = "1"
-            result = subprocess.run(["bash", str(root / "scripts/bootstrap.sh"), "deploy"], env=env, capture_output=True, text=True)
+            result = self.deploy(root, env)
             self.assertNotEqual(result.returncode, 0)
             calls = (root / "calls").read_text()
             self.assertNotIn("helm ", calls)
@@ -177,7 +185,7 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
             (root / "external.yaml").unlink()
-            result = subprocess.run(["bash", str(root / "scripts/bootstrap.sh"), "deploy"], env=env, capture_output=True, text=True)
+            result = self.deploy(root, env)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse((root / "calls").exists())
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared environment and helpers for bootstrap.sh and numbered startup steps.
+# Shared environment and helpers for operational scripts and startup steps.
 # Resolve relative paths from infrastructure/, regardless of the caller's directory.
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 root="$PWD"
@@ -34,5 +34,5 @@ links() {
   printf 'Client: http://%s:30080\n' "$address"
   printf 'Auth: http://%s:30084\n' "$address"
   printf 'Grafana: http://%s:30300 (admin / task password)\n' "$address"
-  printf 'Argo CD: task argocd:ui (admin / task password APP=argocd)\n'
+  printf 'Argo CD: http://argocd.localhost%s (admin / task password APP=argocd)\n' "$suffix"
 }

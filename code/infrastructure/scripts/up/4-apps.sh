@@ -99,7 +99,7 @@ start_gateway_listener
 
 show_gateway_links() {
   GATEWAY_PORT="$port" links
-  echo 'Gateway runs in the background. Stop with task vm:halt.'
+  echo 'Gateway runs in the background. Stop with task down.'
   echo 'Logs: .state/gateway.log'
 }
 show_gateway_links
