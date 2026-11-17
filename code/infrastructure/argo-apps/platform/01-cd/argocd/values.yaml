@@ -15,7 +15,8 @@ configs:
 server:
   replicas: 1
   resources:
-    requests: {memory: 128Mi}
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 1m, memory: 66Mi}
     limits: {memory: 256Mi}
   ingress:
     enabled: false
@@ -23,7 +24,8 @@ controller:
   replicas: 1
   # Cluster discovery/cache exceeded the previous 256Mi limit during startup.
   resources:
-    requests: {memory: 512Mi}
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 11m, memory: 331Mi}
     limits: {memory: 1Gi}
   metrics:
     enabled: true
@@ -31,7 +33,8 @@ repoServer:
   replicas: 1
   # Helm/Git child processes need burst headroom beyond the server's idle usage.
   resources:
-    requests: {memory: 256Mi}
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 4m, memory: 283Mi}
     limits: {memory: 1Gi}
 dex:
   enabled: false
@@ -40,13 +43,15 @@ notifications:
 applicationSet:
   replicas: 1
   resources:
-    requests: {memory: 128Mi}
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 1m, memory: 51Mi}
     limits: {memory: 256Mi}
   readinessProbe:
     enabled: true
 redis:
   resources:
-    requests: {memory: 128Mi}
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 4m, memory: 18Mi}
     limits: {memory: 256Mi}
   readinessProbe:
     enabled: true

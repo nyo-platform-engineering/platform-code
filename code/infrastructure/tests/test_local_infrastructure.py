@@ -209,7 +209,7 @@ class WorkloadTests(unittest.TestCase):
         self.assertTrue(any("p95" in p["title"] for p in dashboard["panels"]))
         pod = next(d for d in self.monitoring if d["kind"] == "Deployment")["spec"]["template"]
         self.assertEqual(pod["metadata"]["labels"]["role"], "store")
-        self.assertEqual(pod["spec"]["containers"][0]["resources"], {"requests": {"memory": "512Mi"}, "limits": {"memory": "1Gi"}})
+        self.assertEqual(pod["spec"]["containers"][0]["resources"], {"requests": {"cpu": "5m", "memory": "61Mi"}, "limits": {"memory": "1Gi"}})
 
     def test_no_gitlab_vps_or_policy_blocks_in_local_render(self):
         documents = self.dependencies + self.monitoring + sum(self.services.values(), [])

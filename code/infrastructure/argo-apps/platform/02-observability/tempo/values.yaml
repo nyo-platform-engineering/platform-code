@@ -9,8 +9,8 @@ replicas: 1
 tempo:
   tag: 2.9.0
   resources:
-    requests:
-      memory: 512Mi
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 3m, memory: 37Mi}
     limits:
       memory: 1Gi
   memBallastSizeMbs: 0

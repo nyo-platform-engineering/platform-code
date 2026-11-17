@@ -11,8 +11,8 @@ image:
 command:
   name: otelcol-contrib
 resources:
-  requests:
-    memory: 128Mi
+  # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+  requests: {cpu: 10m, memory: 95Mi}
   limits:
     memory: 256Mi
 ports:

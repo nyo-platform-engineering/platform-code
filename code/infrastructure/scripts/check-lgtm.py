@@ -63,25 +63,33 @@ def render_configs(folder, chart_cache=None):
         else:
             command.append(str(ROOT.parents[1] / source["path"]))
         command.extend(["-n", "monitoring"])
+        # Read resource expectations directly from the values used by this app.
+        values = {}
+        if "path" in source:
+            values = yaml.safe_load((ROOT.parents[1] / source["path"] / "values.yaml").read_text())
         for value in helm.get("valueFiles", []):
-            command.extend(["-f", str(ROOT.parents[1] / value.removeprefix("$values/"))])
+            value_path = ROOT.parents[1] / value.removeprefix("$values/")
+            command.extend(["-f", str(value_path)])
+            values.update(yaml.safe_load(value_path.read_text()))
+        name = app["metadata"]["name"]
+        resource_path = {"loki": ("singleBinary", "resources"),
+                         "tempo": ("tempo", "resources")}.get(name, ("resources",))
+        expected = values
+        for key in resource_path:
+            expected = expected[key]
         documents = [d for d in yaml.safe_load_all(run(*command).stdout) if d]
         for doc in documents:
             if doc["kind"] not in ("Deployment", "StatefulSet", "DaemonSet"):
                 continue
             pod = doc["spec"]["template"]
-            role = pod["metadata"]["labels"]["role"]
-            expected = {"requests": {"memory": "512Mi" if role == "store" else "128Mi"},
-                        "limits": {"memory": "1Gi" if role == "store" else "256Mi"}}
             for container in pod["spec"]["containers"]:
                 if container.get("resources") != expected:
-                    raise ValueError(f"Unexpected memory class for {doc['metadata']['name']}")
-        name = app["metadata"]["name"]
+                    raise ValueError(f"Rendered resources differ from app values for {doc['metadata']['name']}")
         if name in configs:
             configmap, key, filename = configs[name]
             config = next(d["data"][key] for d in documents if d["kind"] == "ConfigMap" and d["metadata"]["name"] == configmap)
             (folder / filename).write_text(config)
-        print(f"PASS: {name} upstream/local chart render and memory class", flush=True)
+        print(f"PASS: {name} upstream/local chart render and configured resources", flush=True)
 
 
 def main():

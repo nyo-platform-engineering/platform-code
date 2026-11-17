@@ -1,8 +1,8 @@
 image: grafana/mimir:2.17.4
 storage: 5Gi
 resources:
-  requests:
-    memory: 512Mi
+  # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+  requests: {cpu: 5m, memory: 61Mi}
   limits:
     memory: 1Gi
 nodeSelector:

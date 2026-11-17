@@ -30,8 +30,8 @@ loki:
 singleBinary:
   replicas: 1
   resources:
-    requests:
-      memory: 512Mi
+    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+    requests: {cpu: 6m, memory: 250Mi}
     limits:
       memory: 1Gi
   persistence:
