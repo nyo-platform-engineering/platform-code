@@ -1,4 +1,13 @@
 .env
+# Credentials must not enter a Docker build context, including service subfolders.
+.env.*
+**/.env
+**/.env.*
+**/.kube
+**/.aws
+**/.ssh
+**/*.key
+**/*.pem
 .git
 *.md
 tests
