@@ -40,16 +40,18 @@ func TestOwnedPollPreservesStorageAndTracing(t *testing.T) {
 	if err := p.Poll(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	var poll, ingest sdktrace.ReadOnlySpan
+	var poll, expand, ingest sdktrace.ReadOnlySpan
 	for _, span := range recorder.Ended() {
 		switch span.Name() {
 		case "poll PVMBG":
 			poll = span
 		case "ingest PVMBG":
 			ingest = span
+		case "inbox expand PVMBG":
+			expand = span
 		}
 	}
-	if poll == nil || ingest == nil || ingest.Parent().SpanID() != poll.SpanContext().SpanID() {
+	if poll == nil || expand == nil || ingest == nil || expand.Parent().SpanID() != poll.SpanContext().SpanID() || ingest.Parent().SpanID() != expand.SpanContext().SpanID() {
 		t.Fatal("poll and ingestion trace disconnected")
 	}
 	queryTraced := false

@@ -19,15 +19,20 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 
 	mux.GET("/health", ctrl.Health)
 	private.GET("/internal/hazards", ctrl.Hazards)
+	private.GET("/internal/analytics", ctrl.Analytics)
 	private.GET("/internal/source-status", ctrl.SourceStatus)
 	private.GET("/internal/satellite/stats", ctrl.SatelliteStatsHandler)
 	private.POST("/internal/ingest/bmkg", ctrl.Ingest("BMKG"))
 	private.POST("/internal/ingest/pvmbg", ctrl.Ingest("PVMBG"))
+	private.GET("/internal/ops/unprocessed", ctrl.AuditUnprocessed)
+	private.GET("/internal/ops/unprocessed/:message_id", ctrl.InboxDetail)
+	private.POST("/internal/ops/unprocessed/:message_id/replay", ctrl.InboxReplay)
 
 	audit := mux.Group("/internal/audit", controller.AuditAuth(auditToken))
 	audit.GET("/events", ctrl.AuditEvents)
 	audit.GET("/checksum", ctrl.AuditChecksum)
 	audit.GET("/location", ctrl.AuditLocation)
+	audit.GET("/unprocessed", ctrl.AuditUnprocessed)
 
 	return mux
 }

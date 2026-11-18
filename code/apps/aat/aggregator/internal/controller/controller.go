@@ -14,7 +14,8 @@ type Controller struct {
 	DB    *gorm.DB
 	Store storage.Reader
 	// Set only when DB uses the owner's connection.
-	PollOwner *model.PollOwner
+	PollOwner     *model.PollOwner
+	AcceptPVMBGV2 bool
 	// SatelliteLateness overrides DefaultSatelliteLateness when positive.
 	SatelliteLateness time.Duration
 }

@@ -2,16 +2,16 @@
 fullnameOverride: aggregator
 replicaCount: 3
 containerPorts:
-- name: http
-  containerPort: 8083
-  protocol: TCP
+  - name: http
+    containerPort: 8083
+    protocol: TCP
 service:
   enabled: true
   ports:
-  - name: http
-    port: 8083
-    targetPort: http
-    protocol: TCP
+    - name: http
+      port: 8083
+      targetPort: http
+      protocol: TCP
   type: ClusterIP
 readinessProbe:
   httpGet:
@@ -33,29 +33,29 @@ securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
-    - ALL
+      - ALL
   readOnlyRootFilesystem: true
 resources:
   requests:
     cpu: 100m
     memory: 256Mi
   limits:
-    cpu: '1'
+    cpu: "1"
     memory: 512Mi
 image:
   repository: ghcr.io/yonatan-nyo/aat-apps/aggregator
 volumes:
-- name: tmp
-  emptyDir: {}
-- name: citus
-  configMap:
-    name: aat-citus
+  - name: tmp
+    emptyDir: {}
+  - name: citus
+    configMap:
+      name: aat-citus
 volumeMounts:
-- name: tmp
-  mountPath: /tmp
-- name: citus
-  mountPath: /etc/citus
-  readOnly: true
+  - name: tmp
+    mountPath: /tmp
+  - name: citus
+    mountPath: /etc/citus
+    readOnly: true
 autoscaling:
   enabled: false
   minReplicas: 3
@@ -69,60 +69,61 @@ config:
   BMKG_URL: http://bmkg:8081
   PVMBG_URL: http://pvmbg:8082
   NATS_URL: nats://nats:4222
-  DB_MAX_CONNS: '5'
-  POLL_INTERVAL_SECONDS: '3'
-  POLL_TIMEOUT_MS: '4000'
+  DB_MAX_CONNS: "5"
+  POLL_INTERVAL_SECONDS: "3"
+  POLL_TIMEOUT_MS: "4000"
+  PVMBG_SCHEMA_POLICY: strict
   SATELLITE_FEED_URL: https://satellite.naufarrel.dev
-  SATELLITE_ALLOWED_LATENESS_MINUTES: '360'
-  SATELLITE_BATCH_SIZE: '200'
+  SATELLITE_ALLOWED_LATENESS_MINUTES: "360"
+  SATELLITE_BATCH_SIZE: "200"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-cluster.monitoring.svc.cluster.local:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_SERVICE_NAME: aggregator
   OTEL_RESOURCE_ATTRIBUTES: service.namespace=sistem-informasi-kebencanaan-bnpb
 env:
-- name: AUDIT_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: aat-runtime
-      key: AUDIT_TOKEN
-- name: DATABASE_URL
-  valueFrom:
-    secretKeyRef:
-      name: aat-runtime
-      key: DATABASE_URL
-- name: AGGREGATOR_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: aat-runtime
-      key: AGGREGATOR_TOKEN
-- name: BMKG_API_KEY
-  valueFrom:
-    secretKeyRef:
-      name: aat-runtime
-      key: BMKG_API_KEY
-- name: PVMBG_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: aat-runtime
-      key: PVMBG_TOKEN
-# Token grup Feed Satelit dari asisten; tambahkan ke .env.runtime lalu jalankan task up.
-# Tanpa key ini consumer satelit tidak berjalan dan service lain tetap normal.
-- name: SATELLITE_GROUP_TOKEN
-  valueFrom:
-    secretKeyRef:
-      name: aat-runtime
-      key: SATELLITE_GROUP_TOKEN
-      optional: true
+  - name: AUDIT_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: aat-runtime
+        key: AUDIT_TOKEN
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: aat-runtime
+        key: DATABASE_URL
+  - name: AGGREGATOR_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: aat-runtime
+        key: AGGREGATOR_TOKEN
+  - name: BMKG_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: aat-runtime
+        key: BMKG_API_KEY
+  - name: PVMBG_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: aat-runtime
+        key: PVMBG_TOKEN
+  # Token grup Feed Satelit dari asisten; tambahkan ke .env.runtime lalu jalankan task up.
+  # Tanpa key ini consumer satelit tidak berjalan dan service lain tetap normal.
+  - name: SATELLITE_GROUP_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: aat-runtime
+        key: SATELLITE_GROUP_TOKEN
+        optional: true
 strategy:
   type: RollingUpdate
   rollingUpdate:
     maxUnavailable: 0
     maxSurge: 1
 topologySpreadConstraints:
-- maxSkew: 1
-  topologyKey: kubernetes.io/hostname
-  whenUnsatisfiable: DoNotSchedule
-  nodeTaintsPolicy: Honor
-  labelSelector:
-    matchLabels:
-      app.kubernetes.io/instance: aggregator
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    nodeTaintsPolicy: Honor
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: aggregator

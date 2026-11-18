@@ -26,6 +26,8 @@ func Handler(config Config) (http.Handler, error) {
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	u := upstream{config: config, http: &client}
 	router := httpkit.Router()
+	registerDashboard(router)
+	registerAnalytics(router, u)
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	router.GET("/hazards", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
@@ -105,6 +107,9 @@ func Handler(config Config) (http.Handler, error) {
 		}
 		c.JSON(200, gin.H{"items": items, "next_after": page.Next, "next_cursor": page.Cursor, "sources": statuses, "partial": page.Partial, "unavailable_units": units})
 	})
+	router.GET("/ops/unprocessed", u.ops)
+	router.GET("/ops/unprocessed/:message_id", u.ops)
+	router.POST("/ops/unprocessed/:message_id/replay", u.ops)
 	return httpkit.Limit(config.MaxConcurrent, router), nil
 }
 

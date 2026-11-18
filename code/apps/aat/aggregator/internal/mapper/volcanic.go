@@ -44,7 +44,14 @@ var volcanoes = map[string]struct {
 }
 
 func Volcanic(r model.Record) (model.HazardEvent, error) {
-	input, err := readVolcanic(r)
+	return volcanic(r, false)
+}
+
+func volcanic(r model.Record, optionalCount bool) (model.HazardEvent, error) {
+	if err := validateVolcanicFields(r, optionalCount); err != nil {
+		return model.HazardEvent{}, err
+	}
+	input, err := decodeRecord[volcanicInput](r)
 	if err != nil {
 		return model.HazardEvent{}, err
 	}
@@ -82,16 +89,24 @@ func readVolcanic(r model.Record) (volcanicInput, error) {
 }
 
 func validateVolcanic(r model.Record) error {
+	return validateVolcanicFields(r, false)
+}
+
+func validateVolcanicFields(r model.Record, optionalCount bool) error {
 	err := validateFields(r,
 		requiredString("report_id"),
 		requiredField[time.Time]("reported_at"),
 		validateVolcanoID,
 		validateAlertLevel,
-		validateEruptionCount,
 		boundedNumber("ash_column_height_m", 0, math.MaxFloat64),
 	)
 	if err != nil {
 		return err
+	}
+	if _, present := r["eruption_count_24h"]; present || !optionalCount {
+		if err := validateEruptionCount(r); err != nil {
+			return err
+		}
 	}
 	if _, present := r["confidence_level"]; present {
 		return boundedNumber("confidence_level", 0, 1)(r)

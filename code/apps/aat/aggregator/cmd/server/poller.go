@@ -126,6 +126,9 @@ func (p sourcePoller) Poll(ctx context.Context) (err error) {
 	if err := p.ctrl.ValidatePollOwner(ctx, p.source); err != nil {
 		return err
 	}
+	if _, err := p.ctrl.ProcessInbox(ctx, p.source, 100); err != nil {
+		return err
+	}
 	state, err := p.ctrl.GetPollState(ctx, p.source)
 	if err != nil {
 		slog.Error("poll state unavailable", "source", p.source, "error", err)
@@ -136,35 +139,33 @@ func (p sourcePoller) Poll(ctx context.Context) (err error) {
 	callerTime := time.Now().UTC()
 	since := state.FetchCursor
 
-	batch := make(map[string][]model.Record, len(p.endpoints))
+	payloads := make([]controller.RawPayload, 0, len(p.endpoints))
 	for _, endpoint := range p.endpoints {
 		if err := p.ctrl.ValidatePollOwner(ctx, p.source); err != nil {
 			return err
 		}
-		records, err := p.fetch(ctx, endpoint.path, since, correlationID)
+		raw, err := p.fetchRaw(ctx, endpoint.path, since, correlationID)
 		if err != nil {
 			p.markFailure(ctx, callerTime, err)
 			return err
 		}
-		batch[endpoint.key] = records
+		payloads = append(payloads, controller.RawPayload{BatchKey: endpoint.key, Raw: raw})
 	}
 
-	cursor, err := sourceCursor(p.source, batch, since)
-	if err != nil {
+	if err := p.ctrl.CaptureRawPoll(ctx, p.source, payloads); err != nil {
 		p.markFailure(ctx, callerTime, err)
 		return err
 	}
-	changedEvents, err := p.ctrl.IngestPollBatch(ctx, p.source, batch, cursor)
+	changed, err := p.ctrl.ProcessInbox(ctx, p.source, 100)
 	if err != nil {
-		p.markFailure(ctx, callerTime, fmt.Errorf("ingest: %w", err))
 		return err
 	}
-	span.SetAttributes(attribute.Int("aat.ingest.changed_events", len(changedEvents)))
+	span.SetAttributes(attribute.Int("aat.ingest.changed_events", changed))
 	slog.Info("poll succeeded",
 		"source", p.source,
 		"trace_id", telemetry.TraceID(ctx),
 		"correlation_id", correlationID,
-		"changed", len(changedEvents),
+		"changed", changed,
 		"epoch", p.ctrl.PollOwner.Epoch,
 	)
 	return nil
@@ -196,7 +197,7 @@ func sourceCursor(source string, batch map[string][]model.Record, previous *time
 	return latest, nil
 }
 
-func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, correlationID string) ([]model.Record, error) {
+func (p sourcePoller) fetchRaw(ctx context.Context, path string, since *time.Time, correlationID string) ([]byte, error) {
 	requestURL, err := url.Parse(p.baseURL + path)
 	if err != nil {
 		return nil, err
@@ -247,21 +248,21 @@ func (p sourcePoller) fetch(ctx context.Context, path string, since *time.Time, 
 		return nil, fmt.Errorf("%s returned %s", path, response.Status)
 	}
 
-	// Limit each response to 2 MiB before decoding the source records.
-	const maxResponseBytes = 2 << 20
-	var records []model.Record
-	decoder := json.NewDecoder(io.LimitReader(response.Body, maxResponseBytes))
-	if err := decoder.Decode(&records); err != nil {
-		return nil, fmt.Errorf("decode %s: %w", path, err)
+	raw, err := io.ReadAll(io.LimitReader(response.Body, controller.MaxCaptureBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > controller.MaxCaptureBytes {
+		return nil, fmt.Errorf("source response exceeds capture limit")
 	}
 	slog.Info("poll request",
 		"source", p.source,
 		"path", path,
 		"correlation_id", correlationID,
 		"latency_ms", latency.Milliseconds(),
-		"records", len(records),
+		"bytes", len(raw),
 	)
-	return records, nil
+	return raw, nil
 }
 
 func (p sourcePoller) markFailure(ctx context.Context, callerTime time.Time, err error) {

@@ -39,7 +39,11 @@ func TestSourcePollerFetchCredentialsAndCursor(t *testing.T) {
 			}))
 			defer upstream.Close()
 			poller := newSourcePoller(source.name, upstream.URL, source.header, source.credential, nil, nil, upstream.Client())
-			records, err := poller.fetch(context.Background(), source.path, &since, "correlation")
+			raw, err := poller.fetchRaw(context.Background(), source.path, &since, "correlation")
+			var records []model.Record
+			if err == nil {
+				err = json.Unmarshal(raw, &records)
+			}
 			if err != nil || len(records) != 1 {
 				t.Fatalf("fetch: %v, %v", records, err)
 			}

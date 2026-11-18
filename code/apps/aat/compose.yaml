@@ -34,6 +34,7 @@ services:
       PVMBG_TOKEN: ${PVMBG_TOKEN:?required}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-3}
       POLL_TIMEOUT_MS: ${POLL_TIMEOUT_MS:-4000}
+      PVMBG_SCHEMA_POLICY: ${PVMBG_SCHEMA_POLICY:-strict}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       # Feed Satelit (P4); kosong = consumer mati. Overlay compose.satellite.yaml memakai mock lokal.
       SATELLITE_FEED_URL: ${SATELLITE_FEED_URL:-https://satellite.naufarrel.dev}

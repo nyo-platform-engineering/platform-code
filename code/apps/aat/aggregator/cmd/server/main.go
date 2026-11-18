@@ -66,6 +66,11 @@ func main() {
 	ctrl := &controller.Controller{DB: db, Store: storage.NewPostgres(db, storage.Identity{
 		Node: os.Getenv("STORE_NODE_NAME"), Unit: httpkit.Env("STORE_UNIT", "postgres"),
 	})}
+	schemaPolicy := httpkit.Env("PVMBG_SCHEMA_POLICY", "strict")
+	if schemaPolicy != "strict" && schemaPolicy != "v2" {
+		panic("PVMBG_SCHEMA_POLICY must be strict or v2")
+	}
+	ctrl.AcceptPVMBGV2 = schemaPolicy == "v2"
 	lateness := httpkit.Integer("SATELLITE_ALLOWED_LATENESS_MINUTES", int(controller.DefaultSatelliteLateness/time.Minute))
 	if lateness < 1 {
 		panic("SATELLITE_ALLOWED_LATENESS_MINUTES must be positive")
