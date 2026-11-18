@@ -15,6 +15,23 @@ tempo:
       memory: 1Gi
   memBallastSizeMbs: 0
   retention: 72h
+  # Traces Drilldown uses TraceQL metrics, served by local-blocks in Tempo 2.9.
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://mimir:9009/api/v1/push
+    storage:
+      path: /var/tempo/generator/metrics
+    traces_storage:
+      path: /var/tempo/generator/traces
+    processor:
+      local_blocks:
+        filter_server_spans: false
+        flush_to_storage: true
+        max_block_duration: 1m
+  overrides:
+    defaults:
+      metrics_generator:
+        processors: [local-blocks]
   ingester:
     max_block_duration: 5m
   receivers:
