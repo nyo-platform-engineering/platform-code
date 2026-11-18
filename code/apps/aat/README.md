@@ -333,7 +333,7 @@ KUBECONFIG=$PWD/.state/kubeconfig kubectl -n sistem-informasi-kebencanaan-bnpb p
 
 Bootstrap menyimpan kredensial pada `.env.runtime` (permission 0600), membuat Secret `aat-runtime`, serta mempertahankan `START_TIME` mock melalui ConfigMap `aat-clock` dan `.state/mock-start-time`. Nilai dipertahankan saat deploy ulang dan dapat dipulihkan dari cluster. Token asisten untuk integrasi lanjutan tercantum pada `.env.example` infrastructure dan perlu diisi sesuai sesi tugas.
 
-Dashboard Grafana **AAT — layanan dan runtime lokal** menampilkan throughput, rasio 5xx, dan p95 dari log request JSON (`msg=request`, `service`, `status`, `latency_ms`), serta CPU/memori/replica dari cAdvisor dan kube-state-metrics. Cari `correlation_id` melalui Loki. Trace membutuhkan instrumentasi serta propagasi context aplikasi; environment `OTEL_*` saja tidak menginstrumentasi binary Go.
+Dashboard Grafana **AAT — layanan dan runtime lokal** menampilkan throughput, rasio 5xx, dan p95 dari log request JSON (`msg=request`, `service`, `status`, `latency_ms`), serta CPU/memori/replica dari cAdvisor dan kube-state-metrics. Cari `correlation_id` melalui Loki. Kode Go menyediakan SDK OTel dengan span HTTP server/client, PostgreSQL, polling, serta propagasi context outbox/NATS. Image yang dipakai harus dibangun dari kode berinstrumentasi; environment `OTEL_*` saja tidak menginstrumentasi image baseline lama.
 
 Image baseline dan konfigurasi cluster belum membuktikan kelulusan P1–P5 M2. Sharding/replikasi storage, koordinasi leader/fencing, Feed Satelit, Audit API, serta bukti load/failure/recovery masih membutuhkan implementasi dan pengujian aplikasi. Checklist lokal ada di `task.local.md`.
 
@@ -359,3 +359,33 @@ Kode Aggregator menyediakan adapter storage PostgreSQL serta endpoint audit
 tanpa token ini akses audit dinonaktifkan. `STORE_NODE_NAME` adalah node database,
 bukan node Aggregator; `STORE_UNIT` default `postgres`. Backend masih satu
 PostgreSQL; deployment infra perlu meneruskan Secret dan identitas node storage.
+
+
+### Distributed tracing
+
+Spek M2 bagian Observabilitas mewajibkan trace lintas seluruh service yang dilalui
+satu alur, dengan durasi tiap langkah. Infra menyediakan collector OTLP dan Tempo;
+pemilik masing-masing aplikasi bertanggung jawab meneruskan context pada jalurnya.
+
+SDK Go memakai OTLP HTTP/protobuf melalui `OTEL_EXPORTER_OTLP_ENDPOINT`; tanpa
+endpoint, export dinonaktifkan untuk pengembangan lokal. Manifest AAT sudah
+memuat endpoint collector dan service.name. Rebuild dan rollout image diperlukan
+agar kode instrumentasi baru berjalan di cluster. Compose juga meneruskan endpoint
+opsional dari .env; alamatnya harus dapat dijangkau dari container.
+
+HTTP memakai W3C traceparent/tracestate. Respons memuat X-Trace-ID dan log request
+memuat trace_id selain correlation_id. Query PostgreSQL diberi span tanpa SQL,
+parameter, token, atau payload. Context ingest disimpan bersama outbox sehingga
+publish dan consumer NATS dapat melanjutkan trace sesudah restart. HTTP health
+check consumer saja belum membuktikan alur pesan; uji jalur asynchronous secara
+terpisah sebelum mencentang bukti demo.
+
+Default sampling parentbased_always_on cocok untuk demo. Untuk load test gunakan
+OTEL_TRACES_SAMPLER=parentbased_traceidratio dan OTEL_TRACES_SAMPLER_ARG misalnya
+0.1; anak span mengikuti keputusan sampling parent. Export berjalan melalui
+antrean batch terbatas dan tidak menunggu collector pada request aplikasi.
+SIGTERM/SIGINT menguras HTTP request lalu melakukan flush exporter dengan timeout.
+
+Untuk bukti, kirim GET /hazards dengan token client, catat X-Trace-ID, lalu cari ID
+tersebut pada datasource Tempo di Grafana Explore. Periksa Client API, Auth,
+Aggregator, dan child span PostgreSQL pada trace yang sama beserta durasinya.

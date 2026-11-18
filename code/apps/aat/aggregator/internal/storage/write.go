@@ -7,6 +7,8 @@ import (
 
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/propagation"
 	"gorm.io/gorm/clause"
 )
 
@@ -40,7 +42,9 @@ func (p *Postgres) Save(ctx context.Context, events []model.HazardEvent) ([]mode
 			if correlationID == "" {
 				correlationID = httpkit.ID()
 			}
-			outbox := model.HazardOutbox{EventKey: eventKey, CorrelationID: correlationID, Payload: json.RawMessage(payload)}
+			carrier := propagation.MapCarrier{}
+			telemetry.Propagation.Inject(ctx, carrier)
+			outbox := model.HazardOutbox{TraceParent: carrier.Get("traceparent"), TraceState: carrier.Get("tracestate"), EventKey: eventKey, CorrelationID: correlationID, Payload: json.RawMessage(payload)}
 			if err = tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "event_key"}}, DoNothing: true}).Create(&outbox).Error; err != nil {
 				return nil, err
 			}

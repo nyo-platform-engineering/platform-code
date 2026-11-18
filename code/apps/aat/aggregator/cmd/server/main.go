@@ -19,6 +19,7 @@ import (
 	"aat/aggregator/internal/model"
 	"aat/aggregator/internal/storage"
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
 )
 
 func main() {
@@ -75,7 +76,7 @@ func main() {
 	if pollTimeout <= 0 {
 		panic("POLL_TIMEOUT_MS must be positive")
 	}
-	pollClient := &http.Client{Timeout: pollTimeout}
+	pollClient := &http.Client{Timeout: pollTimeout, Transport: telemetry.Transport{}}
 
 	bmkgURL := httpkit.Env("BMKG_URL", "http://bmkg:8081")
 	bmkgKey := httpkit.Secret("BMKG_API_KEY")

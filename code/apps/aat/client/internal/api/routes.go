@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,6 +21,7 @@ func Handler(config Config) (http.Handler, error) {
 	if config.HTTPClient != nil {
 		client = *config.HTTPClient
 	}
+	client.Transport = telemetry.Transport{Base: client.Transport}
 	// Never forward internal credentials through redirects.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	u := upstream{config: config, http: &client}
