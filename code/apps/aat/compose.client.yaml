@@ -5,6 +5,10 @@ services:
       context: .
       dockerfile: auth/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       AUTH_INTERNAL_TOKEN: ${AUTH_INTERNAL_TOKEN:?required}
       PUBLIC_CLIENT_SECRET: ${PUBLIC_CLIENT_SECRET:?required}
       RESPONDER_CLIENT_SECRET: ${RESPONDER_CLIENT_SECRET:?required}
@@ -25,6 +29,10 @@ services:
       context: .
       dockerfile: client/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       AUTH_URL: http://auth:8084
       AGGREGATOR_URL: http://aggregator:8083
       AUTH_INTERNAL_TOKEN: ${AUTH_INTERNAL_TOKEN:?required}

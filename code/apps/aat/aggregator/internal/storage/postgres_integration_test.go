@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"aat/aggregator/internal/model"
+	"aat/internal/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"go.opentelemetry.io/otel/propagation"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -134,7 +136,8 @@ func TestPostgresAuditContract(t *testing.T) {
 
 func TestPostgresWriterTransactionAndIdempotency(t *testing.T) {
 	db := testPostgres(t)
-	ctx := context.Background()
+	traceParent := "00-11223344556677889900aabbccddeeff-1122334455667788-01"
+	ctx := telemetry.Propagation.Extract(context.Background(), propagation.MapCarrier{"traceparent": traceParent})
 	when := time.Date(2026, 11, 12, 2, 0, 0, 0, time.UTC)
 	event := model.HazardEvent{ID: "hz-original", Ref: "same-source-ref", Source: "BMKG", Type: "SEISMIC", Severity: "WASPADA", Area: "Jawa", Occurred: when, Ingested: when, Attributes: model.Record{}}
 	rollback := errors.New("source processing failed")
@@ -182,6 +185,10 @@ func TestPostgresWriterTransactionAndIdempotency(t *testing.T) {
 	event.Severity = "AWAS"
 	if changed := save(event); len(changed) != 1 || changed[0].ID != "hz-original" {
 		t.Fatalf("stable identity: %+v", changed)
+	}
+	var persisted model.HazardOutbox
+	if err := db.Order("id").First(&persisted).Error; err != nil || persisted.TraceParent != traceParent {
+		t.Fatalf("durable trace context: %+v %v", persisted, err)
 	}
 	var count int64
 	if err := db.Model(&model.HazardOutbox{}).Count(&count).Error; err != nil || count != 2 {

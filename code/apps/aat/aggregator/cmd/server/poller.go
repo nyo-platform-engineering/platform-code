@@ -14,6 +14,8 @@ import (
 	"aat/aggregator/internal/controller"
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type pollEndpoint struct {
@@ -70,6 +72,8 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 }
 
 func (p sourcePoller) Poll(ctx context.Context) {
+	ctx, span := telemetry.Start(ctx, "poll "+p.source, trace.SpanKindInternal)
+	defer span.End()
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	correlationID := httpkit.ID()

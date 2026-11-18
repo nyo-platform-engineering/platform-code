@@ -18,6 +18,10 @@ services:
       context: .
       dockerfile: aggregator/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       DATABASE_URL: "host=postgres user=${POSTGRES_USER:?required} password=${POSTGRES_PASSWORD:?required} dbname=${POSTGRES_DB:?required} sslmode=disable"
       AGGREGATOR_TOKEN: ${AGGREGATOR_TOKEN:?required}
       AUDIT_TOKEN: ${AUDIT_TOKEN:-}
@@ -43,6 +47,10 @@ services:
       context: .
       dockerfile: bmkg/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       BMKG_API_KEY: ${BMKG_API_KEY:?required}
       BMKG_DELAY_MS: ${BMKG_DELAY_MS:-100}
       START_TIME: ${START_TIME:?run scripts/setup-env.py first}
@@ -54,6 +62,10 @@ services:
       context: .
       dockerfile: pvmbg/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       PVMBG_TOKEN: ${PVMBG_TOKEN:?required}
       PVMBG_DELAY_MIN_MS: ${PVMBG_DELAY_MIN_MS:-500}
       PVMBG_DELAY_MAX_MS: ${PVMBG_DELAY_MAX_MS:-3000}
@@ -81,6 +93,10 @@ services:
       context: .
       dockerfile: consumers/dashboard-updater/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       PORT: "8085"
     networks: [services]
@@ -97,6 +113,10 @@ services:
       context: .
       dockerfile: consumers/field-notifier/Dockerfile
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       PORT: "8086"
     networks: [services]

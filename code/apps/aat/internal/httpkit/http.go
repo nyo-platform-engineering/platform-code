@@ -7,10 +7,18 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os/signal"
+	"syscall"
+
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"os"
 	"strconv"
 	"time"
@@ -117,6 +125,13 @@ func (w *response) WriteHeader(status int) {
 func Observe(service string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		ctx, span := telemetry.Start(telemetry.Extract(r.Context(), r.Header), r.Method+" "+r.URL.Path, trace.SpanKindServer)
+		defer span.End()
+		r = r.WithContext(ctx)
+		span.SetAttributes(attribute.String("http.request.method", r.Method), attribute.String("service.name", service))
+		if id := telemetry.TraceID(ctx); id != "" {
+			w.Header().Set("X-Trace-ID", id)
+		}
 		id := r.Header.Get("X-Correlation-ID")
 		if id == "" {
 			id = ID()
@@ -127,8 +142,13 @@ func Observe(service string, next http.Handler) http.Handler {
 		w.Header().Set("X-Correlation-ID", id)
 		rw := &response{w, 200}
 		next.ServeHTTP(rw, r)
+		span.SetAttributes(attribute.Int("http.response.status_code", rw.status))
+		if rw.status >= 500 {
+			span.SetStatus(codes.Error, "request failed")
+		}
 		slog.Info(
 			"request",
+			"trace_id", telemetry.TraceID(r.Context()),
 			"service",
 			service,
 			"correlation_id",
@@ -167,6 +187,19 @@ func Sleep(r *http.Request, d time.Duration) bool {
 
 func Serve(service, port string, h http.Handler) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	shutdown, err := telemetry.Init(context.Background(), service)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := shutdown(ctx); err != nil {
+			slog.Warn("trace shutdown failed")
+		}
+	}()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 	s := http.Server{
 		Addr:              ":" + Env("PORT", port),
 		Handler:           Observe(service, h),
@@ -176,8 +209,17 @@ func Serve(service, port string, h http.Handler) {
 		IdleTimeout:       30 * time.Second,
 	}
 
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		<-ctx.Done()
+		drain, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Shutdown(drain)
+	}()
 	slog.Info("listening", "service", service, "address", s.Addr)
-	if e := s.ListenAndServe(); e != nil {
+	if e := s.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {
 		panic(e)
 	}
+	<-drained
 }
