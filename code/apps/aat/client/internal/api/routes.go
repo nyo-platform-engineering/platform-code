@@ -26,6 +26,8 @@ func Handler(config Config) (http.Handler, error) {
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	u := upstream{config: config, http: &client}
 	router := httpkit.Router()
+	registerDashboard(router)
+	registerAnalytics(router, u)
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 	router.GET("/hazards", func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")

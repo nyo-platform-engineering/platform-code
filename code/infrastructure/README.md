@@ -175,7 +175,7 @@ Traefik memakai IngressRoute untuk service internal `api@internal`.
 
 | Layanan | Akses default |
 | --- | --- |
-| Client | http://client.localhost |
+| Dashboard analitik dan Client API | http://client.localhost; login analyst, kunci dari `task password APP=analyst` |
 | Auth | http://auth.localhost |
 | Radar | http://radar.localhost |
 | Grafana | http://grafana.localhost; user `admin`, password dari `task password` |

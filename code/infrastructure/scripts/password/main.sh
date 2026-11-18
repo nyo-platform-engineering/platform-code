@@ -23,6 +23,10 @@ print_password() {
     grafana)
       cat .state/grafana-password
       ;;
+    analyst)
+      kube get secret aat-runtime -n "$namespace" \
+        -o go-template='{{.data.ANALYST_CLIENT_SECRET | base64decode}}{{"\n"}}'
+      ;;
     argocd)
       kube get secret argocd-initial-admin-secret -n argocd \
         -o go-template='{{.data.password | base64decode}}{{"\n"}}'
@@ -52,9 +56,9 @@ main() {
   # Individual app selection retains password-only output for scripts.
   case "${1:-all}" in
     all) print_all_credentials ;;
-    grafana|argocd) print_password "$1" ;;
+    grafana|argocd|analyst) print_password "$1" ;;
     *)
-      echo 'Choose all, grafana, or argocd.' >&2
+      echo 'Choose all, grafana, argocd, or analyst.' >&2
       return 2
       ;;
   esac

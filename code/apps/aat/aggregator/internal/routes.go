@@ -19,6 +19,7 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 
 	mux.GET("/health", ctrl.Health)
 	private.GET("/internal/hazards", ctrl.Hazards)
+	private.GET("/internal/analytics", ctrl.Analytics)
 	private.GET("/internal/source-status", ctrl.SourceStatus)
 	private.GET("/internal/satellite/stats", ctrl.SatelliteStatsHandler)
 	private.POST("/internal/ingest/bmkg", ctrl.Ingest("BMKG"))
