@@ -20,6 +20,9 @@ services:
     environment:
       DATABASE_URL: "host=postgres user=${POSTGRES_USER:?required} password=${POSTGRES_PASSWORD:?required} dbname=${POSTGRES_DB:?required} sslmode=disable"
       AGGREGATOR_TOKEN: ${AGGREGATOR_TOKEN:?required}
+      AUDIT_TOKEN: ${AUDIT_TOKEN:-}
+      STORE_NODE_NAME: ${STORE_NODE_NAME:-}
+      STORE_UNIT: ${STORE_UNIT:-postgres}
       DB_MAX_CONNS: ${DB_MAX_CONNS:-5}
       BMKG_URL: http://bmkg:8081
       BMKG_API_KEY: ${BMKG_API_KEY:?required}

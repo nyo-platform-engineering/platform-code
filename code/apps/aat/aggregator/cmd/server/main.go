@@ -17,6 +17,7 @@ import (
 	"aat/aggregator/internal/controller"
 	"aat/aggregator/internal/dbtrace"
 	"aat/aggregator/internal/model"
+	"aat/aggregator/internal/storage"
 	"aat/internal/httpkit"
 )
 
@@ -46,7 +47,13 @@ func main() {
 	}
 
 	// Check the connection and create or update the model tables.
-	ctrl := &controller.Controller{DB: db}
+	auditToken := os.Getenv("AUDIT_TOKEN")
+	if auditToken != "" && (auditToken == token || auditToken == os.Getenv("BMKG_API_KEY") || auditToken == os.Getenv("PVMBG_TOKEN")) {
+		panic("AUDIT_TOKEN must differ from application tokens")
+	}
+	ctrl := &controller.Controller{DB: db, Store: storage.NewPostgres(db, storage.Identity{
+		Node: os.Getenv("STORE_NODE_NAME"), Unit: httpkit.Env("STORE_UNIT", "postgres"),
+	})}
 	lateness := httpkit.Integer("SATELLITE_ALLOWED_LATENESS_MINUTES", int(controller.DefaultSatelliteLateness/time.Minute))
 	if lateness < 1 {
 		panic("SATELLITE_ALLOWED_LATENESS_MINUTES must be positive")
@@ -98,6 +105,6 @@ func main() {
 	go pvmbgPoller.Run(workerCtx, pollInterval)
 	go runOutboxRelay(workerCtx, ctrl, natsURL)
 
-	router := internal.NewHandler(ctrl, token)
+	router := internal.NewHandlerWithAudit(ctrl, token, auditToken)
 	httpkit.Serve("Aggregator", "8083", router)
 }
