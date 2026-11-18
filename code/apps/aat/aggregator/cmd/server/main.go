@@ -122,10 +122,26 @@ func main() {
 		pvmbgEndpoints, ctrl, pollClient,
 	)
 
+	// The satellite consumer runs only when a feed token is configured.
+	satelliteToken := os.Getenv("SATELLITE_GROUP_TOKEN")
+	if satelliteToken != "" && maxConns < 4 {
+		panic("DB_MAX_CONNS must be at least 4 with the satellite feed: three owner sessions plus API connections")
+	}
+
 	natsURL := httpkit.Env("NATS_URL", "nats://nats:4222")
 	var workers sync.WaitGroup
 	workers.Go(func() { bmkgPoller.Run(workerCtx, pollInterval) })
 	workers.Go(func() { pvmbgPoller.Run(workerCtx, pollInterval) })
+	if satelliteToken != "" {
+		consumer := newSatelliteConsumer(httpkit.Env("SATELLITE_FEED_URL", "https://satellite.naufarrel.dev"), satelliteToken, ctrl)
+		consumer.batchSize = httpkit.Integer("SATELLITE_BATCH_SIZE", consumer.batchSize)
+		if consumer.batchSize < 1 || consumer.batchSize > 1000 {
+			panic("SATELLITE_BATCH_SIZE must be between 1 and 1000")
+		}
+		workers.Go(func() { consumer.Run(workerCtx) })
+	} else {
+		slog.Warn("satellite feed disabled: SATELLITE_GROUP_TOKEN is empty")
+	}
 	workers.Go(func() { runOutboxRelay(workerCtx, ctrl, natsURL) })
 
 	router := internal.NewHandlerWithAudit(ctrl, token, auditToken)

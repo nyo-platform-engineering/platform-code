@@ -352,6 +352,36 @@ Gunakan worker untuk gangguan awal karena cluster hanya mempunyai satu control p
 Sensor Pantai belum dideploy karena contoh manifest pada PDF lokal kosong. Setelah kontraknya tersedia, gunakan image `sustuna/sensor-pantai@sha256:51fbd90d3891ad6e9f5768ad330ffb65205644cb29e50da65c7538f2e0b4397d`, namespace aplikasi, label `role=sensor`, dan memory 128Mi/256Mi.
 
 
+### Feed Satelit (P4)
+
+Aggregator membaca `GET /v1/stream` (SSE) milik Feed Satelit bila `SATELLITE_GROUP_TOKEN`
+terisi; tanpa token consumer tidak berjalan. Hanya satu instance yang membaca feed: ia
+memegang sesi `SATELIT` dengan advisory lock dan epoch yang sama seperti polling BMKG/PVMBG,
+sehingga instance lain menunggu dan mengambil alih bila pemiliknya mati atau membeku.
+
+- Event `detection`/`update`/`retract` diterapkan berurutan per offset. Offset terakhir disimpan
+  di tabel `satellite_feeds` pada transaksi yang sama dengan deteksi dan HazardEvent; setelah putus,
+  crash, atau takeover, stream dibuka lagi dari offset itu dan event yang sudah diterapkan dilewati.
+- Offset yang meloncat (celah) memicu reconnect dari offset terakhir yang benar.
+- Event yang tidak terbaca disimpan di `satellite_rejects` beserta alasannya, bukan dibuang.
+- `GET /internal/satellite/stats` (token Aggregator) menampilkan jumlah kebakaran, deteksi tunggal,
+  terlambat, confidence rendah, ditarik, serta posisi feed: `offset`, `latest_offset`, `lag_events`.
+- Log `satellite batch committed` memuat `ingest_latency_ms` (event tertua dalam batch sampai commit);
+  log `satellite feed progress` memuat `lag_events` setiap 10 detik.
+
+Pengembangan tanpa token asisten memakai mock lokal (`satellite/`):
+
+```sh
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml -f compose.satellite.yaml up -d --build
+# Lonjakan 60x dan putus koneksi; token default mock: local-satellite-token
+curl -X POST -H "Authorization: Bearer local-satellite-token" -d '{"speed":60}' http://127.0.0.1:8087/admin/speed
+curl -X POST -H "Authorization: Bearer local-satellite-token" http://127.0.0.1:8087/admin/drop
+```
+
+Bentuk payload feed asli belum diverifikasi: mapper mengasumsikan field `satellite`, `acq_date`,
+`acq_time`, `latitude`, `longitude`, `confidence`, `frp` pada objek data (atau di dalam `detection`/`data`),
+dan offset pada `id:` SSE. Cocokkan dengan feed asli begitu token tersedia.
+
 ### Fondasi storage dan Audit API M2
 
 Kode Aggregator menyediakan adapter storage PostgreSQL serta endpoint audit
