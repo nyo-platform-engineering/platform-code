@@ -1,6 +1,6 @@
 # Application and infrastructure code
 
-`apps/` berisi source, Dockerfile, test, dan dokumentasi masing-masing aplikasi. `infrastructure/` berisi cluster k3s lokal pada tiga VM, deployment melalui Argo CD, dan observabilitas LGTM.
+`apps/` berisi source, Dockerfile, test, dan dokumentasi masing-masing aplikasi. `infrastructure/` berisi cluster k3s lokal pada dua VM, deployment melalui Argo CD, dan observabilitas LGTM.
 
 ```text
 apps/                            aplikasi dan panduan penggunaannya

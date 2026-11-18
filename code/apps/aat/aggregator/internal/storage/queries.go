@@ -1,4 +1,4 @@
-package controller
+package storage
 
 // Repeated ingestion preserves ingested_at unless the actual event changed.
 const hazardChanged = `ROW(

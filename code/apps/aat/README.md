@@ -275,7 +275,7 @@ subscriber baru, ikuti [panduan Problem 5](docs/demo-events.md).
 
 ## Deployment Kubernetes lokal — M2
 
-Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan tiga VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`. Workflow
+Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan dua VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`. Workflow
 [GitHub Actions AAT](../../../.github/workflows/aat-ci.yml) membuild service yang
 berubah di `main`, publish ke GHCR, lalu memperbarui digest GitOps agar Argo CD
 melakukan rollout. Tidak ada job test atau build pada PR. Build manual tersedia
@@ -313,7 +313,7 @@ Workload berada pada namespace `sistem-informasi-kebencanaan-bnpb`. PostgreSQL d
 | api / consumer / other | 128Mi / 256Mi |
 | mock | 64Mi / 128Mi |
 
-Aggregator default tiga replica yang tersebar menurut hostname, rolling update `maxUnavailable: 0`, dan PDB `minAvailable: 2`. Auth tetap satu replica karena sesi image baseline berada dalam memori proses. HPA Aggregator opsional 3–5 replica: tambahkan `../../argo-apps/dev/aat/aggregator/autoscaling.yaml` ke `spec.source.helm.valueFiles` pada Application Aggregator, lalu commit/push. Lepaskan overlay tersebut sebelum pengujian scale manual.
+Aggregator default tiga replica yang tersebar 2+1 pada dua node menurut hostname, rolling update `maxUnavailable: 0`, dan PDB `minAvailable: 2`. Auth tetap satu replica karena sesi image baseline berada dalam memori proses. HPA Aggregator opsional 3–5 replica: tambahkan `../../argo-apps/dev/aat/aggregator/autoscaling.yaml` ke `spec.source.helm.valueFiles` pada Application Aggregator, lalu commit/push. Lepaskan overlay tersebut sebelum pengujian scale manual.
 
 Dari `code/infrastructure`, setelah prasyarat cluster disiapkan:
 
@@ -333,7 +333,7 @@ KUBECONFIG=$PWD/.state/kubeconfig kubectl -n sistem-informasi-kebencanaan-bnpb p
 
 Bootstrap menyimpan kredensial pada `.env.runtime` (permission 0600), membuat Secret `aat-runtime`, serta mempertahankan `START_TIME` mock melalui ConfigMap `aat-clock` dan `.state/mock-start-time`. Nilai dipertahankan saat deploy ulang dan dapat dipulihkan dari cluster. Token asisten untuk integrasi lanjutan tercantum pada `.env.example` infrastructure dan perlu diisi sesuai sesi tugas.
 
-Dashboard Grafana **AAT — layanan dan runtime lokal** menampilkan throughput, rasio 5xx, dan p95 dari log request JSON (`msg=request`, `service`, `status`, `latency_ms`), serta CPU/memori/replica dari cAdvisor dan kube-state-metrics. Cari `correlation_id` melalui Loki. Trace membutuhkan instrumentasi serta propagasi context aplikasi; environment `OTEL_*` saja tidak menginstrumentasi binary Go.
+Dashboard Grafana **AAT — layanan dan runtime lokal** menampilkan throughput, rasio 5xx, dan p95 dari log request JSON (`msg=request`, `service`, `status`, `latency_ms`), serta CPU/memori/replica dari cAdvisor dan kube-state-metrics. Cari `correlation_id` melalui Loki. Kode Go menyediakan SDK OTel dengan span HTTP server/client, PostgreSQL, polling, serta propagasi context outbox/NATS. Image yang dipakai harus dibangun dari kode berinstrumentasi; environment `OTEL_*` saja tidak menginstrumentasi image baseline lama.
 
 Image baseline dan konfigurasi cluster belum membuktikan kelulusan P1–P5 M2. Sharding/replikasi storage, koordinasi leader/fencing, Feed Satelit, Audit API, serta bukti load/failure/recovery masih membutuhkan implementasi dan pengujian aplikasi. Checklist lokal ada di `task.local.md`.
 
@@ -350,3 +350,45 @@ task vm:resume-worker NODE=aat-worker-1
 Gunakan worker untuk gangguan awal karena cluster hanya mempunyai satu control plane. Skenario ujian memerlukan token/kunci asisten; catat log Tester Agent serta bukti kernel terpisah dan spesifikasi host untuk laporan.
 
 Sensor Pantai belum dideploy karena contoh manifest pada PDF lokal kosong. Setelah kontraknya tersedia, gunakan image `sustuna/sensor-pantai@sha256:51fbd90d3891ad6e9f5768ad330ffb65205644cb29e50da65c7538f2e0b4397d`, namespace aplikasi, label `role=sensor`, dan memory 128Mi/256Mi.
+
+
+### Fondasi storage dan Audit API M2
+
+Kode Aggregator menyediakan adapter storage PostgreSQL serta endpoint audit
+`events`, `checksum`, dan `location`. Gunakan `AUDIT_TOKEN` khusus audit;
+tanpa token ini akses audit dinonaktifkan. `STORE_NODE_NAME` adalah node database,
+bukan node Aggregator; `STORE_UNIT` default `postgres`. Backend masih satu
+PostgreSQL; deployment infra perlu meneruskan Secret dan identitas node storage.
+
+
+### Distributed tracing
+
+Spek M2 bagian Observabilitas mewajibkan trace lintas seluruh service yang dilalui
+satu alur, dengan durasi tiap langkah. Infra menyediakan collector OTLP dan Tempo;
+pemilik masing-masing aplikasi bertanggung jawab meneruskan context pada jalurnya.
+
+SDK Go memakai OTLP HTTP/protobuf melalui `OTEL_EXPORTER_OTLP_ENDPOINT`; tanpa
+endpoint, export dinonaktifkan untuk pengembangan lokal. Manifest AAT sudah
+memuat endpoint collector dan service.name. Rebuild dan rollout image diperlukan
+agar kode instrumentasi baru berjalan di cluster. Compose juga meneruskan endpoint
+opsional dari .env; alamatnya harus dapat dijangkau dari container.
+
+HTTP memakai W3C traceparent/tracestate. Respons memuat X-Trace-ID dan log request
+memuat trace_id selain correlation_id. Query PostgreSQL memakai nama ringkas dan `db.query.text` tersanitasi; literal,
+komentar, parameter values, token, dan payload tidak diekspor. `db.namespace`,
+server, operation, collection dari metadata GORM, jumlah baris SELECT, serta
+SQLSTATE error ditambahkan bila tersedia. Query besar atau konstruksi yang tidak
+didukung tetap generik. Query ingest dikelompokkan pada span `ingest <source>`. Context ingest disimpan bersama outbox sehingga
+publish dan consumer NATS dapat melanjutkan trace sesudah restart. HTTP health
+check consumer saja belum membuktikan alur pesan; uji jalur asynchronous secara
+terpisah sebelum mencentang bukti demo.
+
+Default sampling parentbased_always_on cocok untuk demo. Untuk load test gunakan
+OTEL_TRACES_SAMPLER=parentbased_traceidratio dan OTEL_TRACES_SAMPLER_ARG misalnya
+0.1; anak span mengikuti keputusan sampling parent. Export berjalan melalui
+antrean batch terbatas dan tidak menunggu collector pada request aplikasi.
+SIGTERM/SIGINT menguras HTTP request lalu melakukan flush exporter dengan timeout.
+
+Untuk bukti, kirim GET /hazards dengan token client, catat X-Trace-ID, lalu cari ID
+tersebut pada datasource Tempo di Grafana Explore. Periksa Client API, Auth,
+Aggregator, dan child span PostgreSQL pada trace yang sama beserta durasinya.

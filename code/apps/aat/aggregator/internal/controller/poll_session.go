@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"aat/aggregator/internal/dbtrace"
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -112,6 +113,9 @@ func (ctrl *Controller) AcquirePollSession(ctx context.Context, source string) (
 		Logger:               ctrl.DB.Logger,
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := dbtrace.Register(db); err != nil {
 		return nil, err
 	}
 	owned := *ctrl

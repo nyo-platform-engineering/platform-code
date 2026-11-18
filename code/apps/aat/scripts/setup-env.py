@@ -11,7 +11,7 @@ parser.add_argument('--env-file', type=Path, default=root / '.env')
 args = parser.parse_args()
 path = args.env_file
 lines = (path if path.exists() else root / '.env.example').read_text().splitlines()
-keys = ('BMKG_API_KEY', 'PVMBG_TOKEN', 'AGGREGATOR_TOKEN', 'POSTGRES_PASSWORD',
+keys = ('AUDIT_TOKEN', 'BMKG_API_KEY', 'PVMBG_TOKEN', 'AGGREGATOR_TOKEN', 'POSTGRES_PASSWORD',
         'AUTH_INTERNAL_TOKEN', 'PUBLIC_CLIENT_SECRET', 'RESPONDER_CLIENT_SECRET', 'ANALYST_CLIENT_SECRET')
 values, positions = {}, {}
 for index, line in enumerate(lines):

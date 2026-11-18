@@ -5,7 +5,7 @@ tasks:
     desc: Check VM startup tools and libvirt/KVM prerequisites
     cmds: [bash scripts/doctor/main.sh]
   up:
-    desc: Start three local VMs and deploy AAT plus LGTM
+    desc: Start two local VMs and deploy AAT plus LGTM
     cmds:
       - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/up/main.sh {{.CLI_ARGS}}'
   status:
@@ -15,9 +15,9 @@ tasks:
     desc: Show local VM service URLs
     cmds: [bash scripts/links/main.sh]
   password:
-    desc: Show the admin password (APP=grafana or argocd)
+    desc: Show Grafana and Argo CD admin credentials (optional APP=grafana or argocd)
     cmds:
-      - 'bash scripts/password/main.sh "{{.APP | default "grafana"}}"'
+      - 'bash scripts/password/main.sh "{{.APP | default "all"}}"'
   context:
     desc: Register the VM cluster as aat-local in your kubeconfig
     cmds: [bash scripts/context/main.sh]

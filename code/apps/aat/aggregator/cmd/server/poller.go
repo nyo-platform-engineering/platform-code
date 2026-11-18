@@ -16,6 +16,9 @@ import (
 	"aat/aggregator/internal/controller"
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type pollEndpoint struct {
@@ -100,7 +103,13 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (p sourcePoller) Poll(ctx context.Context) error {
+func (p sourcePoller) Poll(ctx context.Context) (err error) {
+	ctx, span := telemetry.Start(ctx, "poll "+p.source, trace.SpanKindInternal)
+	defer func() {
+		telemetry.Fail(span, err)
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("aat.source", p.source))
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	// Direct calls also need ownership.
@@ -150,8 +159,10 @@ func (p sourcePoller) Poll(ctx context.Context) error {
 		p.markFailure(ctx, callerTime, fmt.Errorf("ingest: %w", err))
 		return err
 	}
+	span.SetAttributes(attribute.Int("aat.ingest.changed_events", len(changedEvents)))
 	slog.Info("poll succeeded",
 		"source", p.source,
+		"trace_id", telemetry.TraceID(ctx),
 		"correlation_id", correlationID,
 		"changed", len(changedEvents),
 		"epoch", p.ctrl.PollOwner.Epoch,

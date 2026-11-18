@@ -11,8 +11,11 @@ import (
 
 	"aat/internal/eventbus"
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Hazard struct {
@@ -67,9 +70,9 @@ func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 					TTL:         30 * 24 * time.Hour,
 					Replicas:    1,
 				})
-			if e == nil {
-				consume(ctx, durable, consumer, dedupe, handle)
-			}
+				if e == nil {
+					consume(ctx, durable, consumer, dedupe, handle)
+				}
 			}
 		}
 		if e != nil && ctx.Err() == nil {
@@ -87,107 +90,122 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 			return
 		}
 		for msg := range batch.Messages() {
-			correlationID := msg.Headers().Get("X-Correlation-ID")
-			if correlationID == "" {
-				correlationID = httpkit.ID()
-			}
-			messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
-			start := time.Now()
-			handleMs := int64(-1)
-			var hazard Hazard
-			if e = json.Unmarshal(msg.Data(), &hazard); e != nil || hazard.ID == "" {
-				slog.Error("invalid hazard event; terminating delivery",
-					"durable", durable,
-					"correlation_id", correlationID,
-					"status", "invalid",
-					"latency_ms", time.Since(start).Milliseconds(),
-					"handle_ms", handleMs,
-					"error", e)
-				_ = msg.Term()
-				continue
-			}
-			key := deliveryKey(msg.Headers().Get("Nats-Msg-Id"), hazard)
-			_, e = dedupe.Get(messageCtx, key)
-			if e == nil {
-				if ackErr := msg.Ack(); ackErr != nil {
-					slog.Warn("duplicate ack failed",
+			func() {
+				correlationID := msg.Headers().Get("X-Correlation-ID")
+				if correlationID == "" {
+					correlationID = httpkit.ID()
+				}
+				messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
+				messageCtx = telemetry.Propagation.Extract(messageCtx, eventbus.HeaderCarrier(msg.Headers()))
+				messageCtx, span := telemetry.Start(messageCtx, "consume "+eventbus.Subject, trace.SpanKindConsumer)
+				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", eventbus.Subject), attribute.String("messaging.operation.type", "process"), attribute.String("messaging.consumer.group.name", durable))
+				defer func() { telemetry.Fail(span, e); span.End() }()
+				start := time.Now()
+				handleMs := int64(-1)
+				var hazard Hazard
+				if e = json.Unmarshal(msg.Data(), &hazard); e != nil || hazard.ID == "" {
+					slog.Error("invalid hazard event; terminating delivery",
 						"durable", durable,
 						"correlation_id", correlationID,
-						"hazard_id", hazard.ID,
-						"status", "duplicate",
+						"trace_id", telemetry.TraceID(messageCtx),
+						"status", "invalid",
 						"latency_ms", time.Since(start).Milliseconds(),
 						"handle_ms", handleMs,
-						"error", ackErr)
-				} else {
-					slog.Info("consume_completed",
-						"durable", durable,
-						"correlation_id", correlationID,
-						"hazard_id", hazard.ID,
-						"status", "duplicate",
-						"latency_ms", time.Since(start).Milliseconds(),
-						"handle_ms", handleMs)
+						"error", e)
+					_ = msg.Term()
+					return
 				}
-				continue
-			}
-			if !errors.Is(e, jetstream.ErrKeyNotFound) {
-				slog.Warn("dedupe check failed; message will retry",
-					"durable", durable,
-					"correlation_id", correlationID,
-					"hazard_id", hazard.ID,
-					"status", "error",
-					"latency_ms", time.Since(start).Milliseconds(),
-					"handle_ms", handleMs,
-					"error", e)
-				_ = msg.NakWithDelay(2 * time.Second)
-				continue
-			}
-			handleStart := time.Now()
-			e = handle(messageCtx, hazard)
-			handleMs = time.Since(handleStart).Milliseconds()
-			if e != nil {
-				slog.Error("hazard handling failed; message will retry",
-					"durable", durable,
-					"correlation_id", correlationID,
-					"hazard_id", hazard.ID,
-					"status", "error",
-					"latency_ms", time.Since(start).Milliseconds(),
-					"handle_ms", handleMs,
-					"error", e)
-				_ = msg.NakWithDelay(2 * time.Second)
-				continue
-			}
-			if _, e = dedupe.Create(messageCtx, key, []byte(time.Now().UTC().Format(time.RFC3339Nano))); e != nil {
-				if _, getErr := dedupe.Get(messageCtx, key); getErr != nil {
-					slog.Warn("dedupe write failed; message will retry",
+				span.SetAttributes(attribute.String("aat.hazard_id", hazard.ID), attribute.String("aat.source", hazard.Source))
+				key := deliveryKey(msg.Headers().Get("Nats-Msg-Id"), hazard)
+				_, e = dedupe.Get(messageCtx, key)
+				if e == nil {
+					if ackErr := msg.Ack(); ackErr != nil {
+						slog.Warn("duplicate ack failed",
+							"durable", durable,
+							"correlation_id", correlationID,
+							"trace_id", telemetry.TraceID(messageCtx),
+							"hazard_id", hazard.ID,
+							"status", "duplicate",
+							"latency_ms", time.Since(start).Milliseconds(),
+							"handle_ms", handleMs,
+							"error", ackErr)
+					} else {
+						slog.Info("consume_completed",
+							"durable", durable,
+							"correlation_id", correlationID,
+							"trace_id", telemetry.TraceID(messageCtx),
+							"hazard_id", hazard.ID,
+							"status", "duplicate",
+							"latency_ms", time.Since(start).Milliseconds(),
+							"handle_ms", handleMs)
+					}
+					return
+				}
+				if !errors.Is(e, jetstream.ErrKeyNotFound) {
+					slog.Warn("dedupe check failed; message will retry",
 						"durable", durable,
 						"correlation_id", correlationID,
+						"trace_id", telemetry.TraceID(messageCtx),
 						"hazard_id", hazard.ID,
 						"status", "error",
 						"latency_ms", time.Since(start).Milliseconds(),
 						"handle_ms", handleMs,
 						"error", e)
 					_ = msg.NakWithDelay(2 * time.Second)
-					continue
+					return
 				}
-			}
-			if e = msg.Ack(); e != nil {
-				slog.Warn("hazard ack failed",
+				handleStart := time.Now()
+				e = handle(messageCtx, hazard)
+				handleMs = time.Since(handleStart).Milliseconds()
+				if e != nil {
+					slog.Error("hazard handling failed; message will retry",
+						"durable", durable,
+						"correlation_id", correlationID,
+						"trace_id", telemetry.TraceID(messageCtx),
+						"hazard_id", hazard.ID,
+						"status", "error",
+						"latency_ms", time.Since(start).Milliseconds(),
+						"handle_ms", handleMs,
+						"error", e)
+					_ = msg.NakWithDelay(2 * time.Second)
+					return
+				}
+				if _, e = dedupe.Create(messageCtx, key, []byte(time.Now().UTC().Format(time.RFC3339Nano))); e != nil {
+					if _, getErr := dedupe.Get(messageCtx, key); getErr != nil {
+						slog.Warn("dedupe write failed; message will retry",
+							"durable", durable,
+							"correlation_id", correlationID,
+							"trace_id", telemetry.TraceID(messageCtx),
+							"hazard_id", hazard.ID,
+							"status", "error",
+							"latency_ms", time.Since(start).Milliseconds(),
+							"handle_ms", handleMs,
+							"error", e)
+						_ = msg.NakWithDelay(2 * time.Second)
+						return
+					}
+				}
+				if e = msg.Ack(); e != nil {
+					slog.Warn("hazard ack failed",
+						"durable", durable,
+						"correlation_id", correlationID,
+						"trace_id", telemetry.TraceID(messageCtx),
+						"hazard_id", hazard.ID,
+						"status", "error",
+						"latency_ms", time.Since(start).Milliseconds(),
+						"handle_ms", handleMs,
+						"error", e)
+					return
+				}
+				slog.Info("consume_completed",
 					"durable", durable,
 					"correlation_id", correlationID,
+					"trace_id", telemetry.TraceID(messageCtx),
 					"hazard_id", hazard.ID,
-					"status", "error",
+					"status", "ok",
 					"latency_ms", time.Since(start).Milliseconds(),
-					"handle_ms", handleMs,
-					"error", e)
-				continue
-			}
-			slog.Info("consume_completed",
-				"durable", durable,
-				"correlation_id", correlationID,
-				"hazard_id", hazard.ID,
-				"status", "ok",
-				"latency_ms", time.Since(start).Milliseconds(),
-				"handle_ms", handleMs)
+					"handle_ms", handleMs)
+			}()
 		}
 		if e = batch.Error(); e != nil {
 			slog.Warn("consumer fetch batch ended with error", "error", e)

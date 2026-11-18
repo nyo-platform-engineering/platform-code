@@ -1,6 +1,6 @@
 # Platform code
 
-Repositori untuk cluster Kubernetes lokal dan aplikasi yang berjalan di atasnya. Cluster memakai k3s pada tiga VM libvirt/KVM, Argo CD untuk deployment dari Git, dan LGTM untuk observabilitas.
+Repositori untuk cluster Kubernetes lokal dan aplikasi yang berjalan di atasnya. Cluster memakai k3s pada dua VM libvirt/KVM, Argo CD untuk deployment dari Git, dan LGTM untuk observabilitas.
 
 | Bagian | Fungsi |
 | --- | --- |

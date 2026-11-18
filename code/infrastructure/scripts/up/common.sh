@@ -34,5 +34,5 @@ links() {
   printf 'Client: http://%s:30080\n' "$address"
   printf 'Auth: http://%s:30084\n' "$address"
   printf 'Grafana: http://%s:30300 (admin / task password)\n' "$address"
-  printf 'Argo CD: http://argocd.localhost%s (admin / task password APP=argocd)\n' "$suffix"
+  printf 'Argo CD: http://argocd.localhost%s (admin / task password)\n' "$suffix"
 }

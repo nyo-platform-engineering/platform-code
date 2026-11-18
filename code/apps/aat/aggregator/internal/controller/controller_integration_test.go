@@ -108,9 +108,11 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 				t.Fatal("old event gained new attribute")
 			}
 		} else {
-			// JSONB can change whitespace.
 			var compact bytes.Buffer
-			if err := json.Compact(&compact, h.Attributes["future_sensor"]); err != nil || string(h.Attributes["confidence_level"]) != "0.85" || compact.String() != `{"nested":[1,true]}` {
+			if err := json.Compact(&compact, h.Attributes["future_sensor"]); err != nil {
+				t.Fatal(err)
+			}
+			if string(h.Attributes["confidence_level"]) != "0.85" || compact.String() != `{"nested":[1,true]}` {
 				t.Fatal("dynamic attributes lost")
 			}
 		}

@@ -7,13 +7,21 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
+
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/gin-gonic/gin"
 )
@@ -117,6 +125,13 @@ func (w *response) WriteHeader(status int) {
 func Observe(service string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		ctx, span := telemetry.Start(telemetry.Extract(r.Context(), r.Header), r.Method+" "+r.URL.Path, trace.SpanKindServer)
+		defer span.End()
+		r = r.WithContext(ctx)
+		span.SetAttributes(attribute.String("http.request.method", r.Method), attribute.String("url.path", r.URL.Path))
+		if id := telemetry.TraceID(ctx); id != "" {
+			w.Header().Set("X-Trace-ID", id)
+		}
 		id := r.Header.Get("X-Correlation-ID")
 		if id == "" {
 			id = ID()
@@ -127,8 +142,13 @@ func Observe(service string, next http.Handler) http.Handler {
 		w.Header().Set("X-Correlation-ID", id)
 		rw := &response{w, 200}
 		next.ServeHTTP(rw, r)
+		span.SetAttributes(attribute.Int("http.response.status_code", rw.status))
+		if rw.status >= 500 {
+			span.SetStatus(codes.Error, "request failed")
+		}
 		slog.Info(
 			"request",
+			"trace_id", telemetry.TraceID(r.Context()),
 			"service",
 			service,
 			"correlation_id",
@@ -166,12 +186,25 @@ func Sleep(r *http.Request, d time.Duration) bool {
 }
 
 func Serve(service, port string, h http.Handler) {
-	ServeContext(context.Background(), service, port, h)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	ServeContext(ctx, service, port, h)
 }
 
 // ServeContext waits for active HTTP requests to finish when ctx is canceled.
 func ServeContext(ctx context.Context, service, port string, h http.Handler) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	shutdown, err := telemetry.Init(context.Background(), service)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := shutdown(ctx); err != nil {
+			slog.Warn("trace shutdown failed")
+		}
+	}()
 	s := http.Server{
 		Addr:              ":" + Env("PORT", port),
 		Handler:           Observe(service, h),
@@ -186,7 +219,7 @@ func ServeContext(ctx context.Context, service, port string, h http.Handler) {
 	go func() { result <- s.ListenAndServe() }()
 	select {
 	case err := <-result:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	case <-ctx.Done():
@@ -196,7 +229,7 @@ func ServeContext(ctx context.Context, service, port string, h http.Handler) {
 			slog.Error("HTTP drain failed", "service", service, "error", err)
 			_ = s.Close()
 		}
-		if err := <-result; err != nil && err != http.ErrServerClosed {
+		if err := <-result; err != nil && !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}

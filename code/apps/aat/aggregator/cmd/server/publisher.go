@@ -8,8 +8,12 @@ import (
 	"aat/aggregator/internal/model"
 	"aat/internal/eventbus"
 	"aat/internal/httpkit"
+	"aat/internal/telemetry"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type outboxStore interface {
@@ -62,11 +66,17 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 					correlationID = item.EventKey
 				}
 				publishCtx = httpkit.WithCorrelationID(publishCtx, correlationID)
+				publishCtx = telemetry.Propagation.Extract(publishCtx, propagation.MapCarrier{"traceparent": item.TraceParent, "tracestate": item.TraceState})
+				publishCtx, span := telemetry.Start(publishCtx, "publish "+eventbus.Subject, trace.SpanKindProducer)
+				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", eventbus.Subject), attribute.String("messaging.operation.type", "send"), attribute.String("messaging.message.id", item.EventKey))
 				message := &nats.Msg{Subject: eventbus.Subject, Data: item.Payload, Header: nats.Header{}}
 				message.Header.Set("X-Correlation-ID", correlationID)
+				telemetry.Propagation.Inject(publishCtx, eventbus.HeaderCarrier(message.Header))
 				started := time.Now()
 				_, e = js.PublishMsg(publishCtx, message,
 					jetstream.WithMsgID(item.EventKey), jetstream.WithExpectStream(eventbus.StreamName))
+				telemetry.Fail(span, e)
+				span.End()
 				cancel()
 				slog.Info("outbound_publish", "correlation_id", correlationID, "event_key", item.EventKey,
 					"subject", eventbus.Subject, "latency_ms", time.Since(started).Milliseconds(), "error", e)

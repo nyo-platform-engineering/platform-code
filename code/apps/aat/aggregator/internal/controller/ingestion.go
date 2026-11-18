@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,7 +9,10 @@ import (
 
 	"aat/aggregator/internal/mapper"
 	"aat/aggregator/internal/model"
-	"aat/internal/httpkit"
+	"aat/aggregator/internal/storage"
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -38,7 +40,16 @@ func (ctrl *Controller) IngestPollBatch(ctx context.Context, source string, batc
 
 type pollCompletion struct{ cursor *time.Time }
 
-func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch map[string][]model.Record, completion *pollCompletion) ([]model.HazardEvent, error) {
+func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch map[string][]model.Record, completion *pollCompletion) (items []model.HazardEvent, err error) {
+	ctx, span := telemetry.Start(ctx, "ingest "+source, trace.SpanKindInternal)
+	defer func() {
+		telemetry.Fail(span, err)
+		if err == nil {
+			span.SetAttributes(attribute.Int("aat.ingest.changed_events", len(items)))
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("aat.source", source))
 	if len(batch) == 0 {
 		return nil, Invalid{fmt.Errorf("empty batch")}
 	}
@@ -73,7 +84,6 @@ func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch ma
 	}
 
 	var events []model.HazardEvent
-	var err error
 	if source == "SATELIT" {
 		events, err = ctrl.satelliteHazards(tx, batch["satellite_events"])
 	} else {
@@ -83,7 +93,7 @@ func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch ma
 		return nil, err
 	}
 
-	changedEvents, err := saveHazards(ctx, tx, events)
+	changedEvents, err := storage.NewPostgres(tx, storage.Identity{}).Save(ctx, events)
 	if err != nil {
 		return nil, err
 	}
@@ -212,45 +222,4 @@ func agencyHazards(tx *gorm.DB, source string, batch map[string][]model.Record) 
 	}
 
 	return events, nil
-}
-
-// saveHazards stores changed hazards and queues their messages in the caller's transaction.
-// An event is matched on (source, source_ref_id) and keeps its first hazard_id, so a
-// later change to occurred_at updates the event instead of creating a second one.
-func saveHazards(ctx context.Context, tx *gorm.DB, events []model.HazardEvent) ([]model.HazardEvent, error) {
-	changedEvents := []model.HazardEvent{}
-	for _, hazard := range events {
-		result := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "source"}, {Name: "source_ref_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"hazard_type", "severity", "area_name",
-				"latitude", "longitude", "occurred_at", "ingested_at", "attributes",
-			}),
-			Where: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: hazardChanged}}},
-		}, clause.Returning{Columns: []clause.Column{{Name: "id"}}}).Create(&hazard)
-
-		if result.Error != nil {
-			return nil, result.Error
-		}
-
-		if result.RowsAffected > 0 {
-			payload, err := json.Marshal(hazard)
-			if err != nil {
-				return nil, err
-			}
-			eventKey := hazard.ID + "-" + hazard.Ingested.UTC().Format(time.RFC3339Nano)
-			correlationID := httpkit.CorrelationID(ctx)
-			if correlationID == "" {
-				correlationID = httpkit.ID()
-			}
-			outbox := model.HazardOutbox{EventKey: eventKey, CorrelationID: correlationID, Payload: json.RawMessage(payload)}
-			if err = tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "event_key"}}, DoNothing: true}).Create(&outbox).Error; err != nil {
-				return nil, err
-			}
-
-			changedEvents = append(changedEvents, hazard)
-		}
-	}
-
-	return changedEvents, nil
 }

@@ -50,7 +50,7 @@ fi
 if [ "$3 $4" = 'get nodes' ]; then
   if [ "${CONTAINER_CLUSTER:-}" = 1 ]; then prefix=k3d-dev-; else prefix=aat-; fi
   printf '{"items":['
-  for i in 0 1 2; do
+  for i in 0 1; do
     [ "$i" = 0 ] || printf ','
     printf '{"metadata":{"name":"%s%s"},"status":{"nodeInfo":{"osImage":"Ubuntu 24.04"}}}' "$prefix" "$i"
   done
@@ -116,8 +116,9 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
             subprocess.run(["bash", str(root / "scripts/up/main.sh")], env=env, check=True, capture_output=True)
             calls = (root / "calls").read_text()
             control = calls.index("vagrant up aat-control --provider=libvirt")
-            workers = calls.index("vagrant up aat-worker-1 aat-worker-2 --provider=libvirt --no-parallel")
+            workers = calls.index("vagrant up aat-worker-1 --provider=libvirt --no-parallel")
             self.assertLess(control, workers)
+            self.assertNotIn("aat-worker-2", calls)
             self.assertIn("192.168.56.10", (root / ".state/kubeconfig").read_text())
             self.assertIn("--kubeconfig " + str(root / ".state/kubeconfig"), calls)
             self.assertNotIn(str(root / "external.yaml"), calls)

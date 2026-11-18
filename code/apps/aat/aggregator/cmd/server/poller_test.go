@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"aat/aggregator/internal/controller"
+	"aat/aggregator/internal/dbtrace"
 	"aat/aggregator/internal/model"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -135,6 +136,7 @@ func pollController(t *testing.T) *controller.Controller {
 		t.Fatal(err)
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = schema
+	config.ConnConfig.Tracer = dbtrace.New()
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatal(err)

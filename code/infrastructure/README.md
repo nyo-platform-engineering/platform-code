@@ -1,20 +1,25 @@
 # Local Kubernetes cluster
 
-Cluster pengembangan lokal menggunakan **k3s pada tiga VM libvirt/KVM**. Setiap node mempunyai kernel dan disk sendiri. Argo CD merekonsiliasi platform serta workload dari Git; Loki, Grafana, Tempo, dan Mimir menyediakan observabilitas bersama.
+Cluster pengembangan lokal menggunakan **k3s pada dua VM libvirt/KVM**. Setiap node mempunyai kernel dan disk sendiri. Argo CD merekonsiliasi platform serta workload dari Git; Loki, Grafana, Tempo, dan Mimir menyediakan observabilitas bersama.
 
 ## Topologi
 
 | Node | Peran | vCPU | RAM | IP default |
 | --- | --- | ---: | ---: | --- |
-| Control plane | API, scheduler, workload, backend observabilitas | 2 | 4 GiB | 192.168.56.10 |
+| Control plane | API, scheduler, workload, backend observabilitas | 4 | 4 GiB | 192.168.56.10 |
 | Worker 1 | Workload | 2 | 2 GiB | 192.168.56.11 |
-| Worker 2 | Workload | 2 | 2 GiB | 192.168.56.12 |
 
-Ketiga VM berada pada satu host fisik, dengan total alokasi guest 6 vCPU dan 8 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+Kedua VM berada pada satu host fisik, dengan total alokasi guest 6 vCPU dan 6 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+
+Default CPU control plane dinaikkan menjadi 4 vCPU setelah snapshot dua node menunjukkan penggunaan 1381m pada control plane dan 1245m pada worker. `AAT_CONTROL_CPUS` dan `AAT_WORKER_CPUS` mengganti CPU per peran; `AAT_VM_CPUS` tetap dapat mengganti default keduanya. Terapkan perubahan CPU pada guest yang sudah ada dengan `task down` lalu `task up`; perubahan file tidak mengubah CPU VM yang sedang berjalan.
 
 Untuk menerapkan perubahan RAM pada VM yang sudah ada, jalankan `task down` lalu `task up`. Provider libvirt memperbarui alokasi RAM ketika menyalakan guest yang sudah berhenti; disk dan data cluster tetap dipakai. Tidak perlu `task destroy`. Environment variable `AAT_CONTROL_MEMORY` dan `AAT_WORKER_MEMORY`, jika disetel, menggantikan default RAM tersebut (dalam MiB).
 
 Satu control plane berarti API dan scheduler belum memiliki redundansi. Storage `local-path` terikat pada disk node; perpindahan pod ke node lain tidak mereplikasi datanya. Backend observabilitas ditempatkan pada control plane melalui `nodeSelector`.
+
+Topologi dua VM menjalankan tiga pod Aggregator dengan sebaran 2+1 menurut hostname. Ini memenuhi minimum platform dua node; penafsiran P2.1 tentang instance pada node berbeda tetap perlu dikonfirmasi kepada asisten. Semua pengujian mematikan atau membekukan node hanya menargetkan `aat-worker-1`.
+
+Pada lab lama, `aat-worker-2` yang sudah berhenti tidak dinyalakan oleh `task up`; disk lamanya tetap disimpan. Bootstrap hanya menunggu dua node aktif, sehingga objek Kubernetes worker lama yang NotReady tidak menghalangi startup. Sebelum menghapus objek node lama atau disknya, periksa workload dan local PV yang masih terikat padanya dan pindahkan data yang diperlukan. Perubahan konfigurasi ini tidak memigrasikan data storage secara otomatis.
 
 ## Komponen platform
 
@@ -32,9 +37,11 @@ Satu control plane berarti API dan scheduler belum memiliki redundansi. Storage 
 
 Controller NetworkPolicy bawaan k3s tetap aktif. Traefik dan ServiceLB bawaan dinonaktifkan; Argo CD memasang Traefik terpisah dengan Gateway API. Akses dari host memakai tunnel loopback ke gateway atau NodePort. Loki, Tempo, dan Mimir memakai volume lokal dengan retensi 72 jam; Grafana memakai PVC 1 GiB.
 
+Grafana Traces Drilldown membutuhkan TraceQL metrics. Tempo 2.9 menjalankan metrics-generator dengan processor `local-blocks`, mencakup seluruh jenis span dan menyimpan blok metrics pada volume Tempo. Data untuk grafik mulai tersedia dari trace yang masuk setelah processor diaktifkan; trace lama tetap dapat dicari, tetapi tidak otomatis diolah ulang menjadi metrics. Processor ini berbeda dari `span-metrics`/`service-graphs` yang menghasilkan seri Prometheus.
+
 Request CPU platform memakai `1,4 × rata-rata teramati`, sedangkan memory memakai `1,4 × peak teramati`, dibulatkan ke atas ke millicore dan Mi. Angka request ditulis langsung di masing-masing `values.yaml` yang dipakai Argo CD. CPU memakai rata-rata seluruh sampel rate satu menit yang tersedia dalam jendela enam jam, dievaluasi setiap 30 detik dan dibobot berdasarkan jumlah sampel antar-replika serta container lama; memory memakai nilai terbesar antara high-water container saat ini dan histori working set. Histori belum mencakup seluruh startup sebelum collector aktif, sehingga angka ini perlu diukur ulang setelah startup dan beban yang representatif. Pengukuran dilakukan pada 17 November 2026; cakupan CPU mengikuti histori yang tersedia dalam jendela tersebut; request tidak berubah otomatis. Memory limit tetap menyediakan ruang lonjakan; resource AAT tetap mengikuti ketentuan tugas.
 
-Dashboard Grafana **Node utilization** (`/d/node-utilization`, folder AAT) menampilkan CPU average/peak, RAM average/peak dan kapasitas, pemakaian root disk, disk/network throughput, serta load average per VM. Pilih node dan rentang waktu untuk membandingkan kondisi idle, startup, dan beban tugas sebelum mengecilkan VM. CPU dihitung sebagai proporsi waktu seluruh vCPU; RAM terpakai memakai `MemTotal − MemAvailable`, sehingga cache yang bisa dilepas tidak dianggap habis.
+Dashboard Grafana **Node utilization** (`/d/node-utilization`, folder AAT) menampilkan CPU average/peak, RAM utilization average/peak, pemakaian root disk, disk/network throughput, serta load average per VM. Pilih node dan rentang waktu untuk membandingkan kondisi idle, startup, dan beban tugas sebelum mengecilkan VM. CPU memakai `system.cpu.utilization`, menjumlahkan state selain idle per CPU lalu merata-ratakan seluruh vCPU. RAM memakai `system.memory.utilization{state="used"}`, dengan cache dan buffer dilaporkan terpisah oleh OTel; definisinya berbeda dari `MemTotal − MemAvailable` dan working set Kubernetes. Grafik CPU/RAM baru terisi setelah metrik opt-in ini di-deploy; histori sebelumnya tidak diisi ulang.
 
 OTel daemon mengumpulkan metrik OS dengan receiver `hostmetrics` setiap 30 detik, memberi label `node`, lalu mengirim lewat cluster collector ke Mimir. Agent membaca root filesystem VM melalui mount read-only `/hostfs`; `hostNetwork` memastikan metrik network berasal dari interface VM. Tidak ada collector tambahan. Root disk saja yang diukur untuk filesystem; interface virtual pod dan loopback dikecualikan dari network. Histori mulai tersedia setelah konfigurasi tersinkron oleh Argo CD; perlu beberapa scrape sebelum grafik rate terisi, dan histori sebelum itu tidak diisi ulang. Nilai request VM/container tidak diubah otomatis oleh dashboard.
 
@@ -77,7 +84,7 @@ Startup dikoordinasikan oleh `scripts/up/main.sh`, dengan langkah terpisah di
 | `4-apps.sh` | Mendaftarkan root Application, menunggu gateway, dan menjalankan listener background `.localhost` |
 
 Setiap script memiliki `preflight_check()` sendiri: langkah VM memeriksa tooling
-Vagrant/libvirt/KVM, langkah cluster memastikan ketiga node VM tersedia dan Ready,
+Vagrant/libvirt/KVM, langkah cluster memastikan kedua node VM tersedia dan Ready,
 langkah Argo CD memastikan API Kubernetes siap, dan langkah aplikasi menunggu CRD
 Application tersedia. `task doctor` hanya menjalankan preflight VM tanpa menyalakan
 atau mengubah guest.
@@ -92,7 +99,7 @@ bukan glob eksekusi.
 
 Commit/push konfigurasi terlebih dahulu. Application membaca `https://github.com/nyo-platform-engineering/platform-code.git` pada revision `main`. Untuk fork atau branch lain, sesuaikan URL/revision pada root dan child Applications. Repository private membutuhkan kredensial pada Argo CD.
 
-`task up` selalu menggunakan tiga VM Vagrant/libvirt dan kubeconfig lab di
+`task up` selalu menggunakan dua VM Vagrant/libvirt dan kubeconfig lab di
 `.state/kubeconfig`. Tidak ada mode startup tanpa VM.
 
 Untuk hanya menjalankan deployment ke cluster yang sudah tersedia:
@@ -104,7 +111,7 @@ bash scripts/up/3-argocd.sh
 bash scripts/up/4-apps.sh
 ```
 
-Preflight saat ini membutuhkan minimal tiga node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
+Preflight saat ini membutuhkan minimal dua node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
 
 ## GitOps
 
@@ -171,7 +178,7 @@ Traefik memakai IngressRoute untuk service internal `api@internal`.
 | Auth | http://auth.localhost |
 | Radar | http://radar.localhost |
 | Grafana | http://grafana.localhost; user `admin`, password dari `task password` |
-| Argo CD | http://argocd.localhost; user `admin`, password dari `task password APP=argocd` |
+| Argo CD | http://argocd.localhost; user `admin`, password dari `task password` |
 | Traefik dashboard | http://traefik.localhost/dashboard/ |
 | OTLP internal | `otel-collector-cluster.monitoring.svc.cluster.local`, HTTP 4318 / gRPC 4317 |
 
