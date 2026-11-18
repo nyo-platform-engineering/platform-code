@@ -128,7 +128,7 @@ func Observe(service string, next http.Handler) http.Handler {
 		ctx, span := telemetry.Start(telemetry.Extract(r.Context(), r.Header), r.Method+" "+r.URL.Path, trace.SpanKindServer)
 		defer span.End()
 		r = r.WithContext(ctx)
-		span.SetAttributes(attribute.String("http.request.method", r.Method), attribute.String("service.name", service))
+		span.SetAttributes(attribute.String("http.request.method", r.Method), attribute.String("url.path", r.URL.Path))
 		if id := telemetry.TraceID(ctx); id != "" {
 			w.Header().Set("X-Trace-ID", id)
 		}

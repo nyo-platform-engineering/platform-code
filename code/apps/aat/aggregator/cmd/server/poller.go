@@ -15,6 +15,7 @@ import (
 	"aat/aggregator/internal/model"
 	"aat/internal/httpkit"
 	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -74,12 +75,14 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 func (p sourcePoller) Poll(ctx context.Context) {
 	ctx, span := telemetry.Start(ctx, "poll "+p.source, trace.SpanKindInternal)
 	defer span.End()
+	span.SetAttributes(attribute.String("aat.source", p.source))
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	correlationID := httpkit.ID()
 	ctx = httpkit.WithCorrelationID(ctx, correlationID)
 	state, err := p.ctrl.GetPollState(ctx, p.source)
 	if err != nil {
+		telemetry.Fail(span, err)
 		slog.Error("poll state unavailable", "source", p.source, "error", err)
 		return
 	}
@@ -94,6 +97,7 @@ func (p sourcePoller) Poll(ctx context.Context) {
 	for _, endpoint := range p.endpoints {
 		records, err := p.fetch(ctx, endpoint.path, since, correlationID)
 		if err != nil {
+			telemetry.Fail(span, err)
 			p.markFailure(ctx, callerTime, err)
 			return
 		}
@@ -103,11 +107,13 @@ func (p sourcePoller) Poll(ctx context.Context) {
 	// Save the batch and save this source's caller time only after ingestion succeeds.
 	changedEvents, err := p.ctrl.IngestBatch(ctx, p.source, batch)
 	if err != nil {
+		telemetry.Fail(span, err)
 		p.markFailure(ctx, callerTime, fmt.Errorf("ingest: %w", err))
 		return
 	}
 
 	if err := p.ctrl.MarkPollSuccess(ctx, p.source, callerTime); err != nil {
+		telemetry.Fail(span, err)
 		slog.Error("poll status write failed",
 			"source", p.source,
 			"correlation_id", correlationID,
@@ -115,6 +121,7 @@ func (p sourcePoller) Poll(ctx context.Context) {
 		)
 		return
 	}
+	span.SetAttributes(attribute.Int("aat.ingest.changed_events", len(changedEvents)))
 	slog.Info("poll succeeded",
 		"source", p.source,
 		"trace_id", telemetry.TraceID(ctx),

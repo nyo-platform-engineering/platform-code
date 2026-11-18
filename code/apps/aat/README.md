@@ -374,8 +374,11 @@ agar kode instrumentasi baru berjalan di cluster. Compose juga meneruskan endpoi
 opsional dari .env; alamatnya harus dapat dijangkau dari container.
 
 HTTP memakai W3C traceparent/tracestate. Respons memuat X-Trace-ID dan log request
-memuat trace_id selain correlation_id. Query PostgreSQL diberi span tanpa SQL,
-parameter, token, atau payload. Context ingest disimpan bersama outbox sehingga
+memuat trace_id selain correlation_id. Query PostgreSQL memakai nama ringkas dan `db.query.text` tersanitasi; literal,
+komentar, parameter values, token, dan payload tidak diekspor. `db.namespace`,
+server, operation, collection dari metadata GORM, jumlah baris SELECT, serta
+SQLSTATE error ditambahkan bila tersedia. Query besar atau konstruksi yang tidak
+didukung tetap generik. Query ingest dikelompokkan pada span `ingest <source>`. Context ingest disimpan bersama outbox sehingga
 publish dan consumer NATS dapat melanjutkan trace sesudah restart. HTTP health
 check consumer saja belum membuktikan alur pesan; uji jalur asynchronous secara
 terpisah sebelum mencentang bukti demo.
