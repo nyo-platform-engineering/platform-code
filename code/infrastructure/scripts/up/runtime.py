@@ -5,9 +5,11 @@ import datetime
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMESPACE = "sistem-informasi-kebencanaan-bnpb"
@@ -88,6 +90,19 @@ def write_private(path, content):
         file.write(content)
 
 
+def replace_private(path, content):
+    """Atomically update an owner-only state file."""
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                     prefix=path.name + ".", delete=False) as file:
+        temporary = Path(file.name)
+        try:
+            file.write(content)
+            file.close()
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 def apply(kind, name, namespace, data):
     # Secrets accept plain strings in stringData; Kubernetes encodes them.
     # ConfigMaps use data directly. Neither manifest is written to a temp file.
@@ -139,22 +154,40 @@ def ensure_aat_credentials():
         temporary = credentials_file.with_suffix(".next")
         write_private(temporary, "".join(f"{key}={value}\n" for key, value in credentials.items()))
         os.replace(temporary, credentials_file)
-    apply("Secret", "aat-runtime", NAMESPACE, credentials)
+    # Mock timing is non-secret configuration, supplied through aat-clock.
+    apply("Secret", "aat-runtime", NAMESPACE, {key: value for key, value in credentials.items() if key != "START_TIME"})
 
 
 def ensure_mock_start_time():
-    """Preserve the mock services' timeline across repeated startup runs."""
+    """Use the shared env setting, recovering the existing timeline when absent."""
+    env_file = ROOT / ".env.runtime"
+    credentials = read_env(env_file)
     clock_file = ROOT / ".state/mock-start-time"
-    if not clock_file.exists():
+    start_time = credentials.get("START_TIME", "")
+    if not start_time and clock_file.exists():
+        start_time = clock_file.read_text().strip()
+    if not start_time:
         cluster_clock = existing("configmap", "aat-clock", NAMESPACE)
         if cluster_clock:
             start_time = cluster_clock["data"]["START_TIME"]
         else:
             now = datetime.datetime.now(datetime.timezone.utc)
             start_time = now.isoformat().replace("+00:00", "Z")
-        write_private(clock_file, start_time + "\n")
 
-    configuration = {"START_TIME": clock_file.read_text().strip()}
+    # Match the RFC3339 timestamps accepted by the Go mock services.
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})", start_time):
+        raise ValueError("START_TIME must be RFC3339 with a timezone, e.g. 2026-11-18T00:00:00Z")
+    try:
+        datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("START_TIME contains an invalid date or timezone") from None
+
+    if credentials.get("START_TIME") != start_time:
+        lines = [line for line in env_file.read_text().splitlines() if not line.startswith("START_TIME=")]
+        replace_private(env_file, "\n".join([*lines, "START_TIME=" + start_time, ""]))
+    if not clock_file.exists() or clock_file.read_text().strip() != start_time:
+        replace_private(clock_file, start_time + "\n")
+    configuration = {"START_TIME": start_time}
     apply("ConfigMap", "aat-clock", NAMESPACE, configuration)
 
 

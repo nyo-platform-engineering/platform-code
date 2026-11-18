@@ -296,7 +296,61 @@ class CredentialTests(unittest.TestCase):
             old = {"data": {key: base64.b64encode(value.encode()).decode() for key, value in credentials.items()}}
             with patch.object(self.runtime, "ROOT", root), patch.object(self.runtime, "existing", side_effect=lambda kind, name, ns: old if name == "aat-runtime" else None), patch.object(self.runtime, "apply"):
                 self.runtime.ensure()
+                recovered = self.runtime.read_env(root / ".env.runtime")
+                self.assertEqual({key: recovered[key] for key in credentials}, credentials)
+                self.assertEqual(recovered["START_TIME"], (root / ".state/mock-start-time").read_text().strip())
+
+    def test_explicit_mock_start_time_overrides_old_state_without_rotating_credentials(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".state").mkdir()
+            credentials = self.runtime.new_credentials()
+            configured = "2026-11-18T07:00:00+07:00"
+            credentials["START_TIME"] = configured
+            self.runtime.write_private(root / ".env.runtime", "".join(f"{k}={v}\n" for k, v in credentials.items()))
+            (root / ".state/mock-start-time").write_text("2026-11-17T00:00:00Z\n")
+            with patch.object(self.runtime, "ROOT", root), patch.object(self.runtime, "apply") as apply:
+                self.runtime.ensure_aat_credentials()
+                secret_data = apply.call_args.args[3]
+                self.assertNotIn("START_TIME", secret_data)
+                self.runtime.ensure_mock_start_time()
                 self.assertEqual(self.runtime.read_env(root / ".env.runtime"), credentials)
+                self.assertEqual((root / ".state/mock-start-time").read_text(), configured + "\n")
+                self.assertEqual(apply.call_args.args[3], {"START_TIME": configured})
+
+    def test_missing_env_start_time_recovers_local_or_cluster_time(self):
+        for local in (True, False):
+            with self.subTest(local=local), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root / ".state").mkdir()
+                credentials = self.runtime.new_credentials()
+                credentials["START_TIME"] = ""
+                self.runtime.write_private(root / ".env.runtime", "# retained comment\n" + "".join(f"{k}={v}\n" for k, v in credentials.items()))
+                start = "2026-11-17T05:20:09.790155Z"
+                if local:
+                    (root / ".state/mock-start-time").write_text(start + "\n")
+                with patch.object(self.runtime, "ROOT", root), patch.object(self.runtime, "existing", return_value={"data": {"START_TIME": start}}), patch.object(self.runtime, "apply"):
+                    self.runtime.ensure_mock_start_time()
+                    saved = self.runtime.read_env(root / ".env.runtime")
+                    self.assertEqual(saved, dict(credentials, START_TIME=start))
+                    self.assertTrue((root / ".env.runtime").read_text().startswith("# retained comment\n"))
+                    self.assertEqual((root / ".env.runtime").stat().st_mode & 0o777, 0o600)
+                    self.assertEqual((root / ".state/mock-start-time").read_text(), start + "\n")
+
+    def test_invalid_start_time_does_not_change_clock_or_apply_config(self):
+        for value in ("2026-11-18", "2026-11-18T07:00:00", "2026-02-30T00:00:00Z", "2026-11-18T00:00:00+25:00"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root / ".state").mkdir()
+                credentials = dict(self.runtime.new_credentials(), START_TIME=value)
+                self.runtime.write_private(root / ".env.runtime", "".join(f"{k}={v}\n" for k, v in credentials.items()))
+                before = (root / ".env.runtime").read_bytes()
+                with patch.object(self.runtime, "ROOT", root), patch.object(self.runtime, "apply") as apply:
+                    with self.assertRaises(ValueError):
+                        self.runtime.ensure_mock_start_time()
+                    apply.assert_not_called()
+                    self.assertEqual((root / ".env.runtime").read_bytes(), before)
+                    self.assertFalse((root / ".state/mock-start-time").exists())
 
     def test_upgrade_adds_replication_and_audit_secrets_without_rotating_old_values(self):
         with tempfile.TemporaryDirectory() as folder:
