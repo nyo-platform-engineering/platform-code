@@ -37,13 +37,14 @@ mengklaim urutan per key yang identitasnya tidak diketahui.
 | `parked` | Memerlukan perubahan parser/kebijakan atau perbaikan sumber; tidak diulang otomatis |
 | `processed` | Efek sudah commit; hilang dari daftar unprocessed dan payload dikosongkan |
 
-Parser menerima satu array JSON, UTF-8 valid, ukuran maksimal 2 MiB, kedalaman
-maksimal 64. Pesan invalid disimpan utuh beserta sumber, waktu, alasan, dan attempts.
+Parser menerima satu array JSON maksimal 8 MiB, dengan batas 2 MiB per record,
+UTF-8 valid, dan kedalaman maksimal 64. Batch riwayat yang totalnya melebihi
+2 MiB tetap diurai; record oversized diparkir secara individual. Pesan invalid
+disimpan utuh beserta sumber, waktu, alasan, dan attempts.
 Kegagalan satu record tidak membatalkan record lain; envelope yang tidak dapat
 diurai diparkir utuh.
 
-Capture memiliki batas transport 8 MiB per respons. Respons antara 2 dan 8 MiB
-tetap disimpan utuh lalu diparkir sebagai oversize. Respons lebih besar dari 8 MiB
+Capture memiliki batas transport 8 MiB per respons. Respons lebih besar dari 8 MiB
 ditolak sebelum dianggap diterima; cursor tidak dimajukan untuk respons itu dan
 tidak ada klaim bahwa payload terpotong sudah disimpan utuh.
 
@@ -107,7 +108,10 @@ curl -X POST -H "Authorization: Bearer $OPS_ACCESS_TOKEN" \
 `poll_owners`, `poll_states`, `inbox_messages`, dan `hazard_outboxes` tetap lokal
 pada coordinator. Migrasi composite primary key milik P1 tetap dipertahankan.
 Semua koneksi polling harus menuju coordinator (group 0); koneksi ke worker
-ditolak. Sesi pemilik menetapkan `citus.multi_shard_commit_protocol=2pc`.
+ditolak. Citus 13 mengoordinasikan commit distributed secara native; sesi tidak
+mengatur parameter lama `citus.multi_shard_commit_protocol` yang sudah tidak tersedia.
+Uji integrasi memaksa kegagalan status inbox dan memeriksa bahwa penulisan
+canonical maupun outbox ikut rollback sebelum mencoba ulang.
 
 Worker memakai adapter PostgreSQL pada transaksi coordinator yang sama; adapter
 ini tidak mengganti Citus atau menulis langsung ke shard. Citus merutekan SQL

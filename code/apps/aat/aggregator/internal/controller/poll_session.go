@@ -111,9 +111,8 @@ func (ctrl *Controller) AcquirePollSession(ctx context.Context, source string) (
 		if group != 0 {
 			return nil, errors.New("polling must connect to the Citus coordinator")
 		}
-		if _, err := conn.ExecContext(ctx, "SET citus.multi_shard_commit_protocol = '2pc'"); err != nil {
-			return nil, err
-		}
+		// Citus 13 coordinates distributed commits itself. The former
+		// multi_shard_commit_protocol GUC is absent and must not block ownership.
 	}
 	err = conn.QueryRowContext(ctx, `INSERT INTO poll_owners (source, epoch, owner, backend_pid)
 		VALUES ($1, 1, $2, pg_backend_pid())

@@ -23,3 +23,27 @@ func TestInboxPayloadValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestInboxLargeEnvelopeKeepsIndividualRecordLimit(t *testing.T) {
+	record := `{"padding":"` + strings.Repeat("x", 1<<20) + `"}`
+	records, err := decodeEnvelope([]byte("[" + record + "," + record + "]"))
+	if err != nil || len(records) != 2 {
+		t.Fatalf("valid batch over 2 MiB rejected: %d %v", len(records), err)
+	}
+	for _, raw := range records {
+		if _, err := decodeInboxRecord(raw); err != nil {
+			t.Fatalf("valid individual record rejected: %v", err)
+		}
+	}
+	oversized := `{"padding":"` + strings.Repeat("x", MaxProcessBytes) + `"}`
+	records, err = decodeEnvelope([]byte("[" + oversized + "]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeInboxRecord(records[0]); err == nil || err.Error() != "payload_too_large" {
+		t.Fatalf("individual record limit bypassed: %v", err)
+	}
+	if _, err := decodeEnvelope([]byte("[" + strings.Repeat(" ", MaxCaptureBytes) + "]")); err == nil || err.Error() != "payload_too_large" {
+		t.Fatalf("envelope capture limit bypassed: %v", err)
+	}
+}
