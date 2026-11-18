@@ -6,10 +6,12 @@ Cluster pengembangan lokal menggunakan **k3s pada dua VM libvirt/KVM**. Setiap n
 
 | Node | Peran | vCPU | RAM | IP default |
 | --- | --- | ---: | ---: | --- |
-| Control plane | API, scheduler, workload, backend observabilitas | 2 | 4 GiB | 192.168.56.10 |
+| Control plane | API, scheduler, workload, backend observabilitas | 4 | 4 GiB | 192.168.56.10 |
 | Worker 1 | Workload | 2 | 2 GiB | 192.168.56.11 |
 
-Kedua VM berada pada satu host fisik, dengan total alokasi guest 4 vCPU dan 6 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+Kedua VM berada pada satu host fisik, dengan total alokasi guest 6 vCPU dan 6 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+
+Default CPU control plane dinaikkan menjadi 4 vCPU setelah snapshot dua node menunjukkan penggunaan 1381m pada control plane dan 1245m pada worker. `AAT_CONTROL_CPUS` dan `AAT_WORKER_CPUS` mengganti CPU per peran; `AAT_VM_CPUS` tetap dapat mengganti default keduanya. Terapkan perubahan CPU pada guest yang sudah ada dengan `task down` lalu `task up`; perubahan file tidak mengubah CPU VM yang sedang berjalan.
 
 Untuk menerapkan perubahan RAM pada VM yang sudah ada, jalankan `task down` lalu `task up`. Provider libvirt memperbarui alokasi RAM ketika menyalakan guest yang sudah berhenti; disk dan data cluster tetap dipakai. Tidak perlu `task destroy`. Environment variable `AAT_CONTROL_MEMORY` dan `AAT_WORKER_MEMORY`, jika disetel, menggantikan default RAM tersebut (dalam MiB).
 
@@ -37,7 +39,7 @@ Controller NetworkPolicy bawaan k3s tetap aktif. Traefik dan ServiceLB bawaan di
 
 Request CPU platform memakai `1,4 × rata-rata teramati`, sedangkan memory memakai `1,4 × peak teramati`, dibulatkan ke atas ke millicore dan Mi. Angka request ditulis langsung di masing-masing `values.yaml` yang dipakai Argo CD. CPU memakai rata-rata seluruh sampel rate satu menit yang tersedia dalam jendela enam jam, dievaluasi setiap 30 detik dan dibobot berdasarkan jumlah sampel antar-replika serta container lama; memory memakai nilai terbesar antara high-water container saat ini dan histori working set. Histori belum mencakup seluruh startup sebelum collector aktif, sehingga angka ini perlu diukur ulang setelah startup dan beban yang representatif. Pengukuran dilakukan pada 17 November 2026; cakupan CPU mengikuti histori yang tersedia dalam jendela tersebut; request tidak berubah otomatis. Memory limit tetap menyediakan ruang lonjakan; resource AAT tetap mengikuti ketentuan tugas.
 
-Dashboard Grafana **Node utilization** (`/d/node-utilization`, folder AAT) menampilkan CPU average/peak, RAM average/peak dan kapasitas, pemakaian root disk, disk/network throughput, serta load average per VM. Pilih node dan rentang waktu untuk membandingkan kondisi idle, startup, dan beban tugas sebelum mengecilkan VM. CPU dihitung sebagai proporsi waktu seluruh vCPU; RAM terpakai memakai `MemTotal − MemAvailable`, sehingga cache yang bisa dilepas tidak dianggap habis.
+Dashboard Grafana **Node utilization** (`/d/node-utilization`, folder AAT) menampilkan CPU average/peak, RAM utilization average/peak, pemakaian root disk, disk/network throughput, serta load average per VM. Pilih node dan rentang waktu untuk membandingkan kondisi idle, startup, dan beban tugas sebelum mengecilkan VM. CPU memakai `system.cpu.utilization`, menjumlahkan state selain idle per CPU lalu merata-ratakan seluruh vCPU. RAM memakai `system.memory.utilization{state="used"}`, dengan cache dan buffer dilaporkan terpisah oleh OTel; definisinya berbeda dari `MemTotal − MemAvailable` dan working set Kubernetes. Grafik CPU/RAM baru terisi setelah metrik opt-in ini di-deploy; histori sebelumnya tidak diisi ulang.
 
 OTel daemon mengumpulkan metrik OS dengan receiver `hostmetrics` setiap 30 detik, memberi label `node`, lalu mengirim lewat cluster collector ke Mimir. Agent membaca root filesystem VM melalui mount read-only `/hostfs`; `hostNetwork` memastikan metrik network berasal dari interface VM. Tidak ada collector tambahan. Root disk saja yang diukur untuk filesystem; interface virtual pod dan loopback dikecualikan dari network. Histori mulai tersedia setelah konfigurasi tersinkron oleh Argo CD; perlu beberapa scrape sebelum grafik rate terisi, dan histori sebelum itu tidak diisi ulang. Nilai request VM/container tidak diubah otomatis oleh dashboard.
 
