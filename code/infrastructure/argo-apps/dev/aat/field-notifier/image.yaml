@@ -1,5 +1,5 @@
-# Published from AAT source commit 0e7f0e0252d43ea69f9ab06f21f6d33f8a17ec4d.
+# Published from AAT source commit de68a7d392935e0bdeb1ee5a1b4c4592e92e6fdb.
 image:
   repository: ghcr.io/nyo-platform-engineering/aat-apps/field-notifier
-  tag: sha-0e7f0e0252d43ea69f9ab06f21f6d33f8a17ec4d
-  digest: sha256:e5a2a80b32c8a05304fb8391759e51884b0351e39cab8bf046d1a2e1db4e7d6a
+  tag: sha-de68a7d392935e0bdeb1ee5a1b4c4592e92e6fdb
+  digest: sha256:cabd98b220bf57b7b1f762dad7e1bf518e2dbea7f492ae729ef8bc6990c402b5
