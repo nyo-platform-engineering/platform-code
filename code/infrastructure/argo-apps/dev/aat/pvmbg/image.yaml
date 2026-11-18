@@ -1,5 +1,5 @@
-# Published from AAT source commit 5025c94126298bca588eac7989711351111e9ea1.
+# Published from AAT source commit de37ffcd1dee36b01f94103ccf107716b077e2ca.
 image:
   repository: ghcr.io/nyo-platform-engineering/aat-apps/pvmbg
-  tag: sha-5025c94126298bca588eac7989711351111e9ea1
-  digest: sha256:36eeb00c1af229f5d9fa7da71d7d36c30dcad7d80c9e7fe520c6e894d0484cc3
+  tag: sha-de37ffcd1dee36b01f94103ccf107716b077e2ca
+  digest: sha256:3c1ae2c2b9e09ad51b6f849f5b56e7ce80a7a6085bc99aaeda9df6cec95db430
