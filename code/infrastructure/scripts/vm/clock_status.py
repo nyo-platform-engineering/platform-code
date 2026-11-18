@@ -61,8 +61,11 @@ def parse(node, output, control_ip):
 def inspect(node, control_ip):
     try:
         result = subprocess.run(
-            ["vagrant", "ssh", node, "-c", "chronyc -c -n tracking && chronyc -c -n sources"],
-            cwd=ROOT / "local", capture_output=True, text=True, timeout=30,
+            ["vagrant", "ssh", node, "--no-tty", "-c", "chronyc -c -n tracking && chronyc -c -n sources"],
+            # Concurrent SSH sessions must not put the shared caller terminal
+            # into raw mode or race while restoring its newline settings.
+            cwd=ROOT / "local", stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=30,
         )
         # Hide only the known provider warning; preserve other diagnostics.
         diagnostics = "\n".join(line for line in result.stderr.splitlines()

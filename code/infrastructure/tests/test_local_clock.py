@@ -1,7 +1,13 @@
 """Check that the summary distinguishes synchronization from UTC uncertainty."""
 import importlib.util
+import os
 from pathlib import Path
+import pty
+import shutil
+import subprocess
 import sys
+import tempfile
+import termios
 import unittest
 
 PATH = Path(__file__).resolve().parents[1] / "scripts/vm/clock_status.py"
@@ -57,6 +63,41 @@ class ClockSummaryTests(unittest.TestCase):
             with self.subTest(output=output):
                 with self.assertRaises(ValueError):
                     clock.parse("aat-worker-1", output, "192.168.56.10")
+
+    def test_parallel_ssh_cannot_change_the_callers_terminal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "scripts/vm").mkdir(parents=True)
+            (root / "local").mkdir()
+            (root / "bin").mkdir()
+            script = root / "scripts/vm/clock_status.py"
+            shutil.copy(PATH, script)
+            # Model an SSH child entering raw output mode if it inherits a TTY.
+            fake = root / "bin/vagrant"
+            fake.write_text(f'''#!{sys.executable}
+import os
+import termios
+if os.isatty(0):
+    state = termios.tcgetattr(0)
+    state[1] &= ~termios.OPOST
+    termios.tcsetattr(0, termios.TCSANOW, state)
+print({report()!r}, end="")
+''')
+            fake.chmod(0o755)
+            master, slave = pty.openpty()
+            try:
+                before = termios.tcgetattr(slave)
+                result = subprocess.run(
+                    [sys.executable, str(script)], stdin=slave,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    env=dict(os.environ, PATH=str(root / "bin") + os.pathsep + os.environ["PATH"]),
+                    text=True, timeout=15, check=True,
+                )
+                self.assertEqual(before, termios.tcgetattr(slave))
+                self.assertIn("OK: both workers use control", result.stdout)
+            finally:
+                os.close(master)
+                os.close(slave)
 
 
 if __name__ == "__main__":
