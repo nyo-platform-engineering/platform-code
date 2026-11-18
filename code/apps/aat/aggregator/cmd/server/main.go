@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -130,8 +131,17 @@ func main() {
 
 	// The satellite consumer runs only when a feed token is configured.
 	satelliteToken := os.Getenv("SATELLITE_GROUP_TOKEN")
-	if satelliteToken != "" && maxConns < 4 {
-		panic("DB_MAX_CONNS must be at least 4 with the satellite feed: three owner sessions plus API connections")
+	sensorToken := os.Getenv("PANTAI_AUTH_TOKEN")
+	// One connection per owned source session (BMKG, PVMBG, satellite, sensor) plus the API.
+	need := 3
+	if satelliteToken != "" {
+		need++
+	}
+	if sensorToken != "" {
+		need++
+	}
+	if maxConns < need+1 {
+		panic(fmt.Sprintf("DB_MAX_CONNS must be at least %d: one per owned source session plus API connections", need+1))
 	}
 
 	natsURL := httpkit.Env("NATS_URL", "nats://nats:4222")
@@ -147,6 +157,19 @@ func main() {
 		workers.Go(func() { consumer.Run(workerCtx) })
 	} else {
 		slog.Warn("satellite feed disabled: SATELLITE_GROUP_TOKEN is empty")
+	}
+	// Sensor Pantai runs only when its token is configured.
+	if sensorToken != "" {
+		sensor := newSensorPoller(httpkit.Env("SENSOR_PANTAI_URL", "http://sensor-pantai:8080"), sensorToken, ctrl,
+			time.Duration(httpkit.Integer("SENSOR_TIMEOUT_MS", 2000))*time.Millisecond)
+		sensor.interval = time.Duration(httpkit.Integer("SENSOR_POLL_INTERVAL_MS", 1000)) * time.Millisecond
+		sensor.staleAfter = time.Duration(httpkit.Integer("SENSOR_STALE_AFTER_SECONDS", 900)) * time.Second
+		if sensor.interval < 100*time.Millisecond || sensor.interval >= controller.PollSessionIdleTimeout/2 || sensor.staleAfter <= 0 {
+			panic("SENSOR_POLL_INTERVAL_MS must be 100..9999 and SENSOR_STALE_AFTER_SECONDS positive")
+		}
+		workers.Go(func() { sensor.Run(workerCtx) })
+	} else {
+		slog.Warn("sensor pantai disabled: PANTAI_AUTH_TOKEN is empty")
 	}
 	workers.Go(func() { runOutboxRelay(workerCtx, ctrl, natsURL) })
 	processReports, err := strconv.ParseBool(httpkit.Env("FIELD_REPORT_PROCESSOR_ENABLED", "true"))

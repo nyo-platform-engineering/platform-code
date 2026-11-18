@@ -13,8 +13,11 @@ func main() {
 		AuthToken:       httpkit.Secret("AUTH_INTERNAL_TOKEN"),
 		AggregatorToken: httpkit.Secret("AGGREGATOR_TOKEN"),
 		MaxConcurrent:   httpkit.Integer("CLIENT_MAX_CONCURRENT", 16),
-		Timeout:         time.Duration(httpkit.Integer("UPSTREAM_TIMEOUT_MS", 3000)) * time.Millisecond,
-		StaleAfter:      time.Duration(httpkit.Integer("STALE_AFTER_SECONDS", 60)) * time.Second,
+		// Media may hold at most this share of the slots; the rest stays for the Field Team.
+		MediaSharePercent: httpkit.Integer("CLIENT_MEDIA_SHARE_PERCENT", 50),
+		IdentityCacheTTL:  time.Duration(httpkit.Integer("CLIENT_IDENTITY_CACHE_SECONDS", 10)) * time.Second,
+		Timeout:           time.Duration(httpkit.Integer("UPSTREAM_TIMEOUT_MS", 3000)) * time.Millisecond,
+		StaleAfter:        time.Duration(httpkit.Integer("STALE_AFTER_SECONDS", 60)) * time.Second,
 	})
 	if err != nil {
 		panic(err)

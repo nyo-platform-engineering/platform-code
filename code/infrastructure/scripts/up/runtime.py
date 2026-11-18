@@ -146,7 +146,8 @@ def ensure_aat_credentials():
     credentials = read_env(credentials_file)
     # Extend older environments without rotating any existing credential.
     added = False
-    for key in ("POSTGRES_REPLICATION_PASSWORD", "AUDIT_TOKEN"):
+    # PANTAI_AUTH_TOKEN is chosen by the group (Sensor Pantai and Aggregator share it).
+    for key in ("POSTGRES_REPLICATION_PASSWORD", "AUDIT_TOKEN", "PANTAI_AUTH_TOKEN"):
         if not credentials.get(key):
             credentials[key] = secrets.token_hex(32)
             added = True

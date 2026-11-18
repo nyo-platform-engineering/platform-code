@@ -28,7 +28,7 @@ func (u upstream) fieldReports(c *gin.Context) {
 		ID     string `json:"client_id"`
 	}
 	correlation := c.GetHeader("X-Correlation-ID")
-	if err := u.get(ctx, "POST", u.endpoint(u.config.AuthURL, "/internal/introspect"), u.config.AuthToken, correlation, map[string]string{"token": parts[1]}, &identity); err != nil {
+	if err := u.introspectInto(ctx, parts[1], correlation, &identity); err != nil {
 		unavailable(c)
 		return
 	}

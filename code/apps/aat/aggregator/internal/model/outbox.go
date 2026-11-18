@@ -16,6 +16,10 @@ type HazardOutbox struct {
 	PublishedAt   *time.Time
 	LeaseUntil    *time.Time
 	Attempts      int `gorm:"not null;default:0"`
+	// Lane routes a message: "" goes to the regular subject only, "critical" to
+	// the regular and the critical subject, "critical_only" (an alert without a
+	// stored event) to the critical subject only. Critical lanes are claimed first.
+	Lane string `gorm:"type:text;not null;default:''"`
 }
 
 type OutboxMessage struct {
@@ -25,4 +29,5 @@ type OutboxMessage struct {
 	TraceParent   string
 	TraceState    string
 	Payload       []byte
+	Lane          string
 }

@@ -41,6 +41,12 @@ func deliveryKey(messageID string, hazard Hazard) string {
 }
 
 func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
+	RunSubject(ctx, durable, bucket, natsURL, eventbus.Subject, handle)
+}
+
+// RunSubject consumes one subject with its own durable consumer and dedupe bucket,
+// so a separate lane (critical alerts) never waits behind another subject's backlog.
+func RunSubject(ctx context.Context, durable, bucket, natsURL, subject string, handle Handler) {
 	for ctx.Err() == nil {
 		nc, e := nats.Connect(natsURL, nats.Timeout(3*time.Second), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 		if e != nil {
@@ -54,7 +60,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 			consumer, e = js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
 				Durable:       durable,
 				Description:   durable + " independent hazard subscriber",
-				FilterSubject: eventbus.Subject,
+				FilterSubject: subject,
 				DeliverPolicy: jetstream.DeliverAllPolicy,
 				AckPolicy:     jetstream.AckExplicitPolicy,
 				AckWait:       30 * time.Second,
@@ -71,7 +77,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 					Replicas:    1,
 				})
 				if e == nil {
-					consume(ctx, durable, consumer, dedupe, handle)
+					consume(ctx, durable, subject, consumer, dedupe, handle)
 				}
 			}
 		}
@@ -83,7 +89,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 	}
 }
 
-func consume(ctx context.Context, durable string, consumer jetstream.Consumer, dedupe jetstream.KeyValue, handle Handler) {
+func consume(ctx context.Context, durable, subject string, consumer jetstream.Consumer, dedupe jetstream.KeyValue, handle Handler) {
 	for ctx.Err() == nil {
 		batch, e := consumer.Fetch(1, jetstream.FetchMaxWait(2*time.Second))
 		if e != nil {
@@ -97,8 +103,8 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 				}
 				messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
 				messageCtx = telemetry.Propagation.Extract(messageCtx, eventbus.HeaderCarrier(msg.Headers()))
-				messageCtx, span := telemetry.Start(messageCtx, "consume "+eventbus.Subject, trace.SpanKindConsumer)
-				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", eventbus.Subject), attribute.String("messaging.operation.type", "process"), attribute.String("messaging.consumer.group.name", durable))
+				messageCtx, span := telemetry.Start(messageCtx, "consume "+subject, trace.SpanKindConsumer)
+				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", subject), attribute.String("messaging.operation.type", "process"), attribute.String("messaging.consumer.group.name", durable))
 				defer func() { telemetry.Fail(span, e); span.End() }()
 				start := time.Now()
 				handleMs := int64(-1)

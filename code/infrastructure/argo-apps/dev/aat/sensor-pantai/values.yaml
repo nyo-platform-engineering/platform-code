@@ -1,0 +1,69 @@
+# Sensor Pantai (P5): mengikuti contoh manifest asisten (Recreate, satu replika,
+# /data emptyDir). Token dibuat oleh task up di Secret aat-runtime. Memori mengikuti
+# kelas "Komponen lain" pada Lampiran B.
+fullnameOverride: sensor-pantai
+replicaCount: 1
+strategy:
+  type: Recreate
+containerPorts:
+- name: http
+  containerPort: 8080
+  protocol: TCP
+service:
+  enabled: true
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  type: ClusterIP
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+resources:
+  requests:
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+volumes:
+- name: data
+  emptyDir: {}
+# Hanya demo: Secret pantai-key berisi berkas "key" dari asisten (profil exam).
+# Optional, sehingga profil practice tetap jalan tanpa Secret ini.
+- name: key
+  secret:
+    secretName: pantai-key
+    optional: true
+volumeMounts:
+- name: data
+  mountPath: /data
+- name: key
+  mountPath: /var/run/pantai
+  readOnly: true
+autoscaling:
+  enabled: false
+podLabels:
+  role: sensor
+config:
+  # Saat demo: PANTAI_PROFILE=exam (kunci dari asisten pada Secret pantai-key).
+  PANTAI_PROFILE: practice
+  PANTAI_SEED: '42'
+  PANTAI_SPEED: '60'
+env:
+- name: PANTAI_AUTH_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: PANTAI_AUTH_TOKEN

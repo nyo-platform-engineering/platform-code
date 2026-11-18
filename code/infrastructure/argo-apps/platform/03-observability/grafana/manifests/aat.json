@@ -256,6 +256,133 @@
           "min": 0
         }
       }
+    },
+    {
+      "id": 11,
+      "title": "P5 Sensor Pantai: circuit breaker dan data basi",
+      "description": "breaker_open: 0 tertutup (normal), 0,5 half-open (satu percobaan), 1 terbuka (tidak ada permintaan ke sensor). data_stale 1 = sensor menjawab tetapi datanya tidak lagi baru.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(max_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"sensor status\" | __error__=\"\" | unwrap breaker_open | __error__=\"\" [30s]))",
+          "legendFormat": "breaker_open"
+        },
+        {
+          "refId": "B",
+          "expr": "max(max_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"sensor status\" | __error__=\"\" | unwrap data_stale | __error__=\"\" [30s]))",
+          "legendFormat": "data_stale"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "P5 Sensor Pantai: permintaan ke sensor per menit",
+      "description": "Harus datar saat sensor bermasalah (tidak ada retry storm); turun ke hampir nol saat breaker terbuka.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(status) (count_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"sensor_request\" | __error__=\"\" [1m]))",
+          "legendFormat": "status {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "P5 Peringatan kritis: p95 latensi sampai penerima Tim Lapangan",
+      "description": "Dari data tiba di BNPB (ingested_at) sampai notifier jalur kritis. Target SLO p95 <= 5000 ms.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(quantile_over_time(0.95, {k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"critical field alert sent\" | __error__=\"\" | unwrap alert_latency_ms | __error__=\"\" [5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(count_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"critical field alert sent\" | __error__=\"\" [5m]))",
+          "legendFormat": "alerts per 5m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "P5 Client API: permintaan yang ditolak (load shedding) per kelas",
+      "description": "media = Media dan tanpa identitas; priority = Tim Lapangan dan BNPB Internal. Saat beban berlebih hanya media yang boleh naik.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(class) (count_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"request shed\" | __error__=\"\" [1m]))",
+          "legendFormat": "{{class}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        }
+      }
     }
   ]
 }

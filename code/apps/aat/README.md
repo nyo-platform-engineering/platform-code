@@ -382,6 +382,32 @@ Format feed (diverifikasi terhadap feed asisten): offset dimulai dari 0 dan `fro
 `retract` merujuk deteksi lewat `key` (`satellite|acq_date|acq_time|latitude|longitude`), dan
 `update` hanya membawa field yang berubah di `changes`; `heartbeat` juga memiliki offset.
 
+### Sensor Pantai (P5)
+
+Image asisten `sustuna/sensor-pantai@sha256:51fbd90d…4397d` berjalan apa adanya (Compose: service
+`sensor-pantai`; cluster: aplikasi Argo `aat-sensor-pantai-dev`, label `role=sensor`). Token
+`PANTAI_AUTH_TOKEN` milik kelompok, dibuat `setup-env.py` / `task up`. Profil demo `exam` memakai Secret
+`pantai-key` dari asisten (sudah dipasang opsional di values).
+
+- **Poller + bulkhead** (`aggregator/cmd/server/sensor.go`): satu instance pemilik (lock + epoch seperti
+  BMKG/PVMBG), HTTP client sendiri (maks 2 koneksi, timeout 2 s), sesi DB sendiri. Sensor yang lambat
+  tidak memakai sumber daya BMKG, PVMBG, atau Feed Satelit.
+- **Circuit breaker**: 3 kegagalan beruntun → terbuka 2 s, lalu satu permintaan percobaan; gagal lagi →
+  dua kali lebih lama sampai 30 s, dengan jitter. Selama terbuka tidak ada permintaan ke sensor.
+- **Kesehatan dari data, bukan `/healthz`**: sensor dianggap tidak tersedia bila breaker terbuka, jam
+  `generated_at` berhenti, atau bacaan terbaru tertinggal > `SENSOR_STALE_AFTER_SECONDS` (waktu sensor).
+- **Kontrak**: respons mentah disimpan di inbox P3 dulu; bacaan yang melanggar kontrak (field hilang/ganti
+  nama, tipe berubah, stasiun tak dikenal, nilai mustahil, JSON terpotong) di-*park* dengan alasan dan
+  tidak menjadi HazardEvent. Duplikat tidak membuat event baru (upsert per `observation_id`).
+- **Jalur kritis**: bacaan `critical` → HazardEvent AWAS, outbox lane `critical` (diklaim lebih dulu) →
+  subjek NATS `hazards.critical.v1` → consumer `field-notifier-critical`, log `alert_latency_ms`.
+  Bacaan kritis yang melanggar kontrak tetap dikirim sebagai peringatan `verified=false` tanpa disimpan.
+- **Client API**: `sources` memuat `SENSOR_PANTAI` dari state tersimpan (tidak memanggil sensor);
+  load shedding: Media maksimal `CLIENT_MEDIA_SHARE_PERCENT` slot, sisanya untuk Tim Lapangan/BNPB Internal.
+- **SLO jalur peringatan**: 99% peringatan kritis sampai notifier ≤ 5 s (p95 ≤ 5 s) per game day;
+  error budget = 1% peringatan kritis. Panel Grafana P5: breaker/data basi, permintaan ke sensor,
+  p95 latensi peringatan kritis, permintaan yang di-shed.
+
 ### Fondasi storage dan Audit API M2
 
 Kode Aggregator menyediakan adapter storage PostgreSQL serta endpoint audit

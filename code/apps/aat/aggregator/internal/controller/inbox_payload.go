@@ -98,7 +98,8 @@ func inboxID(source, key, kind string, raw []byte) string {
 }
 
 func validBatchKey(source, key string) bool {
-	return source == "PVMBG" && key == "volcanic_reports" || source == "BMKG" && (key == "seismic_events" || key == "tsunami_warnings")
+	return source == "PVMBG" && key == "volcanic_reports" || source == "BMKG" && (key == "seismic_events" || key == "tsunami_warnings") ||
+		source == SensorSource && key == sensorBatchKey
 }
 
 func inboxRef(key string, raw []byte) string {
@@ -106,7 +107,7 @@ func inboxRef(key string, raw []byte) string {
 	if err != nil {
 		return ""
 	}
-	field := map[string]string{"seismic_events": "event_id", "tsunami_warnings": "related_event_id", "volcanic_reports": "report_id"}[key]
+	field := map[string]string{"seismic_events": "event_id", "tsunami_warnings": "related_event_id", "volcanic_reports": "report_id", sensorBatchKey: "observation_id"}[key]
 	var ref string
 	_ = json.Unmarshal(record[field], &ref)
 	if len(ref) > 1024 {

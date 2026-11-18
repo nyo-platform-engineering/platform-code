@@ -10,12 +10,15 @@ import (
 const (
 	StreamName = "HAZARDS_STREAM"
 	Subject    = "hazards.created.v1"
+	// CriticalSubject carries Sensor Pantai critical alerts on their own consumer,
+	// so they never wait behind regular hazards (for example a satellite backlog).
+	CriticalSubject = "hazards.critical.v1"
 )
 
 func EnsureStream(ctx context.Context, js jetstream.JetStream) error {
 	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:            StreamName,
-		Subjects:        []string{Subject},
+		Subjects:        []string{Subject, CriticalSubject},
 		Storage:         jetstream.FileStorage,
 		Retention:       jetstream.LimitsPolicy,
 		MaxAge:          7 * 24 * time.Hour,

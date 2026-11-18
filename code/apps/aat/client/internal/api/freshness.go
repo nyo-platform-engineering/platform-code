@@ -31,7 +31,7 @@ func (u upstream) statuses(ctx context.Context, filter, correlation string) []So
 	}
 	now := time.Now()
 	result := []SourceStatus{}
-	for _, source := range []string{"BMKG", "PVMBG"} {
+	for _, source := range []string{"BMKG", "PVMBG", "SENSOR_PANTAI"} {
 		if filter != "" && filter != source {
 			continue
 		}

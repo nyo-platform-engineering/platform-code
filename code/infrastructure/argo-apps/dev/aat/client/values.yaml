@@ -62,6 +62,8 @@ config:
   AUTH_URL: http://auth:8084
   AGGREGATOR_URL: http://aggregator:8083
   CLIENT_MAX_CONCURRENT: '16'
+  CLIENT_MEDIA_SHARE_PERCENT: '50'
+  CLIENT_IDENTITY_CACHE_SECONDS: '10'
   UPSTREAM_TIMEOUT_MS: '3000'
   STALE_AFTER_SECONDS: '60'
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-cluster.monitoring.svc.cluster.local:4318

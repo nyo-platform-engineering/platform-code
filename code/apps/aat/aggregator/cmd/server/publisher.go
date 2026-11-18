@@ -67,19 +67,25 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 				}
 				publishCtx = httpkit.WithCorrelationID(publishCtx, correlationID)
 				publishCtx = telemetry.Propagation.Extract(publishCtx, propagation.MapCarrier{"traceparent": item.TraceParent, "tracestate": item.TraceState})
-				publishCtx, span := telemetry.Start(publishCtx, "publish "+eventbus.Subject, trace.SpanKindProducer)
-				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", eventbus.Subject), attribute.String("messaging.operation.type", "send"), attribute.String("messaging.message.id", item.EventKey))
-				message := &nats.Msg{Subject: eventbus.Subject, Data: item.Payload, Header: nats.Header{}}
-				message.Header.Set("X-Correlation-ID", correlationID)
-				telemetry.Propagation.Inject(publishCtx, eventbus.HeaderCarrier(message.Header))
-				started := time.Now()
-				_, e = js.PublishMsg(publishCtx, message,
-					jetstream.WithMsgID(item.EventKey), jetstream.WithExpectStream(eventbus.StreamName))
-				telemetry.Fail(span, e)
-				span.End()
+				// critical_only: an unverified alert, not a stored event; critical: both.
+				subjects := []string{eventbus.Subject}
+				switch item.Lane {
+				case "critical":
+					subjects = []string{eventbus.CriticalSubject, eventbus.Subject}
+				case "critical_only":
+					subjects = []string{eventbus.CriticalSubject}
+				}
+				for _, subject := range subjects {
+					msgID := item.EventKey
+					if subject == eventbus.CriticalSubject {
+						msgID += ":critical"
+					}
+					e = publishOne(publishCtx, js, subject, msgID, correlationID, item.Payload)
+					if e != nil {
+						break
+					}
+				}
 				cancel()
-				slog.Info("outbound_publish", "correlation_id", correlationID, "event_key", item.EventKey,
-					"subject", eventbus.Subject, "latency_ms", time.Since(started).Milliseconds(), "error", e)
 				if e != nil {
 					slog.Warn("JetStream publish failed; outbox will retry", "outbox_id", item.ID, "error", e)
 					reconnect = true
@@ -110,4 +116,19 @@ func wait(ctx context.Context, duration time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+func publishOne(ctx context.Context, js jetstream.JetStream, subject, msgID, correlationID string, payload []byte) error {
+	ctx, span := telemetry.Start(ctx, "publish "+subject, trace.SpanKindProducer)
+	span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", subject), attribute.String("messaging.operation.type", "send"), attribute.String("messaging.message.id", msgID))
+	message := &nats.Msg{Subject: subject, Data: payload, Header: nats.Header{}}
+	message.Header.Set("X-Correlation-ID", correlationID)
+	telemetry.Propagation.Inject(ctx, eventbus.HeaderCarrier(message.Header))
+	started := time.Now()
+	_, err := js.PublishMsg(ctx, message, jetstream.WithMsgID(msgID), jetstream.WithExpectStream(eventbus.StreamName))
+	telemetry.Fail(span, err)
+	span.End()
+	slog.Info("outbound_publish", "correlation_id", correlationID, "event_key", msgID,
+		"subject", subject, "latency_ms", time.Since(started).Milliseconds(), "error", err)
+	return err
 }

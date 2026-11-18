@@ -1,0 +1,4 @@
+# Image Sensor Pantai dari asisten; dipin ke digest yang diumumkan dan tidak diganti.
+image:
+  repository: sustuna/sensor-pantai
+  digest: sha256:51fbd90d3891ad6e9f5768ad330ffb65205644cb29e50da65c7538f2e0b4397d

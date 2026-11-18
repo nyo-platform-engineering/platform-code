@@ -27,7 +27,7 @@ services:
       AUDIT_TOKEN: ${AUDIT_TOKEN:-}
       STORE_NODE_NAME: ${STORE_NODE_NAME:-}
       STORE_UNIT: ${STORE_UNIT:-postgres}
-      DB_MAX_CONNS: ${DB_MAX_CONNS:-5}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-8}
       BMKG_URL: http://bmkg:8081
       BMKG_API_KEY: ${BMKG_API_KEY:?required}
       PVMBG_URL: http://pvmbg:8082
@@ -42,6 +42,12 @@ services:
       SATELLITE_GROUP_TOKEN: ${SATELLITE_GROUP_TOKEN:-}
       SATELLITE_ALLOWED_LATENESS_MINUTES: ${SATELLITE_ALLOWED_LATENESS_MINUTES:-360}
       SATELLITE_BATCH_SIZE: ${SATELLITE_BATCH_SIZE:-200}
+      # Sensor Pantai (P5); kosong = poller sensor mati.
+      SENSOR_PANTAI_URL: http://sensor-pantai:8080
+      PANTAI_AUTH_TOKEN: ${PANTAI_AUTH_TOKEN:-}
+      SENSOR_POLL_INTERVAL_MS: ${SENSOR_POLL_INTERVAL_MS:-1000}
+      SENSOR_TIMEOUT_MS: ${SENSOR_TIMEOUT_MS:-2000}
+      SENSOR_STALE_AFTER_SECONDS: ${SENSOR_STALE_AFTER_SECONDS:-900}
     ports: ["127.0.0.1:${AGGREGATOR_PORT:-8083}:8083"]
     networks: [services, storage]
     depends_on:
@@ -115,6 +121,15 @@ services:
       interval: 5s
       timeout: 2s
       retries: 10
+  # Image asisten, tidak dimodifikasi; port tidak dipublikasikan ke host.
+  sensor-pantai:
+    image: sustuna/sensor-pantai@sha256:51fbd90d3891ad6e9f5768ad330ffb65205644cb29e50da65c7538f2e0b4397d
+    environment:
+      PANTAI_PROFILE: ${PANTAI_PROFILE:-practice}
+      PANTAI_SEED: ${PANTAI_SEED:-42}
+      PANTAI_SPEED: ${PANTAI_SPEED:-60}
+      PANTAI_AUTH_TOKEN: ${PANTAI_AUTH_TOKEN:?run scripts/setup-env.py first}
+    networks: [services]
   field-notifier:
     build:
       context: .
