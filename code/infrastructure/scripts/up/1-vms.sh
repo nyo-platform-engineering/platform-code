@@ -38,9 +38,9 @@ preflight_check
 # Remaining steps (--check-only exits before running them):
 # prepare_vm_credentials - create private state and a stable token for workers joining k3s.
 # start_control_plane - start the VM hosting the Kubernetes API before workers join.
-# start_workers - start and provision the worker VM.
+# start_workers - start and provision both worker VMs.
 # export_kubeconfig - copy cluster access settings to the laptop and use the VM API address.
-# wait_for_nodes - wait until both Kubernetes nodes report Ready.
+# wait_for_nodes - wait until all three Kubernetes nodes report Ready.
 
 # Used by task doctor to inspect prerequisites without starting any guests.
 if [[ "${1:-}" == --check-only ]]; then
@@ -73,8 +73,8 @@ start_control_plane() {
 start_control_plane
 
 start_workers() {
-  # Start the worker after the server so it can join k3s.
-  vagrant_command up aat-worker-1 --provider=libvirt --no-parallel
+  # Start both workers sequentially after the server so they can join k3s.
+  vagrant_command up aat-worker-1 aat-worker-2 --provider=libvirt --no-parallel
 }
 start_workers
 
@@ -104,10 +104,10 @@ export_kubeconfig() {
 export_kubeconfig
 
 wait_for_nodes() {
-  # A booted VM may still be starting Kubernetes. Stop here until both
+  # A booted VM may still be starting Kubernetes. Stop here until all three
   # nodes report Ready, so the next script can safely prepare cluster resources.
   # Use the lab kubeconfig explicitly to avoid selecting another host context.
   KUBECONFIG="$state/kubeconfig" kubectl wait --for=condition=Ready \
-    node/aat-control node/aat-worker-1 --timeout=300s
+    node/aat-control node/aat-worker-1 node/aat-worker-2 --timeout=300s
 }
 wait_for_nodes

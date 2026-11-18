@@ -40,8 +40,8 @@ case "${1:-help}" in
     ;;
   suspend-worker|resume-worker)
     node="${2:-aat-worker-1}"
-    if [[ "$node" != aat-worker-1 ]]; then
-      echo 'Choose aat-worker-1; the control plane must stay running during failure tests.' >&2
+    if [[ "$node" != aat-worker-1 && "$node" != aat-worker-2 ]]; then
+      echo 'Choose aat-worker-1 or aat-worker-2; keep the control plane running.' >&2
       exit 2
     fi
 

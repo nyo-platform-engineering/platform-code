@@ -273,10 +273,10 @@ class CredentialTests(unittest.TestCase):
 class TopologyTests(unittest.TestCase):
     def test_reject_container_clusters_and_too_few_nodes(self):
         topology = load_module("topology")
-        real = [{"metadata": {"name": f"aat-{i}"}, "status": {"nodeInfo": {"osImage": "Ubuntu 24.04.3 LTS"}}} for i in range(2)]
+        real = [{"metadata": {"name": f"aat-{i}"}, "status": {"nodeInfo": {"osImage": "Ubuntu 24.04.3 LTS"}}} for i in range(3)]
         self.assertTrue(topology.validate(real))
         with self.assertRaises(ValueError):
-            topology.validate(real[:1])
+            topology.validate(real[:2])
         real[0]["metadata"]["name"] = "k3d-dev-server-0"
         with self.assertRaises(ValueError):
             topology.validate(real)
