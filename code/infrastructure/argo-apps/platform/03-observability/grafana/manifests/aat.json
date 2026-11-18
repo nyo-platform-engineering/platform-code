@@ -198,6 +198,64 @@
         "mode": "markdown",
         "content": "Buka **Explore → Tempo** untuk trace OTLP. Aplikasi harus diinstrumentasi dan meneruskan trace context. Mengatur OTEL_* saja tidak menginstrumentasi binary Go lama. Log ber-correlation ID dapat ditelusuri melalui Loki."
       }
+    },
+    {
+      "id": 9,
+      "title": "P4 Feed Satelit: ketertinggalan (event belum diproses)",
+      "type": "timeseries",
+      "description": "latest_offset feed dikurangi offset yang sudah disimpan Aggregator, dicatat tiap 10 detik oleh instance pemilik feed. Saat lonjakan 60x naik, lalu harus kembali ke 0.",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(max_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"satellite feed progress\" | __error__=\"\" | unwrap lag_events | __error__=\"\" [1m]))",
+          "legendFormat": "lag (event)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "P4 Feed Satelit: p95 latensi data masuk sampai HazardEvent tersimpan",
+      "type": "timeseries",
+      "description": "Dari tibanya event tertua dalam batch sampai commit; batas atas latensi per event.",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(quantile_over_time(0.95, {k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"satellite batch committed\" | __error__=\"\" | unwrap ingest_latency_ms | __error__=\"\" [5m]))",
+          "legendFormat": "p95 ingest"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0
+        }
+      }
     }
   ]
 }
