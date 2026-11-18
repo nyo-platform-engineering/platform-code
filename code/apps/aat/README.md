@@ -481,6 +481,14 @@ pada coordinator dan di-commit bersama perubahan canonical melalui transaksi
 Citus. Payload outbox dibersihkan setelah publikasi berhasil agar coordinator
 tidak menjadi arsip seluruh HazardEvent. NATS tetap memiliki retensi event sendiri.
 
+Relay outbox mengambil satu pesan per klaim dengan lease 30 detik dan timeout
+publish 5 detik. Nomor `attempts` menjadi versi klaim; hanya klaim yang masih
+aktif dan versinya cocok dapat menandai publikasi selesai serta membersihkan
+payload. Publisher lama yang kembali setelah takeover ditolak. Retry memakai
+`Nats-Msg-Id` yang sama. Delivery tetap at-least-once: crash setelah publish
+sebelum acknowledgement database dapat menyebabkan redelivery, dan deduplikasi
+JetStream dibatasi window 2 menit. Efek consumer tetap perlu idempotensi sendiri.
+
 Deploy Kubernetes dari root `code/infrastructure` dengan `task up`. Image Citus +
 Patroni dibangun oleh pipeline AAT dan dipasang melalui pin image pada Argo CD.
 Pada merge pertama, tunggu pipeline menerbitkan image dan memperbarui digest

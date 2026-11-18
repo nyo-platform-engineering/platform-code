@@ -24,6 +24,7 @@ type HazardOutbox struct {
 
 type OutboxMessage struct {
 	ID            int64
+	Attempts      int
 	EventKey      string
 	CorrelationID string
 	TraceParent   string
