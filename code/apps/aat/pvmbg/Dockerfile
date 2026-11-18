@@ -2,7 +2,7 @@ FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY internal/httpkit ./internal/httpkit
+COPY internal ./internal
 COPY pvmbg ./pvmbg
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /service ./pvmbg/cmd/server
 FROM alpine:3.22
