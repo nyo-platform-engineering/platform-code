@@ -99,6 +99,22 @@ func (ctrl *Controller) AcquirePollSession(ctx context.Context, source string) (
 		}
 	}
 	var fence model.PollOwner
+	var citus bool
+	if err := conn.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'citus')").Scan(&citus); err != nil {
+		return nil, err
+	}
+	if citus {
+		var group int
+		if err := conn.QueryRowContext(ctx, "SELECT groupid FROM pg_dist_local_group").Scan(&group); err != nil {
+			return nil, err
+		}
+		if group != 0 {
+			return nil, errors.New("polling must connect to the Citus coordinator")
+		}
+		if _, err := conn.ExecContext(ctx, "SET citus.multi_shard_commit_protocol = '2pc'"); err != nil {
+			return nil, err
+		}
+	}
 	err = conn.QueryRowContext(ctx, `INSERT INTO poll_owners (source, epoch, owner, backend_pid)
 		VALUES ($1, 1, $2, pg_backend_pid())
 		ON CONFLICT (source) DO UPDATE SET epoch = poll_owners.epoch + 1,

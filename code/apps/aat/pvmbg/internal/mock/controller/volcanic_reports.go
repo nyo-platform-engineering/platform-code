@@ -21,7 +21,7 @@ func (ctrl *Controller) VolcanicReports(c *gin.Context) {
 		return
 	}
 
-	result := ctrl.Feed.VolcanicReports(since, time.Now())
+	result := ctrl.Feed.PayloadReports(since, time.Now())
 
 	delay := ctrl.MinDelay
 	if ctrl.MaxDelay > ctrl.MinDelay {

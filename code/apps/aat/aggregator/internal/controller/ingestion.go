@@ -87,7 +87,7 @@ func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch ma
 	if source == "SATELIT" {
 		events, err = ctrl.satelliteHazards(tx, batch["satellite_events"])
 	} else {
-		events, err = agencyHazards(tx, source, batch)
+		events, err = ctrl.agencyHazards(tx, source, batch)
 	}
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch ma
 }
 
 // agencyHazards maps BMKG and PVMBG batches, storing the raw BMKG records they correlate with.
-func agencyHazards(tx *gorm.DB, source string, batch map[string][]model.Record) ([]model.HazardEvent, error) {
+func (ctrl *Controller) agencyHazards(tx *gorm.DB, source string, batch map[string][]model.Record) ([]model.HazardEvent, error) {
 	var err error
 
 	// Validate the source records and collect the event IDs that need locking.
@@ -143,6 +143,9 @@ func agencyHazards(tx *gorm.DB, source string, batch map[string][]model.Record) 
 	events := []model.HazardEvent{}
 	for _, record := range batch["volcanic_reports"] {
 		hazard, err := mapper.Volcanic(record)
+		if ctrl.AcceptPVMBGV2 {
+			hazard, err = mapper.VolcanicV2(record)
+		}
 		if err != nil {
 			return nil, Invalid{err}
 		}

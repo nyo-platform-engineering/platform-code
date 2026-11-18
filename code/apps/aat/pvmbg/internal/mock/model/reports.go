@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 )
@@ -17,8 +18,9 @@ type VolcanicReport struct {
 }
 
 type State struct {
-	Outage          bool `json:"outage"`
-	ConfidenceLevel bool `json:"confidence_level"`
+	Outage          bool   `json:"outage"`
+	ConfidenceLevel bool   `json:"confidence_level"`
+	SchemaMode      string `json:"schema_mode"`
 }
 
 type Feed struct {
@@ -26,6 +28,7 @@ type Feed struct {
 	interval   time.Duration
 	outage     atomic.Bool
 	confidence atomic.Bool
+	schemaMode atomic.Uint32
 }
 
 func NewFeed(start time.Time, interval time.Duration) *Feed {
@@ -67,7 +70,50 @@ func (f *Feed) SetConfidence(enabled bool) {
 }
 
 func (f *Feed) State() State {
-	return State{Outage: f.outage.Load(), ConfidenceLevel: f.confidence.Load()}
+	return State{Outage: f.outage.Load(), ConfidenceLevel: f.confidence.Load(), SchemaMode: f.SchemaMode()}
+}
+
+func (f *Feed) SchemaMode() string {
+	return []string{"original", "rename_field", "type_change", "missing_required"}[f.schemaMode.Load()]
+}
+
+func (f *Feed) SetSchemaMode(mode string) bool {
+	for index, name := range []string{"original", "rename_field", "type_change", "missing_required"} {
+		if mode == name {
+			f.schemaMode.Store(uint32(index))
+			f.confidence.Store(false)
+			return true
+		}
+	}
+	if mode == "additive" {
+		f.schemaMode.Store(0)
+		f.confidence.Store(true)
+		return true
+	}
+	return false
+}
+
+func (f *Feed) PayloadReports(since, now time.Time) []map[string]any {
+	mode := f.SchemaMode()
+	rows := []map[string]any{}
+	for _, report := range f.VolcanicReports(since, now) {
+		row := map[string]any{"report_id": report.ReportID, "volcano_id": report.VolcanoID, "alert_level": report.AlertLevel,
+			"eruption_count_24h": report.EruptionCount24h, "ash_column_height_m": report.AshColumnHeightM, "reported_at": report.ReportedAt}
+		if report.ConfidenceLevel != nil {
+			row["confidence_level"] = *report.ConfidenceLevel
+		}
+		switch mode {
+		case "rename_field":
+			row["level"] = row["alert_level"]
+			delete(row, "alert_level")
+		case "type_change":
+			row["eruption_count_24h"] = strconv.Itoa(report.EruptionCount24h)
+		case "missing_required":
+			delete(row, "eruption_count_24h")
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // VolcanicReports is deterministic by using the timestamp to generate the data
