@@ -35,11 +35,12 @@ git_remote() {
 }
 
 check_staged_paths() {
-  # Fail closed if any generated change escapes these seven image.yaml files.
+  # Fail closed if any generated change escapes these image.yaml files.
   local file
   while IFS= read -r file; do
     case "$file" in
       "$image_directory/aggregator/image.yaml"|\
+      "$image_directory/citus/image.yaml"|\
       "$image_directory/auth/image.yaml"|\
       "$image_directory/client/image.yaml"|\
       "$image_directory/bmkg/image.yaml"|\

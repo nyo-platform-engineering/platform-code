@@ -67,7 +67,7 @@ func TestM2TerminatedOwnerCannotCommitAfterTakeover(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?)", old.Fence.BackendPID).Error; err != nil {
+	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?::integer)", old.Fence.BackendPID).Error; err != nil {
 		t.Fatal(err)
 	}
 	next, err := ctrl.AcquirePollSession(ctx, "PVMBG")
@@ -171,7 +171,7 @@ func TestM2DelayedUpstreamResponseIsFencedAfterTakeover(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("old owner never fetched")
 	}
-	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?)", old.Fence.BackendPID).Error; err != nil {
+	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?::integer)", old.Fence.BackendPID).Error; err != nil {
 		t.Fatal(err)
 	}
 	next, err := ctrl.AcquirePollSession(ctx, "PVMBG")
@@ -288,7 +288,13 @@ func TestM2ThreePollersKeepOneOwnerAndStopOnCancellation(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("pollers did not stop")
 	}
+	// Socket close is asynchronous at the server, especially over a network.
 	next, err := ctrl.AcquirePollSession(context.Background(), "PVMBG")
+	deadline = time.Now().Add(time.Second)
+	for errors.Is(err, controller.ErrPollBusy) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		next, err = ctrl.AcquirePollSession(context.Background(), "PVMBG")
+	}
 	if err != nil {
 		t.Fatalf("shutdown retained ownership: %v", err)
 	}

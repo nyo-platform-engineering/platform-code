@@ -1,10 +1,11 @@
-"""The seven deployed AAT images and the source paths that affect each build."""
+"""The deployed AAT images and the source paths that affect each build."""
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 AAT_SOURCE_DIRECTORY = "code/apps/aat/"
 SERVICE_SOURCE_FOLDERS = {
     "aggregator": "aggregator",
+    "citus": "storage/postgres",
     "auth": "auth",
     "client": "client",
     "bmkg": "bmkg",

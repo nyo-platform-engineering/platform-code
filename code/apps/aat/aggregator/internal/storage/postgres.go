@@ -52,6 +52,7 @@ func utc(items []model.HazardEvent) {
 }
 
 type eventCursor struct {
+	Start    bool      `json:"start,omitempty"`
 	Version  int       `json:"v"`
 	Source   string    `json:"source"`
 	Since    string    `json:"since"`
@@ -78,7 +79,7 @@ func decodeCursor(q EventQuery) (eventCursor, error) {
 	if err != nil {
 		return cursor, ErrInvalidCursor
 	}
-	if json.Unmarshal(raw, &cursor) != nil || cursor.Version != 1 || cursor.ID == "" || cursor.Ingested.IsZero() || cursor.Source != q.Source || cursor.Since != sinceKey(q.Since) {
+	if json.Unmarshal(raw, &cursor) != nil || cursor.Version != 1 || (!cursor.Start && (cursor.ID == "" || cursor.Ingested.IsZero())) || cursor.Source != q.Source || cursor.Since != sinceKey(q.Since) {
 		return cursor, ErrInvalidCursor
 	}
 	return cursor, nil
@@ -108,19 +109,25 @@ func (p *Postgres) Events(ctx context.Context, q EventQuery) (EventPage, error) 
 	if !q.Since.IsZero() {
 		query = query.Where("ingested_at >= ?", q.Since)
 	}
-	if q.Cursor != "" {
+	if q.Cursor != "" && !cursor.Start {
 		query = query.Where("(ingested_at, id) > (?, ?)", cursor.Ingested, cursor.ID)
 	}
 	if err = query.Find(&page.Items).Error; err != nil {
 		page.Items = []model.HazardEvent{}
 		page.Availability = p.unavailable()
+		retry := q.Cursor
+		if retry == "" {
+			raw, _ := json.Marshal(eventCursor{Version: 1, Source: q.Source, Since: sinceKey(q.Since), Start: true})
+			retry = base64.RawURLEncoding.EncodeToString(raw)
+		}
+		page.NextCursor = &retry
 		return page, nil
 	}
 	utc(page.Items)
 	if len(page.Items) > q.Limit {
 		page.Items = page.Items[:q.Limit]
 		last := page.Items[len(page.Items)-1]
-		raw, err := json.Marshal(eventCursor{1, q.Source, sinceKey(q.Since), last.Ingested, last.ID})
+		raw, err := json.Marshal(eventCursor{Version: 1, Source: q.Source, Since: sinceKey(q.Since), Ingested: last.Ingested, ID: last.ID})
 		if err != nil {
 			return page, err
 		}

@@ -47,9 +47,15 @@ image:
 volumes:
 - name: tmp
   emptyDir: {}
+- name: citus
+  configMap:
+    name: aat-citus
 volumeMounts:
 - name: tmp
   mountPath: /tmp
+- name: citus
+  mountPath: /etc/citus
+  readOnly: true
 autoscaling:
   enabled: false
   minReplicas: 3
@@ -58,6 +64,8 @@ autoscaling:
 podLabels:
   role: aggregator
 config:
+  STORE_BACKEND: citus
+  CITUS_MEMBERS_FILE: /etc/citus/members.json
   BMKG_URL: http://bmkg:8081
   PVMBG_URL: http://pvmbg:8082
   NATS_URL: nats://nats:4222
@@ -69,6 +77,11 @@ config:
   OTEL_SERVICE_NAME: aggregator
   OTEL_RESOURCE_ATTRIBUTES: service.namespace=sistem-informasi-kebencanaan-bnpb
 env:
+- name: AUDIT_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: AUDIT_TOKEN
 - name: DATABASE_URL
   valueFrom:
     secretKeyRef:

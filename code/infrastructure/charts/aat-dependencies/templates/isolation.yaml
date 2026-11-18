@@ -7,16 +7,24 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: postgres
+      app.kubernetes.io/name: aat-citus
   policyTypes: [Ingress]
   ingress:
     - from:
         - podSelector:
             matchLabels:
               app.kubernetes.io/instance: aggregator
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aat-citus
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tester-agent
       ports:
         - protocol: TCP
           port: 5432
+        - protocol: TCP
+          port: 8008
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

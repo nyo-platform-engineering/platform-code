@@ -36,5 +36,5 @@ func (ctrl *Controller) ClaimOutbox(ctx context.Context, limit int, lease time.D
 }
 
 func (ctrl *Controller) MarkOutboxPublished(ctx context.Context, id int64) error {
-	return ctrl.DB.WithContext(ctx).Model(&model.HazardOutbox{}).Where("id = ? AND published_at IS NULL", id).Updates(map[string]any{"published_at": gorm.Expr("now()"), "lease_until": nil}).Error
+	return ctrl.DB.WithContext(ctx).Model(&model.HazardOutbox{}).Where("id = ? AND published_at IS NULL", id).Updates(map[string]any{"published_at": gorm.Expr("now()"), "lease_until": nil, "payload": gorm.Expr("'{}'::jsonb")}).Error
 }

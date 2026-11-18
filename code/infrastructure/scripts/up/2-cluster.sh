@@ -18,14 +18,14 @@ preflight_check() {
     return 1
   fi
 
-  # Both VM nodes must have joined Kubernetes before cluster preparation.
-  if ! kube get node aat-control aat-worker-1 >/dev/null; then
+  # All three VM nodes must have joined Kubernetes before cluster preparation.
+  if ! kube get node aat-control aat-worker-1 aat-worker-2 >/dev/null; then
     echo 'VM nodes are missing or unreachable. Run task up before preparing the cluster.' >&2
     return 1
   fi
 
   # Wait for node readiness, then reject an unsuitable topology before creating resources.
-  kube wait --for=condition=Ready node/aat-control node/aat-worker-1 --timeout=180s
+  kube wait --for=condition=Ready node/aat-control node/aat-worker-1 node/aat-worker-2 --timeout=180s
   kube get nodes -o json | python3 scripts/up/topology.py
 }
 
