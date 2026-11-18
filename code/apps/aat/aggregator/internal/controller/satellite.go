@@ -334,5 +334,13 @@ func (ctrl *Controller) SatelliteStatsHandler(c *gin.Context) {
 		fail(c.Writer, c.Request, err)
 		return
 	}
-	c.JSON(200, stats)
+	feed, err := ctrl.SatelliteFeedStatus(ctx)
+	if err != nil {
+		fail(c.Writer, c.Request, err)
+		return
+	}
+	c.JSON(200, struct {
+		SatelliteStats
+		Feed SatelliteFeedStatus `json:"feed"`
+	}{stats, feed})
 }

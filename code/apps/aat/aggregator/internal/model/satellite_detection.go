@@ -28,3 +28,25 @@ type SatelliteFire struct {
 	Formed     bool    `gorm:"not null"`
 	MergedInto *string `gorm:"type:text"`
 }
+
+// SatelliteFeed is the resume point of the satellite stream. Offset is written in
+// the same transaction as the detections it covers, so a crash can never save one
+// without the other.
+type SatelliteFeed struct {
+	Source       string     `gorm:"type:text;primaryKey"`
+	Offset       int64      `gorm:"column:feed_offset;not null"`
+	LatestOffset *int64     `gorm:"column:latest_offset"`
+	VirtualNow   *time.Time `gorm:"column:virtual_now"`
+	CheckedAt    *time.Time `gorm:"column:checked_at"`
+	UpdatedAt    time.Time  `gorm:"not null"`
+}
+
+// SatelliteReject keeps a feed event the mapper could not read, with the reason,
+// so it is reported instead of silently dropped.
+type SatelliteReject struct {
+	Offset     int64     `gorm:"column:feed_offset;primaryKey"`
+	EventType  string    `gorm:"type:text;not null"`
+	Payload    string    `gorm:"type:text;not null"`
+	Reason     string    `gorm:"type:text;not null"`
+	ReceivedAt time.Time `gorm:"not null"`
+}

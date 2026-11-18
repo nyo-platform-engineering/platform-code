@@ -98,10 +98,8 @@ func TestInboxCitusDistributedCommitAndLocalState(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer owner.Close()
-	var protocol string
-	if err := owner.Controller.DB.Raw("SHOW citus.multi_shard_commit_protocol").Scan(&protocol).Error; err != nil || protocol != "2pc" {
-		t.Fatalf("unsafe commit protocol: %s %v", protocol, err)
-	}
+	// Verify atomic distributed/local effects below, rather than depending on
+	// the removed multi_shard_commit_protocol setting.
 	captureReports(t, owner.Controller, m2VolcanicReport)
 	if _, err := owner.Controller.ProcessInbox(ctx, "PVMBG", 1); err != nil {
 		t.Fatal(err)

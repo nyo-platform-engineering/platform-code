@@ -37,6 +37,11 @@ services:
       PVMBG_SCHEMA_POLICY: ${PVMBG_SCHEMA_POLICY:-strict}
       FIELD_REPORT_PROCESSOR_ENABLED: ${FIELD_REPORT_PROCESSOR_ENABLED:-true}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
+      # Feed Satelit (P4); kosong = consumer mati. Overlay compose.satellite.yaml memakai mock lokal.
+      SATELLITE_FEED_URL: ${SATELLITE_FEED_URL:-https://satellite.naufarrel.dev}
+      SATELLITE_GROUP_TOKEN: ${SATELLITE_GROUP_TOKEN:-}
+      SATELLITE_ALLOWED_LATENESS_MINUTES: ${SATELLITE_ALLOWED_LATENESS_MINUTES:-360}
+      SATELLITE_BATCH_SIZE: ${SATELLITE_BATCH_SIZE:-200}
     ports: ["127.0.0.1:${AGGREGATOR_PORT:-8083}:8083"]
     networks: [services, storage]
     depends_on:

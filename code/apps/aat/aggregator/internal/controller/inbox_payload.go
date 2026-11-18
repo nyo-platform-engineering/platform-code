@@ -20,7 +20,11 @@ type RawPayload struct {
 }
 
 func payloadError(raw []byte) error {
-	if len(raw) > MaxProcessBytes {
+	return boundedPayloadError(raw, MaxProcessBytes)
+}
+
+func boundedPayloadError(raw []byte, limit int) error {
+	if len(raw) > limit {
 		return fmt.Errorf("payload_too_large")
 	}
 	if !utf8.Valid(raw) {
@@ -57,7 +61,9 @@ func payloadError(raw []byte) error {
 }
 
 func decodeEnvelope(raw []byte) ([]json.RawMessage, error) {
-	if err := payloadError(raw); err != nil {
+	// A valid historical batch may exceed the limit for an individual record.
+	// Records are validated separately when processed from the durable inbox.
+	if err := boundedPayloadError(raw, MaxCaptureBytes); err != nil {
 		return nil, err
 	}
 	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '[' {
