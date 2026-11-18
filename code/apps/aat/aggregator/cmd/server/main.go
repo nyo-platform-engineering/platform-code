@@ -5,6 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -21,13 +24,14 @@ import (
 )
 
 func main() {
+	workerCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	token := httpkit.Secret("AGGREGATOR_TOKEN")
 	startupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	startupCtx = httpkit.WithCorrelationID(startupCtx, httpkit.ID())
 
-	// Connect to PostgreSQL and limit the number of open connections.
 	databaseURL := httpkit.Secret("DATABASE_URL")
 	config, err := pgx.ParseConfig(databaseURL)
 	if err != nil {
@@ -36,7 +40,11 @@ func main() {
 	config.Tracer = dbtrace.New()
 	sqlDB := stdlib.OpenDB(*config)
 	defer sqlDB.Close()
-	sqlDB.SetMaxOpenConns(httpkit.Integer("DB_MAX_CONNS", 5))
+	maxConns := httpkit.Integer("DB_MAX_CONNS", 5)
+	if maxConns < 3 {
+		panic("DB_MAX_CONNS must be at least 3: two polling sessions plus API connections")
+	}
+	sqlDB.SetMaxOpenConns(maxConns)
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
 		DisableAutomaticPing: true,
 		Logger:               logger.Default.LogMode(logger.Silent),
@@ -45,7 +53,6 @@ func main() {
 		panic(err)
 	}
 
-	// Check the connection and create or update the model tables.
 	ctrl := &controller.Controller{DB: db}
 	lateness := httpkit.Integer("SATELLITE_ALLOWED_LATENESS_MINUTES", int(controller.DefaultSatelliteLateness/time.Minute))
 	if lateness < 1 {
@@ -59,10 +66,9 @@ func main() {
 		panic(err)
 	}
 
-	// Both sources share the polling interval and HTTP timeout.
 	pollInterval := time.Duration(httpkit.Integer("POLL_INTERVAL_SECONDS", 3)) * time.Second
-	if pollInterval < time.Second {
-		panic("POLL_INTERVAL_SECONDS must be positive")
+	if pollInterval < time.Second || pollInterval >= controller.PollSessionIdleTimeout/2 {
+		panic("POLL_INTERVAL_SECONDS must be between 1 and 9")
 	}
 	pollTimeout := time.Duration(httpkit.Integer("POLL_TIMEOUT_MS", 4000)) * time.Millisecond
 	if pollTimeout <= 0 {
@@ -91,13 +97,14 @@ func main() {
 		pvmbgEndpoints, ctrl, pollClient,
 	)
 
-	// Poll each source and publish queued events in the background.
-	workerCtx := context.Background()
 	natsURL := httpkit.Env("NATS_URL", "nats://nats:4222")
-	go bmkgPoller.Run(workerCtx, pollInterval)
-	go pvmbgPoller.Run(workerCtx, pollInterval)
-	go runOutboxRelay(workerCtx, ctrl, natsURL)
+	var workers sync.WaitGroup
+	workers.Go(func() { bmkgPoller.Run(workerCtx, pollInterval) })
+	workers.Go(func() { pvmbgPoller.Run(workerCtx, pollInterval) })
+	workers.Go(func() { runOutboxRelay(workerCtx, ctrl, natsURL) })
 
 	router := internal.NewHandler(ctrl, token)
-	httpkit.Serve("Aggregator", "8083", router)
+	httpkit.ServeContext(workerCtx, "Aggregator", "8083", router)
+	stop()
+	workers.Wait()
 }

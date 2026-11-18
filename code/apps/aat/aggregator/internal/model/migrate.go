@@ -25,6 +25,6 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 				return err
 			}
 		}
-		return tx.AutoMigrate(&SeismicEvent{}, &TsunamiWarning{}, &HazardEvent{}, &PollState{}, &HazardOutbox{}, &SatelliteDetection{}, &SatelliteFire{})
+		return tx.AutoMigrate(&SeismicEvent{}, &TsunamiWarning{}, &HazardEvent{}, &PollState{}, &PollOwner{}, &HazardOutbox{}, &SatelliteDetection{}, &SatelliteFire{})
 	})
 }

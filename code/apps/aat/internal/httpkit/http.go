@@ -166,6 +166,11 @@ func Sleep(r *http.Request, d time.Duration) bool {
 }
 
 func Serve(service, port string, h http.Handler) {
+	ServeContext(context.Background(), service, port, h)
+}
+
+// ServeContext waits for active HTTP requests to finish when ctx is canceled.
+func ServeContext(ctx context.Context, service, port string, h http.Handler) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	s := http.Server{
 		Addr:              ":" + Env("PORT", port),
@@ -177,7 +182,22 @@ func Serve(service, port string, h http.Handler) {
 	}
 
 	slog.Info("listening", "service", service, "address", s.Addr)
-	if e := s.ListenAndServe(); e != nil {
-		panic(e)
+	result := make(chan error, 1)
+	go func() { result <- s.ListenAndServe() }()
+	select {
+	case err := <-result:
+		if err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.Shutdown(shutdownCtx); err != nil {
+			slog.Error("HTTP drain failed", "service", service, "error", err)
+			_ = s.Close()
+		}
+		if err := <-result; err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
 	}
 }

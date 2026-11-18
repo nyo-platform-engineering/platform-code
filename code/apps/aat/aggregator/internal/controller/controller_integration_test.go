@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -106,8 +107,12 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 			if _, ok := h.Attributes["confidence_level"]; ok {
 				t.Fatal("old event gained new attribute")
 			}
-		} else if string(h.Attributes["confidence_level"]) != "0.85" || string(h.Attributes["future_sensor"]) != `{"nested":[1,true]}` {
-			t.Fatal("dynamic attributes lost")
+		} else {
+			// JSONB can change whitespace.
+			var compact bytes.Buffer
+			if err := json.Compact(&compact, h.Attributes["future_sensor"]); err != nil || string(h.Attributes["confidence_level"]) != "0.85" || compact.String() != `{"nested":[1,true]}` {
+				t.Fatal("dynamic attributes lost")
+			}
 		}
 	}
 	// Changing an attribute must count as an update.

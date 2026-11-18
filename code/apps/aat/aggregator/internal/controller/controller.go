@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"aat/aggregator/internal/dbtrace"
+	"aat/aggregator/internal/model"
 	"gorm.io/gorm"
 )
 
 type Controller struct {
 	DB *gorm.DB
+	// Set only when DB uses the owner's connection.
+	PollOwner *model.PollOwner
 	// SatelliteLateness overrides DefaultSatelliteLateness when positive.
 	SatelliteLateness time.Duration
 }

@@ -19,11 +19,16 @@ func (ctrl *Controller) GetPollState(ctx context.Context, source string) (model.
 	}
 
 	state.LastSuccessCallerTime = utc(state.LastSuccessCallerTime)
+	state.FetchCursor = utc(state.FetchCursor)
 	state.LastErrorCallerTime = utc(state.LastErrorCallerTime)
 	return state, nil
 }
 
 func (ctrl *Controller) MarkPollSuccess(ctx context.Context, source string, callerTime time.Time) error {
+	// Owned polls save progress through IngestPollBatch.
+	if ctrl.PollOwner != nil {
+		return ErrPollFenced
+	}
 	// Save the caller's start time only after the poll succeeds.
 	values := map[string]any{
 		"source":          source,
@@ -45,6 +50,16 @@ func (ctrl *Controller) MarkPollSuccess(ctx context.Context, source string, call
 }
 
 func (ctrl *Controller) MarkPollFailure(ctx context.Context, source string, callerTime time.Time, message string) error {
+	if ctrl.PollOwner != nil {
+		return ctrl.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := ctrl.fencePoll(tx, source, true); err != nil {
+				return err
+			}
+			copy := *ctrl
+			copy.DB, copy.PollOwner = tx, nil
+			return copy.MarkPollFailure(ctx, source, callerTime, message)
+		})
+	}
 	// Update health and error details while keeping the last successful caller time.
 	values := map[string]any{
 		"source":        source,

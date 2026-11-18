@@ -25,6 +25,20 @@ func (invalid Invalid) Error() string {
 }
 
 func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch map[string][]model.Record) ([]model.HazardEvent, error) {
+	return ctrl.ingestBatch(ctx, source, batch, nil)
+}
+
+// IngestPollBatch saves hazards, outbox messages, and the cursor in one transaction.
+func (ctrl *Controller) IngestPollBatch(ctx context.Context, source string, batch map[string][]model.Record, cursor *time.Time) ([]model.HazardEvent, error) {
+	if ctrl.PollOwner == nil {
+		return nil, ErrPollFenced
+	}
+	return ctrl.ingestBatch(ctx, source, batch, &pollCompletion{cursor: cursor})
+}
+
+type pollCompletion struct{ cursor *time.Time }
+
+func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch map[string][]model.Record, completion *pollCompletion) ([]model.HazardEvent, error) {
 	if len(batch) == 0 {
 		return nil, Invalid{fmt.Errorf("empty batch")}
 	}
@@ -52,6 +66,11 @@ func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch ma
 	}
 
 	defer tx.Rollback()
+	if ctrl.PollOwner != nil {
+		if err := ctrl.fencePoll(tx, source, true); err != nil {
+			return nil, err
+		}
+	}
 
 	var events []model.HazardEvent
 	var err error
@@ -67,6 +86,17 @@ func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch ma
 	changedEvents, err := saveHazards(ctx, tx, events)
 	if err != nil {
 		return nil, err
+	}
+
+	if completion != nil {
+		if err := tx.Exec(`INSERT INTO poll_states
+			(source, healthy, last_success_at, fetch_cursor)
+			VALUES (?, true, clock_timestamp(), ?)
+			ON CONFLICT (source) DO UPDATE SET healthy = true,
+			last_success_at = excluded.last_success_at, last_error_at = NULL,
+			last_error = NULL, fetch_cursor = GREATEST(poll_states.fetch_cursor, excluded.fetch_cursor)`, source, completion.cursor).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	if err = tx.Commit().Error; err != nil {
