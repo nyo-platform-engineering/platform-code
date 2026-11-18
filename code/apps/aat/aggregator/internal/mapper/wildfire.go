@@ -47,8 +47,17 @@ type Detection struct {
 type SatelliteEvent struct {
 	Kind      string
 	Detection Detection
+	// SetConfidence and SetFRP say which values the event carries. A detection
+	// carries both; an update carries only what changed; a retraction neither.
+	SetConfidence, SetFRP bool
 }
 
+var keyFields = []string{"satellite", "acq_date", "acq_time", "latitude", "longitude"}
+
+// Satellite reads one feed event. A detection carries the full row (flat or under
+// "detection"); update and retract name their detection by "key"
+// (satellite|acq_date|acq_time|latitude|longitude) and an update lists only the
+// changed fields under "changes".
 func Satellite(r model.Record) (SatelliteEvent, error) {
 	kind, err := String(r, "event_type")
 	if err != nil {
@@ -59,9 +68,25 @@ func Satellite(r model.Record) (SatelliteEvent, error) {
 	}
 
 	parts := map[string]string{}
-	for _, key := range []string{"satellite", "acq_date", "acq_time", "latitude", "longitude"} {
-		if parts[key], err = rawToken(r, key); err != nil {
+	if _, keyed := r["key"]; keyed && kind != SatelliteDetected {
+		key, err := String(r, "key")
+		if err != nil {
 			return SatelliteEvent{}, err
+		}
+		fields := strings.Split(key, "|")
+		if len(fields) != len(keyFields) {
+			return SatelliteEvent{}, fmt.Errorf("invalid key %q", key)
+		}
+		for i, name := range keyFields {
+			if parts[name] = strings.TrimSpace(fields[i]); parts[name] == "" {
+				return SatelliteEvent{}, fmt.Errorf("invalid key %q", key)
+			}
+		}
+	} else {
+		for _, name := range keyFields {
+			if parts[name], err = rawToken(r, name); err != nil {
+				return SatelliteEvent{}, err
+			}
 		}
 	}
 	at, err := detectionTime(parts["acq_date"], parts["acq_time"])
@@ -77,22 +102,43 @@ func Satellite(r model.Record) (SatelliteEvent, error) {
 		return SatelliteEvent{}, err
 	}
 
-	d := Detection{
+	event := SatelliteEvent{Kind: kind, Detection: Detection{
 		Key:        strings.Join([]string{parts["satellite"], parts["acq_date"], parts["acq_time"], parts["latitude"], parts["longitude"]}, "|"),
 		Satellite:  parts["satellite"],
 		DetectedAt: at,
 		Latitude:   lat,
 		Longitude:  lon,
-	}
-	if kind != SatelliteRetracted {
-		if d.Confidence, err = confidence(r); err != nil {
+	}}
+	switch kind {
+	case SatelliteDetected:
+		if event.Detection.Confidence, err = confidence(r); err != nil {
 			return SatelliteEvent{}, err
 		}
-		if d.FRP, err = Number(r, "frp", 0, math.MaxFloat64); err != nil {
+		if event.Detection.FRP, err = Number(r, "frp", 0, math.MaxFloat64); err != nil {
 			return SatelliteEvent{}, err
 		}
+		event.SetConfidence, event.SetFRP = true, true
+	case SatelliteUpdated:
+		values := r
+		if raw, ok := r["changes"]; ok {
+			if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+				return SatelliteEvent{}, fmt.Errorf("invalid changes")
+			}
+		}
+		if _, ok := values["confidence"]; ok {
+			if event.Detection.Confidence, err = confidence(values); err != nil {
+				return SatelliteEvent{}, err
+			}
+			event.SetConfidence = true
+		}
+		if _, ok := values["frp"]; ok {
+			if event.Detection.FRP, err = Number(values, "frp", 0, math.MaxFloat64); err != nil {
+				return SatelliteEvent{}, err
+			}
+			event.SetFRP = true
+		}
 	}
-	return SatelliteEvent{Kind: kind, Detection: d}, nil
+	return event, nil
 }
 
 // rawToken returns a string or number field exactly as the feed wrote it, so

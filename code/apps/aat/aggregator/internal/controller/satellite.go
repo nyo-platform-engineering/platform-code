@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -77,6 +78,12 @@ func (ctrl *Controller) satelliteHazards(tx *gorm.DB, records []model.Record) ([
 	for _, event := range events {
 		d := event.Detection
 		row, found := rows[d.Key]
+		if !found && event.Kind == mapper.SatelliteUpdated {
+			// The feed only updates detections it sent before; without the row
+			// there is nothing to change, so the update is logged and ignored.
+			slog.Warn("satellite update for unknown detection ignored", "key", d.Key)
+			continue
+		}
 		if !found {
 			row = &model.SatelliteDetection{
 				Key: d.Key, Satellite: d.Satellite, DetectedAt: d.DetectedAt, Latitude: d.Latitude,
@@ -107,7 +114,13 @@ func (ctrl *Controller) satelliteHazards(tx *gorm.DB, records []model.Record) ([
 		if event.Kind == mapper.SatelliteRetracted {
 			row.Retracted = true
 		} else {
-			row.Confidence, row.FRP = d.Confidence, d.FRP
+			// An update carries only the fields that changed.
+			if event.SetConfidence {
+				row.Confidence = d.Confidence
+			}
+			if event.SetFRP {
+				row.FRP = d.FRP
+			}
 		}
 		switch {
 		case previous != nil && eligible(row):

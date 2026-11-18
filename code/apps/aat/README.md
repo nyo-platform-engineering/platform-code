@@ -369,18 +369,18 @@ sehingga instance lain menunggu dan mengambil alih bila pemiliknya mati atau mem
 - Log `satellite batch committed` memuat `ingest_latency_ms` (event tertua dalam batch sampai commit);
   log `satellite feed progress` memuat `lag_events` setiap 10 detik.
 
-Pengembangan tanpa token asisten memakai mock lokal (`satellite/`):
+Token grup disimpan di `.env` (Compose) atau `.env.runtime` → Secret `aat-runtime` (cluster), tidak pernah di-commit.
 
 ```sh
-docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml -f compose.satellite.yaml up -d --build
-# Lonjakan 60x dan putus koneksi; token default mock: local-satellite-token
-curl -X POST -H "Authorization: Bearer local-satellite-token" -d '{"speed":60}' http://127.0.0.1:8087/admin/speed
-curl -X POST -H "Authorization: Bearer local-satellite-token" http://127.0.0.1:8087/admin/drop
+# Isi SATELLITE_GROUP_TOKEN di .env, lalu jalankan stack seperti biasa.
+docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --build
+curl -H "Authorization: Bearer $AGGREGATOR_TOKEN" http://127.0.0.1:8083/internal/satellite/stats
 ```
 
-Bentuk payload feed asli belum diverifikasi: mapper mengasumsikan field `satellite`, `acq_date`,
-`acq_time`, `latitude`, `longitude`, `confidence`, `frp` pada objek data (atau di dalam `detection`/`data`),
-dan offset pada `id:` SSE. Cocokkan dengan feed asli begitu token tersedia.
+Format feed (diverifikasi terhadap feed asisten): offset dimulai dari 0 dan `from` inklusif;
+`detection` membawa baris VIIRS di dalam `detection` dengan `acq_time` numerik; `update` dan
+`retract` merujuk deteksi lewat `key` (`satellite|acq_date|acq_time|latitude|longitude`), dan
+`update` hanya membawa field yang berubah di `changes`; `heartbeat` juga memiliki offset.
 
 ### Fondasi storage dan Audit API M2
 
