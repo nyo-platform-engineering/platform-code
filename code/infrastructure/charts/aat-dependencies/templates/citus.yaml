@@ -1,0 +1,278 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aat-citus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: aat-citus
+rules:
+- apiGroups: ['']
+  resources: [configmaps, endpoints]
+  verbs: [get, list, watch, create, update, patch, delete]
+- apiGroups: ['']
+  resources: [pods]
+  verbs: [get, list, watch, update, patch]
+- apiGroups: ['']
+  resources: [services]
+  verbs: [get, list, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aat-citus
+subjects:
+- kind: ServiceAccount
+  name: aat-citus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: aat-citus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: aat-citus
+    citus-group: '0'
+    patroni-role: primary
+  ports:
+  - name: postgres
+    port: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aat-citus
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: aat-citus
+  ports:
+  - name: postgres
+    port: 5432
+  - name: patroni
+    port: 8008
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aat-citus
+# Patroni supplies placement/failover; Kubernetes is its consensus store.
+# No extra etcd processes are required.
+data:
+  patroni.yaml: |
+    scope: aat-citus
+    kubernetes:
+      use_endpoints: true
+      labels: {app.kubernetes.io/name: aat-citus}
+      scope_label: patroni-scope
+      role_label: patroni-role
+      leader_label_value: primary
+      follower_label_value: replica
+      ports: [{name: postgres, port: 5432}]
+    restapi:
+      listen: 0.0.0.0:8008
+    bootstrap:
+      dcs:
+        ttl: 20
+        loop_wait: 2
+        retry_timeout: 5
+        synchronous_mode: true
+        synchronous_node_count: 1
+        synchronous_mode_strict: false
+        check_timeline: true
+        postgresql:
+          use_pg_rewind: true
+          use_slots: true
+          parameters:
+            shared_buffers: 64MB
+            work_mem: 2MB
+            maintenance_work_mem: 32MB
+            max_connections: 40
+            max_prepared_transactions: 80
+            max_wal_senders: 12
+            max_replication_slots: 12
+            max_worker_processes: 24
+            wal_level: logical
+            wal_log_hints: 'on'
+            synchronous_commit: 'on'
+            statement_timeout: 2000
+            idle_in_transaction_session_timeout: 5000
+            citus.max_adaptive_executor_pool_size: 4
+            citus.max_shared_pool_size: 24
+            citus.node_connection_timeout: 1000
+      initdb:
+      - encoding: UTF8
+      - data-checksums
+    postgresql:
+      listen: 0.0.0.0:5432
+      data_dir: /var/lib/postgresql/data/pgdata
+      pgpass: /tmp/pgpass
+      basebackup:
+      - checkpoint: fast
+      pg_hba:
+      - local all all trust
+      - host replication replicator all scram-sha-256
+      - host all all all scram-sha-256
+      parameters:
+        unix_socket_directories: /tmp
+    tags:
+      nosync: false
+  members.json: |
+    [
+    {{- $comma := dict "used" false }}
+    {{- range $group := .Values.citus.groups }}
+    {{- if gt (int $group.id) 0 }}
+    {{- range $node := $group.nodes }}
+    {{- $unit := printf "citus-g%v-%s-0" $group.id $node }}
+    {{- if $comma.used }},{{ end }}
+    {"unit":{{ $unit | quote }},"group":{{ $group.id }},"node":{{ $node | quote }},"host":"{{ $unit }}.aat-citus","api":"http://{{ $unit }}.aat-citus:8008"}
+    {{- $_ := set $comma "used" true }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    ]
+{{- range $group := .Values.citus.groups }}
+# Headless services protect the Endpoints used by Patroni from Kubernetes GC.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aat-citus-{{ $group.id }}-config
+spec:
+  clusterIP: None
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: citus-g{{ $group.id }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aat-citus
+      citus-group: {{ $group.id | quote }}
+{{- range $node := $group.nodes }}
+{{- $name := printf "citus-g%v-%s" $group.id $node }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+spec:
+  serviceName: aat-citus
+  replicas: 1
+  selector:
+    matchLabels:
+      storage-unit: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aat-citus
+        role: store
+        storage-unit: {{ $name }}
+        patroni-scope: aat-citus
+        citus-group: {{ $group.id | quote }}
+    spec:
+      serviceAccountName: aat-citus
+      nodeSelector:
+        kubernetes.io/hostname: {{ $node }}
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+      - name: postgres
+        image: "{{ $.Values.image.repository }}{{ if $.Values.image.digest }}@{{ $.Values.image.digest }}{{ else }}:{{ $.Values.image.tag }}{{ end }}"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+        command: [/bin/sh, -ec]
+        args:
+        - |
+          # kubelet may broaden an existing PGDATA mode when applying fsGroup.
+          if [ -d /var/lib/postgresql/data/pgdata ]; then
+            chmod 0700 /var/lib/postgresql/data/pgdata
+          fi
+          exec patroni /etc/patroni/patroni.yaml
+        resources:
+          requests: {cpu: 100m, memory: 512Mi}
+          limits: {cpu: '1', memory: 1Gi}
+        ports:
+        - name: postgres
+          containerPort: 5432
+        - name: patroni
+          containerPort: 8008
+        readinessProbe:
+          httpGet: {path: /readiness, port: patroni}
+          periodSeconds: 3
+          timeoutSeconds: 1
+        livenessProbe:
+          httpGet: {path: /liveness, port: patroni}
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 6
+        startupProbe:
+          httpGet: {path: /liveness, port: patroni}
+          periodSeconds: 5
+          failureThreshold: 60
+        env:
+        - name: PATRONI_NAME
+          valueFrom:
+            fieldRef: {fieldPath: metadata.name}
+        - name: PATRONI_KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef: {fieldPath: metadata.namespace}
+        - name: PATRONI_KUBERNETES_POD_IP
+          valueFrom:
+            fieldRef: {fieldPath: status.podIP}
+        - name: PATRONI_RESTAPI_CONNECT_ADDRESS
+          value: "$(PATRONI_NAME).aat-citus:8008"
+        - name: PATRONI_POSTGRESQL_CONNECT_ADDRESS
+          value: "$(PATRONI_NAME).aat-citus:5432"
+        - name: PATRONI_CITUS_GROUP
+          value: {{ $group.id | quote }}
+        - name: PATRONI_CITUS_DATABASE
+          valueFrom:
+            secretKeyRef: {name: aat-runtime, key: POSTGRES_DB}
+        - name: PATRONI_SUPERUSER_USERNAME
+          valueFrom:
+            secretKeyRef: {name: aat-runtime, key: POSTGRES_USER}
+        - name: PATRONI_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef: {name: aat-runtime, key: POSTGRES_PASSWORD}
+        - name: PATRONI_REPLICATION_USERNAME
+          value: replicator
+        - name: PATRONI_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef: {name: aat-runtime, key: POSTGRES_REPLICATION_PASSWORD}
+        volumeMounts:
+        - {name: data, mountPath: /var/lib/postgresql/data}
+        - {name: config, mountPath: /etc/patroni, readOnly: true}
+        - {name: tmp, mountPath: /tmp}
+      volumes:
+      - name: config
+        configMap: {name: aat-citus}
+      - name: tmp
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      storageClassName: local-path
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: {{ $.Values.citus.size }}
+{{- end }}
+{{- end }}

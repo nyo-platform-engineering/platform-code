@@ -30,7 +30,7 @@ func main() {
 	defer stop()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	token := httpkit.Secret("AGGREGATOR_TOKEN")
-	startupCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	startupCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	startupCtx = httpkit.WithCorrelationID(startupCtx, httpkit.ID())
 
@@ -76,6 +76,19 @@ func main() {
 	}
 	if err := model.Migrate(startupCtx, db); err != nil {
 		panic(err)
+	}
+
+	if os.Getenv("STORE_BACKEND") == "citus" {
+		members, err := storage.ReadCitusMembers(os.Getenv("CITUS_MEMBERS_FILE"))
+		if err != nil {
+			panic(err)
+		}
+		if err := storage.EnableCitus(startupCtx, db); err != nil {
+			panic(err)
+		}
+		ctrl.Store = storage.NewCitus(db, members)
+	} else if mode := os.Getenv("STORE_BACKEND"); mode != "" && mode != "postgres" {
+		panic("STORE_BACKEND must be postgres or citus")
 	}
 
 	pollInterval := time.Duration(httpkit.Integer("POLL_INTERVAL_SECONDS", 3)) * time.Second

@@ -1,15 +1,16 @@
 # Local Kubernetes cluster
 
-Cluster pengembangan lokal menggunakan **k3s pada dua VM libvirt/KVM**. Setiap node mempunyai kernel dan disk sendiri. Argo CD merekonsiliasi platform serta workload dari Git; Loki, Grafana, Tempo, dan Mimir menyediakan observabilitas bersama.
+Cluster pengembangan lokal menggunakan **k3s pada tiga VM libvirt/KVM**. Setiap node mempunyai kernel dan disk sendiri. Argo CD merekonsiliasi platform serta workload dari Git; Loki, Grafana, Tempo, dan Mimir menyediakan observabilitas bersama.
 
 ## Topologi
 
 | Node | Peran | vCPU | RAM | IP default |
 | --- | --- | ---: | ---: | --- |
-| Control plane | API, scheduler, workload, backend observabilitas | 4 | 4 GiB | 192.168.56.10 |
-| Worker 1 | Workload | 2 | 2 GiB | 192.168.56.11 |
+| Control plane | API, scheduler, workload, backend observabilitas | 4 | 6 GiB | 192.168.56.10 |
+| Worker 1 | Workload dan dua anggota Citus | 2 | 3 GiB | 192.168.56.11 |
+| Worker 2 | Workload dan dua anggota Citus | 2 | 3 GiB | 192.168.56.12 |
 
-Kedua VM berada pada satu host fisik, dengan total alokasi guest 6 vCPU dan 6 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
+Ketiga VM berada pada satu host fisik, dengan total alokasi guest 8 vCPU dan 12 GiB RAM. Versi k3s default adalah `v1.34.5+k3s1`; box guest `bento/ubuntu-24.04`. Ukuran VM, hostname, subnet, dan pilihan driver tercantum di [Vagrantfile](local/Vagrantfile).
 
 Default CPU control plane dinaikkan menjadi 4 vCPU setelah snapshot dua node menunjukkan penggunaan 1381m pada control plane dan 1245m pada worker. `AAT_CONTROL_CPUS` dan `AAT_WORKER_CPUS` mengganti CPU per peran; `AAT_VM_CPUS` tetap dapat mengganti default keduanya. Terapkan perubahan CPU pada guest yang sudah ada dengan `task down` lalu `task up`; perubahan file tidak mengubah CPU VM yang sedang berjalan.
 
@@ -17,9 +18,9 @@ Untuk menerapkan perubahan RAM pada VM yang sudah ada, jalankan `task down` lalu
 
 Satu control plane berarti API dan scheduler belum memiliki redundansi. Storage `local-path` terikat pada disk node; perpindahan pod ke node lain tidak mereplikasi datanya. Backend observabilitas ditempatkan pada control plane melalui `nodeSelector`.
 
-Topologi dua VM menjalankan tiga pod Aggregator dengan sebaran 2+1 menurut hostname. Ini memenuhi minimum platform dua node; penafsiran P2.1 tentang instance pada node berbeda tetap perlu dikonfirmasi kepada asisten. Semua pengujian mematikan atau membekukan node hanya menargetkan `aat-worker-1`.
+Tiga pod Aggregator tersebar satu per node. Storage memakai Citus dengan tiga kelompok shard dan dua anggota PostgreSQL per kelompok, ditambah satu coordinator pada control plane. Tiap node menyimpan dua dari tiga kelompok sehingga tidak memiliki seluruh dataset. Patroni mengelola streaming replication dan failover; buffer PostgreSQL 64 MiB serta pool koneksi kecil membatasi overhead. Ketujuh instance storage tetap meminta 512 MiB dan dibatasi 1 GiB sesuai Lampiran B. Budget 12 GiB memberi ruang bagi k3s, aplikasi, dan observabilitas; ini alokasi awal, bukan hasil pengukuran beban akhir.
 
-Pada lab lama, `aat-worker-2` yang sudah berhenti tidak dinyalakan oleh `task up`; disk lamanya tetap disimpan. Bootstrap hanya menunggu dua node aktif, sehingga objek Kubernetes worker lama yang NotReady tidak menghalangi startup. Sebelum menghapus objek node lama atau disknya, periksa workload dan local PV yang masih terikat padanya dan pindahkan data yang diperlukan. Perubahan konfigurasi ini tidak memigrasikan data storage secara otomatis.
+Uji kehilangan node hanya menargetkan `aat-worker-1` atau `aat-worker-2`. Coordinator dan control plane masih tunggal; topologi ini belum menjamin pemulihan kehilangan control plane.
 
 ## Komponen platform
 
@@ -84,7 +85,7 @@ Startup dikoordinasikan oleh `scripts/up/main.sh`, dengan langkah terpisah di
 | `4-apps.sh` | Mendaftarkan root Application, menunggu gateway, dan menjalankan listener background `.localhost` |
 
 Setiap script memiliki `preflight_check()` sendiri: langkah VM memeriksa tooling
-Vagrant/libvirt/KVM, langkah cluster memastikan kedua node VM tersedia dan Ready,
+Vagrant/libvirt/KVM, langkah cluster memastikan ketiga node VM tersedia dan Ready,
 langkah Argo CD memastikan API Kubernetes siap, dan langkah aplikasi menunggu CRD
 Application tersedia. `task doctor` hanya menjalankan preflight VM tanpa menyalakan
 atau mengubah guest.
@@ -99,7 +100,7 @@ bukan glob eksekusi.
 
 Commit/push konfigurasi terlebih dahulu. Application membaca `https://github.com/nyo-platform-engineering/platform-code.git` pada revision `main`. Untuk fork atau branch lain, sesuaikan URL/revision pada root dan child Applications. Repository private membutuhkan kredensial pada Argo CD.
 
-`task up` selalu menggunakan dua VM Vagrant/libvirt dan kubeconfig lab di
+`task up` selalu menggunakan tiga VM Vagrant/libvirt dan kubeconfig lab di
 `.state/kubeconfig`. Tidak ada mode startup tanpa VM.
 
 Untuk hanya menjalankan deployment ke cluster yang sudah tersedia:
@@ -111,7 +112,7 @@ bash scripts/up/3-argocd.sh
 bash scripts/up/4-apps.sh
 ```
 
-Preflight saat ini membutuhkan minimal dua node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
+Preflight saat ini membutuhkan minimal tiga node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
 
 ## GitOps
 

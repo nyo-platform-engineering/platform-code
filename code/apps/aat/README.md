@@ -392,3 +392,118 @@ SIGTERM/SIGINT menguras HTTP request lalu melakukan flush exporter dengan timeou
 Untuk bukti, kirim GET /hazards dengan token client, catat X-Trace-ID, lalu cari ID
 tersebut pada datasource Tempo di Grafana Explore. Periksa Client API, Auth,
 Aggregator, dan child span PostgreSQL pada trace yang sama beserta durasinya.
+
+## Milestone 2: Citus storage
+
+P1 menetapkan hasil (distribusi, replikasi, kehilangan disk, pemulihan, dan audit),
+tanpa mewajibkan mesin sharding buatan sendiri. Implementasi memakai Citus 13.0.1
+pada PostgreSQL 17 dan Patroni 4.1.0. Routing shard, streaming replication,
+promosi standby, dan pemulihan replika dikelola database/Patroni.
+
+| VM | Kelompok data yang disimpan |
+| --- | --- |
+| `aat-control` | coordinator metadata, anggota grup 1 dan 3 |
+| `aat-worker-1` | anggota grup 1 dan 2 |
+| `aat-worker-2` | anggota grup 2 dan 3 |
+
+Setiap grup worker memiliki dua instance di disk node berbeda. Primary dipilih
+Patroni, bukan ditentukan oleh nama VM. Tidak ada VM menyimpan ketiga grup data.
+Ini **dua salinan melalui PostgreSQL streaming replication**, bukan pengaturan
+`citus.shard_replication_factor=2`. Jangan menjadikan `hazard_events` reference
+table karena reference table disalin penuh ke setiap worker.
+
+`hazard_events` dibagi menjadi 24 hash shard berdasarkan `source_ref_id` yang
+berkardinalitas tinggi. Lokasi geografis tidak menjadi distribution key, sehingga
+lonjakan satu wilayah tetap tersebar. Unique key `(source, source_ref_id)` tetap
+mencegah duplikasi. Primary key menyertakan distribution key; pembaruan tetap
+mempertahankan `hazard_id` pertama. Source state, polling fence, dan outbox berada
+pada coordinator dan di-commit bersama perubahan canonical melalui transaksi
+Citus. Payload outbox dibersihkan setelah publikasi berhasil agar coordinator
+tidak menjadi arsip seluruh HazardEvent. NATS tetap memiliki retensi event sendiri.
+
+Deploy Kubernetes dari root `code/infrastructure` dengan `task up`. Image Citus +
+Patroni dibangun oleh pipeline AAT dan dipasang melalui pin image pada Argo CD.
+Pada merge pertama, tunggu pipeline menerbitkan image dan memperbarui digest
+sebelum menilai readiness. Compose M1 tetap memakai PostgreSQL tunggal untuk
+pengembangan; Compose bukan bukti pemenuhan P1/P2.
+
+Konfigurasi Aggregator tambahan:
+
+| Variabel | Nilai Kubernetes |
+| --- | --- |
+| `STORE_BACKEND` | `citus`; kosong/`postgres` untuk development M1 |
+| `CITUS_MEMBERS_FILE` | `/etc/citus/members.json`, inventory dari ConfigMap storage |
+| `AUDIT_TOKEN` | Secret tersendiri, berbeda dari token aplikasi |
+| `POSTGRES_REPLICATION_PASSWORD` | Secret khusus koneksi replikasi, dibuat bootstrap |
+
+API biasa mendukung `GET /hazards?order=recent&limit=50` dan `cursor` dari
+`next_cursor`, diurutkan global menurut `occurred_at DESC, hazard_id DESC`.
+Pagination audit tetap `ingested_at ASC, hazard_id ASC`. Citus melakukan sort
+lintas shard; cursor tidak mengandung alamat worker sehingga tetap berlaku
+setelah failover/rebalance. Jangan menggabungkan `after` dengan `order=recent`.
+Read memakai isolasi PostgreSQL/Citus READ COMMITTED; pagination merupakan view
+hidup, bukan snapshot lintas beberapa request. Update yang berlangsung saat
+pagination dapat mengubah keanggotaan halaman. Untuk pembandingan checksum demo,
+gunakan dataset stabil dan catat waktu pengukuran. Write canonical, source cursor,
+dan outbox tetap berada dalam satu transaksi; kegagalan transaksi tidak dianggap
+sebagai ingest berhasil.
+
+Selama worker belum tersedia, query dibatasi waktu dan mengembalikan HTTP 200,
+`partial:true`, serta `unavailable_units`; checksum bernilai null. Bila query SQL
+lintas shard gagal, halaman konservatifnya kosong dengan cursor retry yang sama.
+Halaman tersebut tidak mengklaim akhir dataset. Setelah promosi selesai, query
+kembali lengkap. Audit location menggunakan katalog shard Citus dan status hidup
+Patroni; standby yang masih mengejar WAL tidak diiklankan sebagai salinan lengkap.
+
+Synchronous replication aktif dalam keadaan sehat. Dengan dua anggota per grup,
+Patroni dapat melanjutkan write pada anggota yang tersisa setelah satu node hilang
+(`synchronous_mode_strict:false`); grup itu sementara hanya memiliki satu salinan.
+Jangan mengklaim tahan kegagalan kedua sebelum replica kembali streaming/sync.
+Coordinator tunggal dipasang pada control plane: uji kehilangan node wajib memilih
+worker non-control-plane. Desain ini belum menyediakan HA untuk control plane.
+
+Pemulihan node yang sama dengan disk kosong: nyalakan kembali node, sediakan PVC
+local-path kosong untuk unit yang hilang, lalu jalankan instance Patroni-nya.
+Patroni melakukan base backup dari primary yang bertahan, kemudian mengejar WAL;
+read/write ke primary tetap berjalan. Local PV yang masih menunjuk direktori
+hilang tidak membuat direktori baru otomatis: setelah mengonfirmasi disk unit itu
+sudah hilang dan replica lain sehat, hentikan unit terdampak, ganti PVC-nya dengan
+PVC kosong, lalu nyalakan kembali. Jeda reconciliation Argo CD selama tindakan
+manual tersebut agar jumlah replika tidak dikembalikan di tengah pemulihan.
+Jangan menghapus PVC primary yang selamat atau memaksa promosi standby tertinggal.
+Untuk node pengganti bernama lain, ubah placement grup pada Helm values serta
+inventory, pertahankan unit yang selamat, dan tunggu anggota baru selesai cloning.
+
+Untuk menambah kapasitas dengan grup worker baru, tambahkan sepasang anggota di
+node berbeda pada `citus.groups` (hindari placement yang membuat satu node
+memegang seluruh grup), tunggu Patroni mendaftarkan primary, kemudian jalankan
+pada coordinator:
+
+```sql
+SELECT citus_rebalance_start();
+SELECT * FROM citus_rebalance_status();
+```
+
+Citus Community menyediakan rebalance online menggunakan logical replication.
+Menambah worker saja tidak memindahkan shard lama. Inventory ConfigMap harus
+ikut diperbarui dan Aggregator di-rollout agar audit mengenali anggota baru.
+
+### Verifikasi storage
+
+Suite integrasi memakai PostgreSQL/Citus nyata. Jalankan terhadap database uji
+terpisah yang sudah memiliki tiga worker group, bukan database demo:
+
+```sh
+AAT_TEST_CITUS=1 AAT_TEST_DATABASE_URL='postgres://...database-uji...' go test ./...
+```
+
+Untuk bukti demo P1, muat katalog asisten, rekam sebaran per node dan checksum,
+matikan worker beserta disknya, periksa respons parsial selama failover, kemudian
+cocokkan checksum lengkap. Pulihkan replika dari disk kosong dan ulangi kehilangan
+worker berikutnya. Gunakan Tester Agent resmi pada tiga VM ber-kernel terpisah;
+cluster container hanya untuk pengujian pengembangan. Dashboard analitik P1.7
+merupakan tahap berikutnya dan tidak dipenuhi oleh dashboard observabilitas.
+
+Rujukan: [Citus cluster management](https://docs.citusdata.com/en/v13.0/admin_guide/cluster_management.html),
+[Patroni Citus integration](https://patroni.readthedocs.io/en/rel_4_1/citus.html),
+dan [jaminan synchronous replication](https://patroni.readthedocs.io/en/rel_4_1/replication_modes.html).

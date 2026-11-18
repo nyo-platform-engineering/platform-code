@@ -1,0 +1,4 @@
+# CI replaces this initial tag with the digest after the first storage image build.
+image:
+  repository: ghcr.io/nyo-platform-engineering/aat-apps/citus
+  tag: citus-13.0.1-patroni-4.1.0

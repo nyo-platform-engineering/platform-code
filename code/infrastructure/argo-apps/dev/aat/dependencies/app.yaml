@@ -13,6 +13,8 @@ spec:
     path: code/infrastructure/charts/aat-dependencies
     helm:
       releaseName: aat-dependencies
+      valueFiles:
+      - ../../argo-apps/dev/aat/citus/image.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: sistem-informasi-kebencanaan-bnpb

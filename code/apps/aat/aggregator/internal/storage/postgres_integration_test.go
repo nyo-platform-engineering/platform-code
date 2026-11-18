@@ -195,3 +195,56 @@ func TestPostgresWriterTransactionAndIdempotency(t *testing.T) {
 		t.Fatalf("outbox: %d %v", count, err)
 	}
 }
+
+func TestRecentPagesAndUnavailableCursorRetry(t *testing.T) {
+	db := testPostgres(t)
+	ctx := context.Background()
+	store := NewPostgres(db, Identity{Unit: "canonical"})
+	at := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	for i := 0; i < 5; i++ {
+		h := model.HazardEvent{ID: fmt.Sprintf("hz-%d", i), Ref: fmt.Sprint(i), Source: "BMKG", Type: "SEISMIC", Severity: "NORMAL", Area: "Jawa", Occurred: at, Ingested: at, Attributes: model.Record{}}
+		if err := db.Create(&h).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	q := HazardQuery{Order: "recent", Limit: 2}
+	seen := []string{}
+	for {
+		page, err := store.Page(ctx, q)
+		if err != nil || page.Partial {
+			t.Fatalf("page: %+v %v", page, err)
+		}
+		for _, h := range page.Items {
+			seen = append(seen, h.ID)
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		q.Cursor = *page.NextCursor
+	}
+	if !reflect.DeepEqual(seen, []string{"hz-4", "hz-3", "hz-2", "hz-1", "hz-0"}) {
+		t.Fatalf("recent timestamp ties: %v", seen)
+	}
+	q.Source = "PVMBG"
+	if _, err := store.Page(ctx, q); !errors.Is(err, ErrInvalidCursor) {
+		t.Fatalf("changed source: %v", err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	partial, err := store.Page(canceled, HazardQuery{Order: "recent", Limit: 2})
+	if err != nil || !partial.Partial || partial.NextCursor == nil {
+		t.Fatalf("missing retry: %+v %v", partial, err)
+	}
+	page, err := store.Page(ctx, HazardQuery{Order: "recent", Limit: 2, Cursor: *partial.NextCursor})
+	if err != nil || len(page.Items) != 2 || page.Items[0].ID != "hz-4" {
+		t.Fatalf("retry skipped data: %+v %v", page, err)
+	}
+	audit, err := store.Events(canceled, EventQuery{Limit: 2})
+	if err != nil || !audit.Partial || audit.NextCursor == nil {
+		t.Fatalf("audit missing retry: %+v %v", audit, err)
+	}
+	recovered, err := store.Events(ctx, EventQuery{Limit: 2, Cursor: *audit.NextCursor})
+	if err != nil || len(recovered.Items) != 2 || recovered.Items[0].ID != "hz-0" {
+		t.Fatalf("audit retry skipped data: %+v %v", recovered, err)
+	}
+}

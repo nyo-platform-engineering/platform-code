@@ -53,7 +53,7 @@ def new_credentials():
             f"postgres://aat:{database_password}@postgres:5432/aat?sslmode=disable"
         ),
     }
-    for key in TOKEN_KEYS:
+    for key in (*TOKEN_KEYS, "POSTGRES_REPLICATION_PASSWORD", "AUDIT_TOKEN"):
         credentials[key] = secrets.token_hex(32)
     return credentials
 
@@ -129,6 +129,16 @@ def ensure_aat_credentials():
     # Tighten permissions even when reusing an older local file.
     os.chmod(credentials_file, 0o600)
     credentials = read_env(credentials_file)
+    # Extend older environments without rotating any existing credential.
+    added = False
+    for key in ("POSTGRES_REPLICATION_PASSWORD", "AUDIT_TOKEN"):
+        if not credentials.get(key):
+            credentials[key] = secrets.token_hex(32)
+            added = True
+    if added:
+        temporary = credentials_file.with_suffix(".next")
+        write_private(temporary, "".join(f"{key}={value}\n" for key, value in credentials.items()))
+        os.replace(temporary, credentials_file)
     apply("Secret", "aat-runtime", NAMESPACE, credentials)
 
 

@@ -175,7 +175,7 @@ class WorkloadTests(unittest.TestCase):
 
     def test_local_storage_and_owner_isolation(self):
         workloads = [d for d in self.dependencies if d["kind"] == "StatefulSet"]
-        self.assertEqual(len(workloads), 2)
+        self.assertEqual(len(workloads), 8)
         for document in workloads:
             self.assertEqual(document["spec"]["volumeClaimTemplates"][0]["spec"]["storageClassName"], "local-path")
             container = document["spec"]["template"]["spec"]["containers"][0]
@@ -183,8 +183,37 @@ class WorkloadTests(unittest.TestCase):
             self.assertEqual(container["resources"]["limits"]["memory"], "1Gi")
         policy = next(d for d in self.dependencies if d["metadata"]["name"] == "postgres-owner-only")
         allowed = policy["spec"]["ingress"][0]["from"]
-        self.assertEqual(allowed, [{"podSelector": {"matchLabels": {"app.kubernetes.io/instance": "aggregator"}}}])
+        self.assertEqual(allowed, [
+            {"podSelector": {"matchLabels": {"app.kubernetes.io/instance": "aggregator"}}},
+            {"podSelector": {"matchLabels": {"app.kubernetes.io/name": "aat-citus"}}},
+            {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "tester-agent"}}},
+        ])
         self.assertEqual(policy["spec"]["ingress"][0]["ports"][0]["port"], 5432)
+
+    def test_citus_replica_placement_and_patroni_configuration(self):
+        storage = [d for d in self.dependencies if d["kind"] == "StatefulSet" and d["metadata"]["name"].startswith("citus-")]
+        groups = {}
+        per_node = {}
+        for document in storage:
+            pod = document["spec"]["template"]
+            self.assertEqual(pod["metadata"]["labels"]["role"], "store")
+            group = pod["metadata"]["labels"]["citus-group"]
+            node = pod["spec"]["nodeSelector"]["kubernetes.io/hostname"]
+            groups.setdefault(group, []).append(node)
+            if group != "0":
+                per_node.setdefault(node, set()).add(group)
+            self.assertEqual(pod["spec"]["securityContext"]["fsGroupChangePolicy"], "OnRootMismatch")
+        self.assertEqual(len(groups["0"]), 1)
+        for group in ("1", "2", "3"):
+            self.assertEqual(len(groups[group]), 2)
+            self.assertEqual(len(set(groups[group])), 2)
+        self.assertTrue(all(len(groups) == 2 for groups in per_node.values()))
+        config = next(d for d in self.dependencies if d["kind"] == "ConfigMap" and d["metadata"]["name"] == "aat-citus")
+        self.assertEqual(len(json.loads(config["data"]["members.json"])), 6)
+        patroni = yaml.safe_load(config["data"]["patroni.yaml"])
+        self.assertTrue(patroni["bootstrap"]["dcs"]["synchronous_mode"])
+        self.assertEqual(patroni["kubernetes"]["role_label"], "patroni-role")
+        self.assertTrue(patroni["kubernetes"]["use_endpoints"])
 
     def test_existing_platform_values_connect_lgtm_and_dashboard(self):
         platform = ROOT / "argo-apps/platform"
@@ -257,7 +286,7 @@ class CredentialTests(unittest.TestCase):
                 self.runtime.ensure()
                 self.assertEqual((root / ".env.runtime").read_bytes(), first)
                 self.assertEqual((root / ".state/mock-start-time").read_bytes(), clock)
-                self.assertEqual(set(objects[("secret", "aat-runtime")]["data"]), self.runtime.REQUIRED)
+                self.assertEqual(set(objects[("secret", "aat-runtime")]["data"]), self.runtime.REQUIRED | {"POSTGRES_REPLICATION_PASSWORD", "AUDIT_TOKEN"})
 
     def test_recover_existing_cluster_credentials_without_rotation(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -269,14 +298,31 @@ class CredentialTests(unittest.TestCase):
                 self.runtime.ensure()
                 self.assertEqual(self.runtime.read_env(root / ".env.runtime"), credentials)
 
+    def test_upgrade_adds_replication_and_audit_secrets_without_rotating_old_values(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".state").mkdir()
+            credentials = self.runtime.new_credentials()
+            credentials.pop("POSTGRES_REPLICATION_PASSWORD")
+            credentials.pop("AUDIT_TOKEN")
+            self.runtime.write_private(root / ".env.runtime", "".join(f"{k}={v}\n" for k, v in credentials.items()))
+            with patch.object(self.runtime, "ROOT", root), patch.object(self.runtime, "apply"):
+                self.runtime.ensure_aat_credentials()
+                upgraded = self.runtime.read_env(root / ".env.runtime")
+                self.assertEqual({k: upgraded[k] for k in credentials}, credentials)
+                self.assertNotEqual(upgraded["AUDIT_TOKEN"], upgraded["AGGREGATOR_TOKEN"])
+                self.assertNotEqual(upgraded["POSTGRES_REPLICATION_PASSWORD"], upgraded["POSTGRES_PASSWORD"])
+                self.runtime.ensure_aat_credentials()
+                self.assertEqual(self.runtime.read_env(root / ".env.runtime"), upgraded)
+
 
 class TopologyTests(unittest.TestCase):
     def test_reject_container_clusters_and_too_few_nodes(self):
         topology = load_module("topology")
-        real = [{"metadata": {"name": f"aat-{i}"}, "status": {"nodeInfo": {"osImage": "Ubuntu 24.04.3 LTS"}}} for i in range(2)]
+        real = [{"metadata": {"name": f"aat-{i}"}, "status": {"nodeInfo": {"osImage": "Ubuntu 24.04.3 LTS"}}} for i in range(3)]
         self.assertTrue(topology.validate(real))
         with self.assertRaises(ValueError):
-            topology.validate(real[:1])
+            topology.validate(real[:2])
         real[0]["metadata"]["name"] = "k3d-dev-server-0"
         with self.assertRaises(ValueError):
             topology.validate(real)

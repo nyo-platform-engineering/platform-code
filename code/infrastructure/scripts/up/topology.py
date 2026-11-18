@@ -5,8 +5,8 @@ import sys
 
 
 def validate(nodes):
-    if len(nodes) < 2:
-        raise ValueError("Use >=2 VM/native nodes with separate kernels for this local topology.")
+    if len(nodes) < 3:
+        raise ValueError("Use >=3 VM/native nodes with separate kernels for this local topology.")
     for node in nodes:
         info = node["status"]["nodeInfo"]
         name = node["metadata"]["name"]

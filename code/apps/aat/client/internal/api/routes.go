@@ -52,7 +52,7 @@ func Handler(config Config) (http.Handler, error) {
 		}
 		q, err := url.ParseQuery(c.Request.URL.RawQuery)
 		if err != nil || !validQuery(q) {
-			c.JSON(400, gin.H{"error": "invalid query; use source, limit (1..1000), after, and fields"})
+			c.JSON(400, gin.H{"error": "invalid query; use source, limit (1..1000), after or order=recent with cursor, and fields"})
 			return
 		}
 		requested := []string(nil)
@@ -71,8 +71,11 @@ func Handler(config Config) (http.Handler, error) {
 			q.Del("fields") // Projection belongs to this service, never to the store API.
 		}
 		var page struct {
-			Items []Hazard `json:"items"`
-			Next  string   `json:"next_after"`
+			Items            []Hazard `json:"items"`
+			Next             string   `json:"next_after"`
+			Cursor           *string  `json:"next_cursor"`
+			Partial          bool     `json:"partial"`
+			UnavailableUnits []string `json:"unavailable_units"`
 		}
 		err = u.get(ctx, "GET", u.endpoint(config.AggregatorURL, "/internal/hazards")+"?"+q.Encode(), config.AggregatorToken, correlation, nil, &page)
 		if err != nil || page.Items == nil {
@@ -96,12 +99,19 @@ func Handler(config Config) (http.Handler, error) {
 			items = append(items, item)
 		}
 		statuses := u.statuses(ctx, q.Get("source"), correlation)
-		c.JSON(200, gin.H{"items": items, "next_after": page.Next, "sources": statuses})
+		units := page.UnavailableUnits
+		if units == nil {
+			units = []string{}
+		}
+		c.JSON(200, gin.H{"items": items, "next_after": page.Next, "next_cursor": page.Cursor, "sources": statuses, "partial": page.Partial, "unavailable_units": units})
 	})
 	return httpkit.Limit(config.MaxConcurrent, router), nil
 }
 
 func validQuery(q url.Values) bool {
+	if (q.Get("cursor") != "" && q.Get("order") != "recent") || (q.Get("order") == "recent" && q.Get("after") != "") {
+		return false
+	}
 	for key, values := range q {
 		if len(values) != 1 {
 			return false
@@ -114,6 +124,14 @@ func validQuery(q url.Values) bool {
 		case "limit":
 			n, err := strconv.Atoi(values[0])
 			if err != nil || n < 1 || n > 1000 {
+				return false
+			}
+		case "order":
+			if values[0] != "id" && values[0] != "recent" {
+				return false
+			}
+		case "cursor":
+			if values[0] == "" || len(values[0]) > 4096 {
 				return false
 			}
 		case "fields":
