@@ -50,6 +50,8 @@ print_all_credentials() {
   print_credentials grafana 'Grafana' "$suffix"
   printf '\n'
   print_credentials argocd 'Argo CD' "$suffix"
+  printf '\nDashboard analitik: http://client.localhost%s\nAccount: analyst (BNPB Internal)\nLogin key: ' "$suffix"
+  print_password analyst
 }
 
 main() {

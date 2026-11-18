@@ -15,7 +15,7 @@ tasks:
     desc: Show local VM service URLs
     cmds: [bash scripts/links/main.sh]
   password:
-    desc: Show Grafana and Argo CD credentials (APP=analyst prints the analytics login key)
+    desc: Show Grafana, Argo CD, and analytics dashboard credentials with their URLs
     cmds:
       - 'bash scripts/password/main.sh "{{.APP | default "all"}}"'
   context:
