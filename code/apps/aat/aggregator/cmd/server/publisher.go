@@ -69,11 +69,7 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 				publishCtx, span := telemetry.Start(publishCtx, "publish "+eventbus.Subject, trace.SpanKindProducer)
 				message := &nats.Msg{Subject: eventbus.Subject, Data: item.Payload, Header: nats.Header{}}
 				message.Header.Set("X-Correlation-ID", correlationID)
-				carrier := propagation.MapCarrier{}
-				telemetry.Propagation.Inject(publishCtx, carrier)
-				for key, value := range carrier {
-					message.Header.Set(key, value)
-				}
+				telemetry.Propagation.Inject(publishCtx, eventbus.HeaderCarrier(message.Header))
 				started := time.Now()
 				_, e = js.PublishMsg(publishCtx, message,
 					jetstream.WithMsgID(item.EventKey), jetstream.WithExpectStream(eventbus.StreamName))
