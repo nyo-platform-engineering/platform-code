@@ -65,7 +65,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg_over_time((avg by (node) (sum by (node, cpu) (system_cpu_utilization{node=~\"$node\",state!=\"idle\"})))[$__range:30s])",
+          "expr": "avg_over_time((avg by (node) (sum by (node, cpu) (system_cpu_utilization_ratio{node=~\"$node\",state!=\"idle\"})))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -115,7 +115,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time((avg by (node) (sum by (node, cpu) (system_cpu_utilization{node=~\"$node\",state!=\"idle\"})))[$__range:30s])",
+          "expr": "max_over_time((avg by (node) (sum by (node, cpu) (system_cpu_utilization_ratio{node=~\"$node\",state!=\"idle\"})))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -165,7 +165,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg_over_time((max by (node) (system_memory_utilization{node=~\"$node\",state=\"used\"}))[$__range:30s])",
+          "expr": "avg_over_time((max by (node) (system_memory_utilization_ratio{node=~\"$node\",state=\"used\"}))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -215,7 +215,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time((max by (node) (system_memory_utilization{node=~\"$node\",state=\"used\"}))[$__range:30s])",
+          "expr": "max_over_time((max by (node) (system_memory_utilization_ratio{node=~\"$node\",state=\"used\"}))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -265,7 +265,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg by (node) (sum by (node, cpu) (system_cpu_utilization{node=~\"$node\",state!=\"idle\"}))",
+          "expr": "avg by (node) (sum by (node, cpu) (system_cpu_utilization_ratio{node=~\"$node\",state!=\"idle\"}))",
           "legendFormat": "{{node}}",
           "range": true,
           "instant": false
@@ -316,7 +316,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (node) (system_memory_utilization{node=~\"$node\",state=\"used\"})",
+          "expr": "max by (node) (system_memory_utilization_ratio{node=~\"$node\",state=\"used\"})",
           "legendFormat": "{{node}}",
           "range": true,
           "instant": false
