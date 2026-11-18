@@ -161,6 +161,32 @@ log berada di `.state/gateway.log`. Listener lama yang sudah mati dapat dimulai 
 `task down` menghentikan listener sebelum mematikan VM. `task destroy` menghentikan
 listener setelah perintah penghancuran VM selesai; konfirmasi Vagrant tetap berlaku.
 
+### Sinkronisasi waktu VM
+
+Chrony dijalankan saat boot dan provisioner `clock` diperiksa setiap `task up`,
+termasuk pada VM yang sudah pernah diprovision. Control plane memakai NTP Ubuntu;
+worker mengutamakan control plane melalui jaringan lokal dan tetap memiliki NTP
+upstream sebagai fallback. Referensi bersama mengurangi perbedaan timestamp
+antar-VM yang membuat child span HTTP tampak berada di luar parent pada waterfall.
+
+```bash
+task clock:sync     # terapkan konfigurasi pada VM yang sedang berjalan
+task clock:status   # lihat tracking, offset, dan sumber terpilih (^*) tiap VM
+```
+
+Provisioner menunggu sinkronisasi dan sisa koreksi clock di bawah 1 ms, maksimal
+60 detik tiap pemeriksaan. Worker juga menunggu referensi control plane terpilih
+hingga 60 detik, lalu memeriksa koreksinya lagi; kegagalan menghentikan startup.
+Angka tersebut adalah sisa koreksi lokal, bukan jaminan akurasi absolut UTC
+atau batas skew antar-VM.
+Koreksi normal dilakukan bertahap; hanya selisih di atas satu detik pada tiga
+update awal daemon yang boleh melompat. Tidak ada loop `makestep` atau hook
+resume yang melompati gangguan jam Tester Agent. Setelah gangguan/freeze selesai,
+periksa lagi sumber dan offset sebelum mengambil bukti trace baru. Trace lama
+tetap memakai timestamp yang direkam saat itu.
+
+Rujukan konfigurasi: [chrony](https://chrony-project.org/doc/4.5/chrony.conf.html).
+
 Nama `.localhost` mengarah ke loopback laptop, bukan IP VM. Browser modern
 umumnya menanganinya langsung; bila resolver lokal tidak mendukung subdomain ini,
 tambahkan hostname yang dipakai ke `/etc/hosts` dengan alamat `127.0.0.1`.
@@ -175,7 +201,7 @@ Traefik memakai IngressRoute untuk service internal `api@internal`.
 
 | Layanan | Akses default |
 | --- | --- |
-| Client | http://client.localhost |
+| Dashboard analitik dan Client API | http://client.localhost; login analyst, kunci dari `task password` |
 | Auth | http://auth.localhost |
 | Radar | http://radar.localhost |
 | Grafana | http://grafana.localhost; user `admin`, password dari `task password` |

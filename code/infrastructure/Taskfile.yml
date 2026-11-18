@@ -5,7 +5,7 @@ tasks:
     desc: Check VM startup tools and libvirt/KVM prerequisites
     cmds: [bash scripts/doctor/main.sh]
   up:
-    desc: Start two local VMs and deploy AAT plus LGTM
+    desc: Start three local VMs and deploy AAT plus LGTM
     cmds:
       - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/up/main.sh {{.CLI_ARGS}}'
   status:
@@ -15,7 +15,7 @@ tasks:
     desc: Show local VM service URLs
     cmds: [bash scripts/links/main.sh]
   password:
-    desc: Show Grafana and Argo CD admin credentials (optional APP=grafana or argocd)
+    desc: Show Grafana, Argo CD, and analytics dashboard credentials with their URLs
     cmds:
       - 'bash scripts/password/main.sh "{{.APP | default "all"}}"'
   context:
@@ -27,6 +27,12 @@ tasks:
   vm:manager:
     desc: Open Virtual Machine Manager on the system libvirt connection
     cmds: [bash scripts/vm/main.sh manager]
+  clock:status:
+    desc: Show clock offsets and NTP sources on all three VMs
+    cmds: [bash scripts/vm/clock.sh status]
+  clock:sync:
+    desc: Configure chrony and wait for clock synchronization on existing VMs
+    cmds: [bash scripts/vm/clock.sh sync]
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
     cmds: [bash scripts/tester/main.sh install]

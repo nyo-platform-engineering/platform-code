@@ -67,7 +67,7 @@ func TestM2TerminatedOwnerCannotCommitAfterTakeover(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?::integer)", old.Fence.BackendPID).Error; err != nil {
+	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?::integer, 1000)", old.Fence.BackendPID).Error; err != nil {
 		t.Fatal(err)
 	}
 	next, err := ctrl.AcquirePollSession(ctx, "PVMBG")
@@ -171,7 +171,7 @@ func TestM2DelayedUpstreamResponseIsFencedAfterTakeover(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("old owner never fetched")
 	}
-	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?::integer)", old.Fence.BackendPID).Error; err != nil {
+	if err := ctrl.DB.Exec("SELECT pg_terminate_backend(?::integer, 1000)", old.Fence.BackendPID).Error; err != nil {
 		t.Fatal(err)
 	}
 	next, err := ctrl.AcquirePollSession(ctx, "PVMBG")
