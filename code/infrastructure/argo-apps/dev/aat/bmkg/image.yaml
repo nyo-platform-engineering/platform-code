@@ -1,5 +1,5 @@
-# Published from AAT source commit de37ffcd1dee36b01f94103ccf107716b077e2ca.
+# Published from AAT source commit 0bbf36bc0f129175dd5a497bfda508f0b050d720.
 image:
   repository: ghcr.io/nyo-platform-engineering/aat-apps/bmkg
-  tag: sha-de37ffcd1dee36b01f94103ccf107716b077e2ca
-  digest: sha256:3a2e7610c1ec1554f9fbfeffae4554fc5343e295a76b9fa3fb50d86466467d51
+  tag: sha-0bbf36bc0f129175dd5a497bfda508f0b050d720
+  digest: sha256:f01cdce30be6a957de8b70a25e0563d86657cd82efeda6ef03a4988b6abb038f
