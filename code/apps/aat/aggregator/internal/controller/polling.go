@@ -105,6 +105,16 @@ func (ctrl *Controller) ListSourceStatuses(ctx context.Context) ([]model.PollSta
 		}
 		statuses = append(statuses, state)
 	}
+	// Sensor Pantai is healthy only while its breaker is closed and its data fresh,
+	// whatever its own /healthz says.
+	// It is listed once its poller has run (it is optional and off without a token).
+	sensor, err := ctrl.SensorState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !sensor.UpdatedAt.IsZero() {
+		statuses = append(statuses, model.PollState{Source: SensorSource, Healthy: sensorAvailable(sensor, time.Now()), LastSuccessCallerTime: sensor.LastSuccessAt})
+	}
 	return statuses, nil
 }
 

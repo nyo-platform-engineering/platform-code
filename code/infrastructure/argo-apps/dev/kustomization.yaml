@@ -9,3 +9,4 @@ resources:
 - aat/client/app.yaml
 - aat/dashboard-updater/app.yaml
 - aat/field-notifier/app.yaml
+- aat/sensor-pantai/app.yaml

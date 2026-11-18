@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"aat/internal/httpkit"
 	"aat/internal/telemetry"
@@ -24,7 +25,16 @@ func Handler(config Config) (http.Handler, error) {
 	client.Transport = telemetry.Transport{Base: client.Transport}
 	// Never forward internal credentials through redirects.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	u := upstream{config: config, http: &client}
+	if config.MediaSharePercent == 0 {
+		config.MediaSharePercent = 50
+	}
+	if config.IdentityCacheTTL == 0 {
+		config.IdentityCacheTTL = 10 * time.Second
+	}
+	if config.MediaSharePercent < 1 || config.MediaSharePercent > 100 {
+		return nil, fmt.Errorf("invalid client API configuration")
+	}
+	u := upstream{config: config, http: &client, ids: &identityCache{ttl: config.IdentityCacheTTL, entries: map[[32]byte]cachedIdentity{}}}
 	router := httpkit.Router()
 	registerDashboard(router)
 	registerAnalytics(router, u)
@@ -43,7 +53,7 @@ func Handler(config Config) (http.Handler, error) {
 			Active bool   `json:"active"`
 			ID     string `json:"client_id"`
 		}
-		err := u.get(ctx, "POST", u.endpoint(config.AuthURL, "/internal/introspect"), config.AuthToken, correlation, map[string]string{"token": parts[1]}, &identity)
+		err := u.introspectInto(ctx, parts[1], correlation, &identity)
 		if err != nil {
 			unavailable(c)
 			return
@@ -112,7 +122,7 @@ func Handler(config Config) (http.Handler, error) {
 	router.GET("/ops/field-reports/:report_id", u.ops)
 	router.GET("/ops/unprocessed/:message_id", u.ops)
 	router.POST("/ops/unprocessed/:message_id/replay", u.ops)
-	return httpkit.Limit(config.MaxConcurrent, router), nil
+	return newAdmission(config.MaxConcurrent, config.MediaSharePercent).wrap(u, router), nil
 }
 
 func validQuery(q url.Values) bool {

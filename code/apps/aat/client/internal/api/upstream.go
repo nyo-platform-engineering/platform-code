@@ -17,6 +17,11 @@ type Config struct {
 	AuthURL, AggregatorURL     string
 	AuthToken, AggregatorToken string
 	MaxConcurrent              int
+	// MediaSharePercent caps the share of MaxConcurrent Media requests may hold;
+	// 0 means 50. IdentityCacheTTL caches positive introspections; 0 means 10 s,
+	// negative disables the cache.
+	MediaSharePercent int
+	IdentityCacheTTL  time.Duration
 	Timeout, StaleAfter        time.Duration
 	HTTPClient                 *http.Client
 }
@@ -24,6 +29,7 @@ type Config struct {
 type upstream struct {
 	config Config
 	http   *http.Client
+	ids    *identityCache
 }
 
 type upstreamStatusError struct{ Status int }

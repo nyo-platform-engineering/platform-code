@@ -23,12 +23,12 @@ func (ctrl *Controller) ClaimOutbox(ctx context.Context, limit int, lease time.D
 	err = tx.Raw(`WITH selected AS (
         SELECT id FROM hazard_outboxes
         WHERE published_at IS NULL AND (lease_until IS NULL OR lease_until < now())
-        ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED
+        ORDER BY (lane <> '') DESC, id LIMIT ? FOR UPDATE SKIP LOCKED
     )
     UPDATE hazard_outboxes AS outbox
     SET lease_until = now() + (? * interval '1 second'), attempts = attempts + 1
     FROM selected WHERE outbox.id = selected.id
-    RETURNING outbox.id, outbox.attempts, outbox.event_key, outbox.correlation_id, outbox.trace_parent, outbox.trace_state, outbox.payload`, limit, lease.Seconds()).Scan(&items).Error
+    RETURNING outbox.id, outbox.attempts, outbox.event_key, outbox.correlation_id, outbox.trace_parent, outbox.trace_state, outbox.payload, outbox.lane`, limit, lease.Seconds()).Scan(&items).Error
 	if err != nil {
 		return nil, err
 	}

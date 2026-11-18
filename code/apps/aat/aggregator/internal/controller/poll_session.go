@@ -50,7 +50,7 @@ func (session *PollSession) Close() {
 }
 
 func (ctrl *Controller) AcquirePollSession(ctx context.Context, source string) (*PollSession, error) {
-	if source != "BMKG" && source != "PVMBG" && source != "SATELIT" {
+	if source != "BMKG" && source != "PVMBG" && source != "SATELIT" && source != SensorSource {
 		return nil, fmt.Errorf("unsupported polling source %q", source)
 	}
 	pool, err := ctrl.DB.DB()

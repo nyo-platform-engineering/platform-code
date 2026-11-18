@@ -163,7 +163,7 @@ func TestConsumerCrashRecovery(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				consume(workerCtx, "crash-test", consumer, effects, func(Hazard) string {
+				consume(workerCtx, "crash-test", eventbus.Subject, consumer, effects, func(Hazard) string {
 					projections.Add(1)
 					return "field_alert"
 				})
@@ -205,6 +205,96 @@ func TestConsumerCrashRecovery(t *testing.T) {
 				t.Fatalf("reprojected committed effect: calls=%d want=%d", projections.Load(), wantProjections)
 			}
 		})
+	}
+}
+
+func TestCriticalLaneContinuesWhileRegularLaneBlocked(t *testing.T) {
+	url, _ := consumerTestServer(t)
+	_, js := consumerTestConnect(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	if err := eventbus.EnsureStream(ctx, js); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	regularDone, criticalDone := make(chan struct{}), make(chan struct{})
+	var observed atomic.Int32
+	go func() {
+		defer close(regularDone)
+		Run(ctx, "regular-lane", "REGULAR", url, func(Hazard) string {
+			close(entered)
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+			return "critical_alert_delegated"
+		})
+	}()
+	go func() {
+		defer close(criticalDone)
+		RunSubject(ctx, "critical-lane", "CRITICAL", url, eventbus.CriticalSubject,
+			func(Hazard) string { return "critical_field_alert" },
+			func(context.Context, Effect) { observed.Add(1) })
+	}()
+	t.Cleanup(func() { cancel(); <-regularDone; <-criticalDone })
+	hazard := Hazard{ID: "coastal-critical", Source: "SENSOR_PANTAI", Severity: "AWAS",
+		Ingested: time.Now().UTC(), Attributes: json.RawMessage(`{"critical":true,"verified":false}`)}
+	payload, _ := json.Marshal(hazard)
+	if _, err := js.Publish(ctx, eventbus.Subject, payload); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("regular lane did not start")
+	}
+	for range 2 {
+		if _, err := js.Publish(ctx, eventbus.CriticalSubject, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		consumer, err := js.Consumer(ctx, eventbus.StreamName, "critical-lane")
+		if err == nil {
+			info, err := consumer.Info(ctx)
+			if err == nil && info.AckFloor.Stream >= 3 && info.NumAckPending == 0 && observed.Load() == 1 {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("critical lane blocked or duplicate emitted an extra observation")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	criticalEffects, err := js.KeyValue(ctx, "CRITICAL_EFFECTS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := criticalEffects.Status(ctx)
+	if err != nil || status.Values() != 1 {
+		t.Fatalf("critical alert was lost or recorded twice: status=%v error=%v", status, err)
+	}
+	regularEffects, err := js.KeyValue(ctx, "REGULAR_EFFECTS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err = regularEffects.Status(ctx)
+	if err != nil || status.Values() != 0 {
+		t.Fatalf("blocked regular lane unexpectedly committed: status=%v error=%v", status, err)
+	}
+	close(release)
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		status, err = regularEffects.Status(ctx)
+		if err == nil && status.Values() == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("regular lane did not recover after release")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

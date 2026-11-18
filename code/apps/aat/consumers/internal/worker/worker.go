@@ -38,6 +38,14 @@ func deliveryKey(messageID string, hazard Hazard) string {
 }
 
 func Run(ctx context.Context, durable, bucket, natsURL string, project Projection) {
+	RunSubject(ctx, durable, bucket, natsURL, eventbus.Subject, project)
+}
+
+// Observer reports a committed effect; it must not perform business side effects.
+type Observer func(context.Context, Effect)
+
+// RunSubject gives each lane its own durable consumer and inbox.
+func RunSubject(ctx context.Context, durable, bucket, natsURL, subject string, project Projection, observers ...Observer) {
 	for ctx.Err() == nil {
 		nc, e := nats.Connect(natsURL, nats.Timeout(3*time.Second), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 		if e != nil {
@@ -51,7 +59,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, project Projectio
 			consumer, e = js.CreateOrUpdateConsumer(ctx, eventbus.StreamName, jetstream.ConsumerConfig{
 				Durable:       durable,
 				Description:   durable + " independent hazard subscriber",
-				FilterSubject: eventbus.Subject,
+				FilterSubject: subject,
 				DeliverPolicy: jetstream.DeliverAllPolicy,
 				AckPolicy:     jetstream.AckExplicitPolicy,
 				AckWait:       30 * time.Second,
@@ -67,7 +75,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, project Projectio
 					Replicas:    1,
 				})
 				if e == nil {
-					consume(ctx, durable, consumer, effects, project)
+					consume(ctx, durable, subject, consumer, effects, project, observers...)
 				}
 			}
 		}
@@ -79,7 +87,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, project Projectio
 	}
 }
 
-func consume(ctx context.Context, durable string, consumer jetstream.Consumer, effects effectStore, project Projection) {
+func consume(ctx context.Context, durable, subject string, consumer jetstream.Consumer, effects effectStore, project Projection, observers ...Observer) {
 	for ctx.Err() == nil {
 		batch, e := consumer.Fetch(1, jetstream.FetchMaxWait(2*time.Second))
 		if e != nil {
@@ -93,8 +101,8 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, e
 				}
 				messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
 				messageCtx = telemetry.Propagation.Extract(messageCtx, eventbus.HeaderCarrier(msg.Headers()))
-				messageCtx, span := telemetry.Start(messageCtx, "consume "+eventbus.Subject, trace.SpanKindConsumer)
-				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", eventbus.Subject), attribute.String("messaging.operation.type", "process"), attribute.String("messaging.consumer.group.name", durable))
+				messageCtx, span := telemetry.Start(messageCtx, "consume "+subject, trace.SpanKindConsumer)
+				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", subject), attribute.String("messaging.operation.type", "process"), attribute.String("messaging.consumer.group.name", durable))
 				defer func() { telemetry.Fail(span, e); span.End() }()
 				start := time.Now()
 				handleMs := int64(-1)
@@ -145,6 +153,11 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, e
 						"handle_ms", handleMs,
 						"error", e)
 					return
+				}
+				if created {
+					for _, observe := range observers {
+						observe(messageCtx, effect)
+					}
 				}
 				slog.Info("consume_completed",
 					"durable", durable,

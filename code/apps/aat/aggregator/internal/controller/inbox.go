@@ -109,6 +109,13 @@ func (ctrl *Controller) ProcessInbox(ctx context.Context, source string, limit i
 				if rollback := tx.RollbackTo("inbox_effect").Error; rollback != nil {
 					return rollback
 				}
+				// A broken reading flagged critical is parked, but its alert still goes out.
+				var alert criticalAlert
+				if errors.As(err, &alert) {
+					if err := queueUnverifiedAlert(messageCtx, tx, alert.alert); err != nil {
+						return err
+					}
+				}
 				var invalid Invalid
 				if errors.As(err, &invalid) {
 					status, reason = "parked", "schema_incompatible: "+invalid.Error()
@@ -147,7 +154,11 @@ func (ctrl *Controller) ProcessInbox(ctx context.Context, source string, limit i
 }
 
 func (ctrl *Controller) expandEnvelope(ctx context.Context, tx *gorm.DB, envelope model.InboxMessage) error {
-	records, err := decodeEnvelope(envelope.Raw)
+	decode := decodeEnvelope
+	if envelope.Source == SensorSource {
+		decode = decodeSensorEnvelope
+	}
+	records, err := decode(envelope.Raw)
 	if err != nil {
 		return Invalid{err}
 	}
@@ -183,6 +194,9 @@ func (ctrl *Controller) expandEnvelope(ctx context.Context, tx *gorm.DB, envelop
 }
 
 func (ctrl *Controller) processRecord(ctx context.Context, tx *gorm.DB, message model.InboxMessage) (int, error) {
+	if message.Source == SensorSource {
+		return ctrl.processSensorRecord(ctx, tx, message)
+	}
 	record, err := decodeInboxRecord(message.Raw)
 	if err != nil {
 		return 0, Invalid{err}

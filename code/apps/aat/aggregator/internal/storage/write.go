@@ -45,6 +45,11 @@ func (p *Postgres) Save(ctx context.Context, events []model.HazardEvent) ([]mode
 			carrier := propagation.MapCarrier{}
 			telemetry.Propagation.Inject(ctx, carrier)
 			outbox := model.HazardOutbox{TraceParent: carrier.Get("traceparent"), TraceState: carrier.Get("tracestate"), EventKey: eventKey, CorrelationID: correlationID, Payload: json.RawMessage(payload)}
+			// A coastal reading the sensor marks critical takes the critical lane: it is
+			// claimed before other messages and also published to the alert subject.
+			if hazard.Source == "SENSOR_PANTAI" && string(hazard.Attributes["critical"]) == "true" {
+				outbox.Lane = "critical"
+			}
 			if err = tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "event_key"}}, DoNothing: true}).Create(&outbox).Error; err != nil {
 				return nil, err
 			}
