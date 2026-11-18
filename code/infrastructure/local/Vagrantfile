@@ -33,6 +33,9 @@ Vagrant.configure("2") do |config|
         provider.default_prefix = "aat-m2"
       end
       node.vm.provision "file", source: token, destination: "/tmp/aat-k3s-token"
+      node.vm.provision "clock", type: "shell", path: "sync-clock.sh", run: "always", args: [
+        index == 0 ? "server" : "agent", "#{prefix}.10"
+      ]
       node.vm.provision "shell", path: "provision-node.sh", args: [
         index == 0 ? "server" : "agent", name, ip, "#{prefix}.10",
         ENV.fetch("K3S_VERSION", "v1.34.5+k3s1")
