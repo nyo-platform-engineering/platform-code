@@ -516,7 +516,7 @@ Internal menggunakan kunci akun `analyst`. Ambil kuncinya dari infrastructure:
 
 ```sh
 cd code/infrastructure
-task password APP=analyst
+task password
 ```
 
 Untuk Compose, gunakan `http://localhost:8080/` dan `ANALYST_CLIENT_SECRET`
