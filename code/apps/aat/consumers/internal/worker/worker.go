@@ -15,7 +15,6 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel/trace"
-	"net/http"
 )
 
 type Hazard struct {
@@ -96,7 +95,7 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 					correlationID = httpkit.ID()
 				}
 				messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
-				messageCtx = telemetry.Extract(messageCtx, http.Header(msg.Headers()))
+				messageCtx = telemetry.Propagation.Extract(messageCtx, eventbus.HeaderCarrier(msg.Headers()))
 				messageCtx, span := telemetry.Start(messageCtx, "consume "+eventbus.Subject, trace.SpanKindConsumer)
 				defer func() { telemetry.Fail(span, e); span.End() }()
 				start := time.Now()

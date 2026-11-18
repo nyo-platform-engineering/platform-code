@@ -117,6 +117,7 @@ func (p sourcePoller) Poll(ctx context.Context) {
 	}
 	slog.Info("poll succeeded",
 		"source", p.source,
+		"trace_id", telemetry.TraceID(ctx),
 		"correlation_id", correlationID,
 		"changed", len(changedEvents),
 	)
