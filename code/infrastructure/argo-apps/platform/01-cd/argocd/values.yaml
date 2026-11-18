@@ -8,7 +8,7 @@ fullnameOverride: argocd
 configs:
   params:
     server.insecure: true
-    # Keep startup reconciliation bursts small on the three-VM lab.
+    # Keep startup reconciliation bursts small on the two-VM lab.
     controller.status.processors: '5'
     controller.operation.processors: '2'
     reposerver.parallelism.limit: '2'
