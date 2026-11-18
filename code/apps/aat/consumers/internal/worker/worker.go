@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -29,8 +28,6 @@ type Hazard struct {
 	Attributes json.RawMessage `json:"attributes"`
 }
 
-type Handler func(context.Context, Hazard) error
-
 // A new warning may update a hazard: deduplicate each delivery, not its hazard ID.
 func deliveryKey(messageID string, hazard Hazard) string {
 	if messageID == "" {
@@ -40,7 +37,7 @@ func deliveryKey(messageID string, hazard Hazard) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
+func Run(ctx context.Context, durable, bucket, natsURL string, project Projection) {
 	for ctx.Err() == nil {
 		nc, e := nats.Connect(natsURL, nats.Timeout(3*time.Second), nats.MaxReconnects(-1), nats.ReconnectWait(time.Second))
 		if e != nil {
@@ -62,16 +59,15 @@ func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 				ReplayPolicy:  jetstream.ReplayInstantPolicy,
 			})
 			if e == nil {
-				var dedupe jetstream.KeyValue
-				dedupe, e = js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
-					Bucket:      bucket,
-					Description: durable + " processed hazard IDs",
+				var effects jetstream.KeyValue
+				effects, e = js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+					Bucket:      bucket + "_EFFECTS",
+					Description: durable + " durable consumer inbox",
 					Storage:     jetstream.FileStorage,
-					TTL:         30 * 24 * time.Hour,
 					Replicas:    1,
 				})
 				if e == nil {
-					consume(ctx, durable, consumer, dedupe, handle)
+					consume(ctx, durable, consumer, effects, project)
 				}
 			}
 		}
@@ -83,7 +79,7 @@ func Run(ctx context.Context, durable, bucket, natsURL string, handle Handler) {
 	}
 }
 
-func consume(ctx context.Context, durable string, consumer jetstream.Consumer, dedupe jetstream.KeyValue, handle Handler) {
+func consume(ctx context.Context, durable string, consumer jetstream.Consumer, effects effectStore, project Projection) {
 	for ctx.Err() == nil {
 		batch, e := consumer.Fetch(1, jetstream.FetchMaxWait(2*time.Second))
 		if e != nil {
@@ -117,75 +113,28 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 				}
 				span.SetAttributes(attribute.String("aat.hazard_id", hazard.ID), attribute.String("aat.source", hazard.Source))
 				key := deliveryKey(msg.Headers().Get("Nats-Msg-Id"), hazard)
-				_, e = dedupe.Get(messageCtx, key)
-				if e == nil {
-					if ackErr := msg.Ack(); ackErr != nil {
-						slog.Warn("duplicate ack failed",
-							"durable", durable,
-							"correlation_id", correlationID,
-							"trace_id", telemetry.TraceID(messageCtx),
-							"hazard_id", hazard.ID,
-							"status", "duplicate",
-							"latency_ms", time.Since(start).Milliseconds(),
-							"handle_ms", handleMs,
-							"error", ackErr)
-					} else {
-						slog.Info("consume_completed",
-							"durable", durable,
-							"correlation_id", correlationID,
-							"trace_id", telemetry.TraceID(messageCtx),
-							"hazard_id", hazard.ID,
-							"status", "duplicate",
-							"latency_ms", time.Since(start).Milliseconds(),
-							"handle_ms", handleMs)
-					}
-					return
-				}
-				if !errors.Is(e, jetstream.ErrKeyNotFound) {
-					slog.Warn("dedupe check failed; message will retry",
-						"durable", durable,
-						"correlation_id", correlationID,
-						"trace_id", telemetry.TraceID(messageCtx),
-						"hazard_id", hazard.ID,
-						"status", "error",
-						"latency_ms", time.Since(start).Milliseconds(),
-						"handle_ms", handleMs,
-						"error", e)
-					_ = msg.NakWithDelay(2 * time.Second)
-					return
-				}
 				handleStart := time.Now()
-				e = handle(messageCtx, hazard)
+				effectCtx, cancel := context.WithTimeout(messageCtx, 5*time.Second)
+				effect, created, recordErr := recordEffect(effectCtx, effects, key, hazard, project)
+				cancel()
+				e = recordErr
 				handleMs = time.Since(handleStart).Milliseconds()
 				if e != nil {
-					slog.Error("hazard handling failed; message will retry",
-						"durable", durable,
-						"correlation_id", correlationID,
-						"trace_id", telemetry.TraceID(messageCtx),
-						"hazard_id", hazard.ID,
-						"status", "error",
-						"latency_ms", time.Since(start).Milliseconds(),
-						"handle_ms", handleMs,
-						"error", e)
+					slog.Error("consumer effect not confirmed; message will retry",
+						"durable", durable, "delivery_id", key, "hazard_id", hazard.ID,
+						"correlation_id", correlationID, "trace_id", telemetry.TraceID(messageCtx),
+						"status", "error", "error", e)
 					_ = msg.NakWithDelay(2 * time.Second)
 					return
 				}
-				if _, e = dedupe.Create(messageCtx, key, []byte(time.Now().UTC().Format(time.RFC3339Nano))); e != nil {
-					if _, getErr := dedupe.Get(messageCtx, key); getErr != nil {
-						slog.Warn("dedupe write failed; message will retry",
-							"durable", durable,
-							"correlation_id", correlationID,
-							"trace_id", telemetry.TraceID(messageCtx),
-							"hazard_id", hazard.ID,
-							"status", "error",
-							"latency_ms", time.Since(start).Milliseconds(),
-							"handle_ms", handleMs,
-							"error", e)
-						_ = msg.NakWithDelay(2 * time.Second)
-						return
-					}
+				status := "duplicate"
+				if created {
+					status = "recorded"
 				}
-				if e = msg.Ack(); e != nil {
+				ackCtx, cancelAck := context.WithTimeout(messageCtx, 5*time.Second)
+				e = msg.DoubleAck(ackCtx)
+				cancelAck()
+				if e != nil {
 					slog.Warn("hazard ack failed",
 						"durable", durable,
 						"correlation_id", correlationID,
@@ -202,7 +151,9 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 					"correlation_id", correlationID,
 					"trace_id", telemetry.TraceID(messageCtx),
 					"hazard_id", hazard.ID,
-					"status", "ok",
+					"status", status,
+					"delivery_id", key,
+					"effect_kind", effect.Kind,
 					"latency_ms", time.Since(start).Milliseconds(),
 					"handle_ms", handleMs)
 			}()

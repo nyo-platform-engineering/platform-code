@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,13 +15,11 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go worker.Run(ctx, "field-notifier", "FIELD_NOTIFIER_PROCESSED", httpkit.Env("NATS_URL", "nats://nats:4222"), func(ctx context.Context, hazard worker.Hazard) error {
+	go worker.Run(ctx, "field-notifier", "FIELD_NOTIFIER_PROCESSED", httpkit.Env("NATS_URL", "nats://nats:4222"), func(hazard worker.Hazard) string {
 		if hazard.Severity == "SIAGA" || hazard.Severity == "AWAS" {
-			slog.Warn("field alert sent", "correlation_id", httpkit.CorrelationID(ctx), "hazard_id", hazard.ID, "source", hazard.Source, "severity", hazard.Severity, "area", hazard.Area)
-		} else {
-			slog.Info("no field alert required", "correlation_id", httpkit.CorrelationID(ctx), "hazard_id", hazard.ID, "severity", hazard.Severity)
+			return "field_alert"
 		}
-		return nil
+		return "no_field_alert"
 	})
 
 	router := httpkit.Router()

@@ -829,11 +829,12 @@ def main() -> int:
         worker_test_text = ""
     if (re.search(r"dedupe|KeyValue|deliveryKey", worker_text)
             and "TestDeliveryKey" in worker_test_text):
-        passed("consumer idempotency implemented (KV deliveryKey dedupe) and unit-tested; "
-               "NOT exactly-once end-to-end (log side effect can duplicate on crash-before-KV-write)")
+        passed("consumer deliveryKey implemented; durable effect/crash recovery is tested "
+               "separately with go test ./consumers/internal/worker and a local nats-server")
     else:
         failed("consumer idempotency mechanism missing or untested")
-    info("verdict: at-least-once delivery with consumer-side dedupe; exactly-once NOT claimed")
+    info("verdict: at-least-once transport; consumer inbox records use atomic KV Create; "
+         "external notification delivery is not established by this suite")
 
     # ---------------------------------------------------------------- cleanup (only own resources)
     if CLEANUP_TEST_CONSUMER == "1" and STARTED_TEST_CONSUMER:
