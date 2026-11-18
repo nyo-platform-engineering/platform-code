@@ -1,5 +1,5 @@
-# Published from AAT source commit 00ff960de0191e8f4fcb656c5a662c9fd49028c9.
+# Published from AAT source commit 0e7f0e0252d43ea69f9ab06f21f6d33f8a17ec4d.
 image:
   repository: ghcr.io/nyo-platform-engineering/aat-apps/dashboard-updater
-  tag: sha-00ff960de0191e8f4fcb656c5a662c9fd49028c9
-  digest: sha256:7801d3f87d794927e90af8beeb8ad93f8044dff7f62222a33e9c726064af27ad
+  tag: sha-0e7f0e0252d43ea69f9ab06f21f6d33f8a17ec4d
+  digest: sha256:f7e851b91df552967320398c77a5bf55f8b7b0fe210acc159c2d3540766305bb
