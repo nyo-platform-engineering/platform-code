@@ -73,6 +73,7 @@ config:
   POLL_INTERVAL_SECONDS: '3'
   POLL_TIMEOUT_MS: '4000'
   PVMBG_SCHEMA_POLICY: strict
+  FIELD_REPORT_PROCESSOR_ENABLED: 'true'
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-cluster.monitoring.svc.cluster.local:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_SERVICE_NAME: aggregator

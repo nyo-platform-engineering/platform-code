@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -132,6 +133,13 @@ func main() {
 	workers.Go(func() { bmkgPoller.Run(workerCtx, pollInterval) })
 	workers.Go(func() { pvmbgPoller.Run(workerCtx, pollInterval) })
 	workers.Go(func() { runOutboxRelay(workerCtx, ctrl, natsURL) })
+	processReports, err := strconv.ParseBool(httpkit.Env("FIELD_REPORT_PROCESSOR_ENABLED", "true"))
+	if err != nil {
+		panic("FIELD_REPORT_PROCESSOR_ENABLED must be true or false")
+	}
+	if processReports {
+		workers.Go(func() { runFieldReportProcessor(workerCtx, ctrl) })
+	}
 
 	router := internal.NewHandlerWithAudit(ctrl, token, auditToken)
 	httpkit.ServeContext(workerCtx, "Aggregator", "8083", router)

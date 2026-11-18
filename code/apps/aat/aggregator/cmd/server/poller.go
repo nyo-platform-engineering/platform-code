@@ -173,7 +173,7 @@ func (p sourcePoller) Poll(ctx context.Context) (err error) {
 
 // sourceCursor uses event time from the current mocks. BMKG fetches warnings
 // after seismic events, so future arrival times must not advance the cursor.
-// Historical updates need a separate recovery strategy; see docs/m2-polling.md.
+// Historical updates need a separate recovery strategy.
 func sourceCursor(source string, batch map[string][]model.Record, previous *time.Time) (*time.Time, error) {
 	key, field := "seismic_events", "occurred_at"
 	if source == "PVMBG" {

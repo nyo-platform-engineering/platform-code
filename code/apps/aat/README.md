@@ -395,6 +395,10 @@ Aggregator, dan child span PostgreSQL pada trace yang sama beserta durasinya.
 
 ## Milestone 2: Citus storage
 
+`POST /field-reports` menerima laporan Tim Lapangan dengan `Idempotency-Key` dan
+membalas 202 setelah penyimpanan durable. Hasil worker dapat dibaca BNPB Internal
+melalui `GET /ops/field-reports/<report_id>`.
+
 P1 menetapkan hasil (distribusi, replikasi, kehilangan disk, pemulihan, dan audit),
 tanpa mewajibkan mesin sharding buatan sendiri. Implementasi memakai Citus 13.0.1
 pada PostgreSQL 17 dan Patroni 4.1.0. Routing shard, streaming replication,

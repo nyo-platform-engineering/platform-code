@@ -11,6 +11,7 @@ func TestOnlyInternalOpsCanInspectAndReplayMessages(t *testing.T) {
 	id := strings.Repeat("a", 64)
 	for _, identity := range []string{"public", "responder", "analyst"} {
 		for _, operation := range []struct{ method, path string }{
+			{"GET", "/ops/field-reports/fr-" + id},
 			{"GET", "/ops/unprocessed?source=PVMBG&limit=1"},
 			{"GET", "/ops/unprocessed/" + id},
 			{"POST", "/ops/unprocessed/" + id + "/replay"},
