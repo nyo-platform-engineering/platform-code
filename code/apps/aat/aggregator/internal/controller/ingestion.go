@@ -9,6 +9,9 @@ import (
 	"aat/aggregator/internal/mapper"
 	"aat/aggregator/internal/model"
 	"aat/aggregator/internal/storage"
+	"aat/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -23,6 +26,18 @@ func (invalid Invalid) Error() string {
 }
 
 func (ctrl *Controller) IngestBatch(ctx context.Context, source string, batch map[string][]model.Record) ([]model.HazardEvent, error) {
+	ctx, span := telemetry.Start(ctx, "ingest "+source, trace.SpanKindInternal)
+	defer span.End()
+	span.SetAttributes(attribute.String("aat.source", source))
+	items, err := ctrl.ingestBatch(ctx, source, batch)
+	telemetry.Fail(span, err)
+	if err == nil {
+		span.SetAttributes(attribute.Int("aat.ingest.changed_events", len(items)))
+	}
+	return items, err
+}
+
+func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch map[string][]model.Record) ([]model.HazardEvent, error) {
 	if len(batch) == 0 {
 		return nil, Invalid{fmt.Errorf("empty batch")}
 	}

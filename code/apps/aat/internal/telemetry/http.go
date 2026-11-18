@@ -3,6 +3,7 @@ package telemetry
 import (
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -15,7 +16,18 @@ type Transport struct{ Base http.RoundTripper }
 
 func (t Transport) RoundTrip(request *http.Request) (*http.Response, error) {
 	ctx, span := Start(request.Context(), request.Method+" "+request.URL.Path, trace.SpanKindClient)
-	span.SetAttributes(attribute.String("http.request.method", request.Method), attribute.String("server.address", request.URL.Hostname()))
+	span.SetAttributes(attribute.String("http.request.method", request.Method), attribute.String("server.address", request.URL.Hostname()), attribute.String("url.path", request.URL.Path), attribute.String("url.scheme", request.URL.Scheme))
+	port, err := strconv.Atoi(request.URL.Port())
+	if err != nil {
+		if request.URL.Scheme == "http" {
+			port = 80
+		} else if request.URL.Scheme == "https" {
+			port = 443
+		}
+	}
+	if port > 0 {
+		span.SetAttributes(attribute.Int("server.port", port))
+	}
 	clone := request.Clone(ctx)
 	Propagation.Inject(ctx, propagation.HeaderCarrier(clone.Header))
 	base := t.Base

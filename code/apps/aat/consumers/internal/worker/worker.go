@@ -14,6 +14,7 @@ import (
 	"aat/internal/telemetry"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -97,6 +98,7 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 				messageCtx := httpkit.WithCorrelationID(ctx, correlationID)
 				messageCtx = telemetry.Propagation.Extract(messageCtx, eventbus.HeaderCarrier(msg.Headers()))
 				messageCtx, span := telemetry.Start(messageCtx, "consume "+eventbus.Subject, trace.SpanKindConsumer)
+				span.SetAttributes(attribute.String("messaging.system", "nats"), attribute.String("messaging.destination.name", eventbus.Subject), attribute.String("messaging.operation.type", "process"), attribute.String("messaging.consumer.group.name", durable))
 				defer func() { telemetry.Fail(span, e); span.End() }()
 				start := time.Now()
 				handleMs := int64(-1)
@@ -113,6 +115,7 @@ func consume(ctx context.Context, durable string, consumer jetstream.Consumer, d
 					_ = msg.Term()
 					return
 				}
+				span.SetAttributes(attribute.String("aat.hazard_id", hazard.ID), attribute.String("aat.source", hazard.Source))
 				key := deliveryKey(msg.Headers().Get("Nats-Msg-Id"), hazard)
 				_, e = dedupe.Get(messageCtx, key)
 				if e == nil {

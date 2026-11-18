@@ -3,6 +3,7 @@ module aat
 go 1.25.0
 
 require (
+	github.com/DataDog/go-sqllexer v0.2.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/nats-io/nats.go v1.45.0

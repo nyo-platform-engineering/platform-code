@@ -47,6 +47,10 @@ func main() {
 		panic(err)
 	}
 
+	if err := dbtrace.Register(db); err != nil {
+		panic(err)
+	}
+
 	// Check the connection and create or update the model tables.
 	auditToken := os.Getenv("AUDIT_TOKEN")
 	if auditToken != "" && (auditToken == token || auditToken == os.Getenv("BMKG_API_KEY") || auditToken == os.Getenv("PVMBG_TOKEN")) {
