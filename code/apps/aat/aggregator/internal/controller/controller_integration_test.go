@@ -188,7 +188,7 @@ func TestAutoMigrateAndIngestion(t *testing.T) {
 		if err := json.Unmarshal(message.Payload, &event); err != nil || event.ID == "" || event.Attributes == nil {
 			t.Fatalf("invalid outbox payload: %s, %v", message.Payload, err)
 		}
-		if err := ctrl.MarkOutboxPublished(ctx, message.ID); err != nil {
+		if err := ctrl.MarkOutboxPublished(ctx, message.ID, message.Attempts); err != nil {
 			t.Fatal(err)
 		}
 	}

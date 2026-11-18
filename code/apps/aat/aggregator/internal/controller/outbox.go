@@ -2,12 +2,15 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"aat/aggregator/internal/model"
 
 	"gorm.io/gorm"
 )
+
+var ErrOutboxClaimLost = errors.New("outbox claim expired or replaced")
 
 func (ctrl *Controller) ClaimOutbox(ctx context.Context, limit int, lease time.Duration) ([]model.OutboxMessage, error) {
 	tx := ctrl.DB.WithContext(ctx).Begin()
@@ -25,7 +28,7 @@ func (ctrl *Controller) ClaimOutbox(ctx context.Context, limit int, lease time.D
     UPDATE hazard_outboxes AS outbox
     SET lease_until = now() + (? * interval '1 second'), attempts = attempts + 1
     FROM selected WHERE outbox.id = selected.id
-    RETURNING outbox.id, outbox.event_key, outbox.correlation_id, outbox.trace_parent, outbox.trace_state, outbox.payload`, limit, lease.Seconds()).Scan(&items).Error
+    RETURNING outbox.id, outbox.attempts, outbox.event_key, outbox.correlation_id, outbox.trace_parent, outbox.trace_state, outbox.payload`, limit, lease.Seconds()).Scan(&items).Error
 	if err != nil {
 		return nil, err
 	}
@@ -35,6 +38,16 @@ func (ctrl *Controller) ClaimOutbox(ctx context.Context, limit int, lease time.D
 	return items, nil
 }
 
-func (ctrl *Controller) MarkOutboxPublished(ctx context.Context, id int64) error {
-	return ctrl.DB.WithContext(ctx).Model(&model.HazardOutbox{}).Where("id = ? AND published_at IS NULL", id).Updates(map[string]any{"published_at": gorm.Expr("now()"), "lease_until": nil, "payload": gorm.Expr("'{}'::jsonb")}).Error
+func (ctrl *Controller) MarkOutboxPublished(ctx context.Context, id int64, attempt int) error {
+	// Only the current claim may acknowledge publication and clear the payload.
+	result := ctrl.DB.WithContext(ctx).Model(&model.HazardOutbox{}).
+		Where("id = ? AND attempts = ? AND published_at IS NULL AND lease_until > now()", id, attempt).
+		Updates(map[string]any{"published_at": gorm.Expr("now()"), "lease_until": nil, "payload": gorm.Expr("'{}'::jsonb")})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrOutboxClaimLost
+	}
+	return nil
 }

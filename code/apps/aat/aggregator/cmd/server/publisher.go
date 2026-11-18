@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
+	"aat/aggregator/internal/controller"
 	"aat/aggregator/internal/model"
 	"aat/internal/eventbus"
 	"aat/internal/httpkit"
@@ -18,7 +20,7 @@ import (
 
 type outboxStore interface {
 	ClaimOutbox(context.Context, int, time.Duration) ([]model.OutboxMessage, error)
-	MarkOutboxPublished(context.Context, int64) error
+	MarkOutboxPublished(context.Context, int64, int) error
 }
 
 func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
@@ -47,7 +49,8 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 		reconnect := false
 		for ctx.Err() == nil && !reconnect {
 			claimCtx := httpkit.WithCorrelationID(ctx, httpkit.ID())
-			items, claimErr := store.ClaimOutbox(claimCtx, 32, 30*time.Second)
+			// Claim only the next publication so queued items cannot outlive their lease.
+			items, claimErr := store.ClaimOutbox(claimCtx, 1, 30*time.Second)
 			if claimErr != nil {
 				slog.Error("outbox claim failed", "error", claimErr)
 				if !wait(ctx, time.Second) {
@@ -86,7 +89,10 @@ func runOutboxRelay(ctx context.Context, store outboxStore, url string) {
 					break
 				}
 				dbCtx := httpkit.WithCorrelationID(ctx, correlationID)
-				if e = store.MarkOutboxPublished(dbCtx, item.ID); e != nil {
+				if e = store.MarkOutboxPublished(dbCtx, item.ID, item.Attempts); errors.Is(e, controller.ErrOutboxClaimLost) {
+					slog.Warn("outbox claim lost after publish; current owner will retry", "outbox_id", item.ID, "attempt", item.Attempts)
+					continue
+				} else if e != nil {
 					slog.Error("outbox acknowledgement update failed", "outbox_id", item.ID, "error", e)
 					reconnect = true
 					break
