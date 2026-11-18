@@ -34,6 +34,9 @@ tasks:
   clock:sync:
     desc: Configure chrony and wait for clock synchronization on existing VMs
     cmds: [bash scripts/vm/clock.sh sync]
+  verify:storage-isolation:
+    desc: Verify Citus ingress from existing application pods and save JSON evidence
+    cmds: [python3 scripts/verify/storage-isolation.py]
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
     cmds: [bash scripts/tester/main.sh install]

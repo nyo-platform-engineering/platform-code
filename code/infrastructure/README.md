@@ -70,6 +70,7 @@ Taskfile memanggil entry point `main.sh` pada folder masing-masing:
 | `context` | `scripts/context/main.sh` |
 | `k9s` | `scripts/k9s/main.sh` |
 | `vm:manager` | `scripts/vm/main.sh manager` |
+| `verify:storage-isolation` | `scripts/verify/storage-isolation.py` |
 | `tester:*` | `scripts/tester/main.sh` dengan aksi install/list/practice |
 | `down` (alias `vm:down`, `vm:halt`) | `scripts/vm/main.sh halt` |
 | `destroy` (alias `vm:destroy`) | `scripts/vm/main.sh destroy` |
@@ -113,6 +114,33 @@ bash scripts/up/4-apps.sh
 ```
 
 Preflight saat ini membutuhkan minimal tiga node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
+
+### Verifikasi isolasi storage
+
+Setelah rollout selesai dan seluruh anggota Citus Ready, jalankan:
+
+```bash
+task verify:storage-isolation
+```
+
+Pemeriksaan memakai pod aplikasi yang sedang berjalan, tanpa mengubah policy
+atau data. Seluruh Aggregator dan anggota Citus harus dapat membuka koneksi ke
+port PostgreSQL `5432` serta Patroni `8008` pada setiap anggota, termasuk replica.
+Pod aplikasi lain harus ditolak. Service coordinator `postgres:5432` ikut diuji.
+Health endpoint tiap Aggregator juga harus berhasil melakukan ping database
+dengan koneksi aplikasi yang sudah dikonfigurasi.
+
+Setiap pod terlebih dahulu diuji ke port Aggregator yang terbuka sebagai kontrol
+positif. Pod yang tidak dapat menjalankan probe atau terganggu rollout membuat
+hasil gagal/inconclusive, bukan dianggap berhasil diblokir oleh NetworkPolicy.
+Kegagalan expectation membuat command keluar nonzero. Bukti JSON, label/UID pod,
+node, alamat target, dan policy tersimpan di
+`.state/storage-networkpolicy/results.json` untuk laporan.
+Perubahan pod, policy, atau Service selama pengujian juga menggagalkan hasil;
+ulangi setelah rollout stabil agar penolakan tidak berasal dari target yang hilang.
+
+Pengecualian namespace resmi `tester-agent` tetap dipertahankan pada policy;
+command ini menguji pod aplikasi dan tidak membuat atau menyamar sebagai Tester Agent.
 
 ## GitOps
 
