@@ -350,3 +350,12 @@ task vm:resume-worker NODE=aat-worker-1
 Gunakan worker untuk gangguan awal karena cluster hanya mempunyai satu control plane. Skenario ujian memerlukan token/kunci asisten; catat log Tester Agent serta bukti kernel terpisah dan spesifikasi host untuk laporan.
 
 Sensor Pantai belum dideploy karena contoh manifest pada PDF lokal kosong. Setelah kontraknya tersedia, gunakan image `sustuna/sensor-pantai@sha256:51fbd90d3891ad6e9f5768ad330ffb65205644cb29e50da65c7538f2e0b4397d`, namespace aplikasi, label `role=sensor`, dan memory 128Mi/256Mi.
+
+
+### Fondasi storage dan Audit API M2
+
+Kode Aggregator menyediakan adapter storage PostgreSQL serta endpoint audit
+`events`, `checksum`, dan `location`. Gunakan `AUDIT_TOKEN` khusus audit;
+tanpa token ini akses audit dinonaktifkan. `STORE_NODE_NAME` adalah node database,
+bukan node Aggregator; `STORE_UNIT` default `postgres`. Backend masih satu
+PostgreSQL; deployment infra perlu meneruskan Secret dan identitas node storage.
