@@ -17,7 +17,7 @@ case "${1:-status}" in
     fi
     for node in aat-control aat-worker-1 aat-worker-2; do
       printf '\n%s\n' "$node"
-      vagrant ssh "$node" -c 'chronyc tracking && chronyc -n sources'
+      vagrant ssh "$node" --no-tty -c 'chronyc tracking && chronyc -n sources' </dev/null
     done
     ;;
   *) echo 'Usage: clock.sh sync|status' >&2; exit 2 ;;
