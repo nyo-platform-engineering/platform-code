@@ -72,6 +72,9 @@ config:
   DB_MAX_CONNS: '5'
   POLL_INTERVAL_SECONDS: '3'
   POLL_TIMEOUT_MS: '4000'
+  SATELLITE_FEED_URL: https://satellite.naufarrel.dev
+  SATELLITE_ALLOWED_LATENESS_MINUTES: '360'
+  SATELLITE_BATCH_SIZE: '200'
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-cluster.monitoring.svc.cluster.local:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_SERVICE_NAME: aggregator
@@ -102,6 +105,14 @@ env:
     secretKeyRef:
       name: aat-runtime
       key: PVMBG_TOKEN
+# Token grup Feed Satelit dari asisten; tambahkan ke .env.runtime lalu jalankan task up.
+# Tanpa key ini consumer satelit tidak berjalan dan service lain tetap normal.
+- name: SATELLITE_GROUP_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: aat-runtime
+      key: SATELLITE_GROUP_TOKEN
+      optional: true
 strategy:
   type: RollingUpdate
   rollingUpdate:
