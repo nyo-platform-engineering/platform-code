@@ -28,8 +28,9 @@ tasks:
     desc: Open Virtual Machine Manager on the system libvirt connection
     cmds: [bash scripts/vm/main.sh manager]
   clock:status:
-    desc: Show clock offsets and NTP sources on all three VMs
-    cmds: [bash scripts/vm/clock.sh status]
+    desc: Summarize VM clock synchronization (use -- --verbose for full reports)
+    cmds:
+      - 'bash scripts/vm/clock.sh status {{.CLI_ARGS}}'
   clock:sync:
     desc: Configure chrony and wait for clock synchronization on existing VMs
     cmds: [bash scripts/vm/clock.sh sync]

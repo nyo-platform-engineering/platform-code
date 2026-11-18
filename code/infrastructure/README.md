@@ -171,8 +171,16 @@ antar-VM yang membuat child span HTTP tampak berada di luar parent pada waterfal
 
 ```bash
 task clock:sync     # terapkan konfigurasi pada VM yang sedang berjalan
-task clock:status   # lihat tracking, offset, dan sumber terpilih (^*) tiap VM
+task clock:status   # ringkasan sumber waktu, sisa koreksi, dan umur sampel tiap VM
+task clock:status -- --verbose  # laporan chrony lengkap
 ```
+
+Ringkasan menampilkan `SYNCED` bila sumber terpilih sehat, sampelnya belum lama,
+dan sisa koreksi paling besar 1 ms. Status `CHECK` menyertakan alasan, misalnya
+worker memakai fallback atau clock masih mengejar koreksi; `ERROR` berarti
+laporan VM tidak dapat dibaca. `CORRECTION LEFT` adalah koreksi lokal yang masih
+tertunda. Estimasi ketidakpastian UTC ditampilkan terpisah karena tidak sama
+dengan selisih jam worker terhadap control plane.
 
 Provisioner menunggu sinkronisasi dan sisa koreksi clock di bawah 1 ms, maksimal
 60 detik tiap pemeriksaan. Worker juga menunggu referensi control plane terpilih
