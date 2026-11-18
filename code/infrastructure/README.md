@@ -161,6 +161,32 @@ log berada di `.state/gateway.log`. Listener lama yang sudah mati dapat dimulai 
 `task down` menghentikan listener sebelum mematikan VM. `task destroy` menghentikan
 listener setelah perintah penghancuran VM selesai; konfirmasi Vagrant tetap berlaku.
 
+### Waktu awal mock BMKG/PVMBG
+
+Atur satu nilai bersama di `.env.runtime`:
+
+```dotenv
+START_TIME=2026-11-18T07:00:00+07:00
+```
+
+Gunakan RFC3339 dengan zona waktu, tanpa tanda kutip. Nilai eksplisit mengatur
+ConfigMap `aat-clock` dan `.state/mock-start-time`. Bila kosong/belum ada,
+bootstrap mengambil waktu awal yang sudah tersimpan, kemudian menuliskannya ke
+`.env.runtime`; lab baru memakai waktu saat bootstrap pertama. Nilai itu tetap
+dipakai saat restart berikutnya.
+
+Setelah mengedit, terapkan konfigurasi dan restart kedua mock agar env baru dibaca:
+
+```bash
+python3 scripts/up/runtime.py
+kubectl --kubeconfig .state/kubeconfig -n sistem-informasi-kebencanaan-bnpb \
+  rollout restart deployment/bmkg deployment/pvmbg
+```
+
+`task up` juga menerapkan konfigurasi tersebut; pod yang sudah berjalan tetap
+memerlukan restart untuk membaca perubahan env. Mengubah waktu awal mock tidak
+menghapus data atau cursor ingestion yang sudah tersimpan.
+
 ### Sinkronisasi waktu VM
 
 Chrony dijalankan saat boot dan provisioner `clock` diperiksa setiap `task up`,
