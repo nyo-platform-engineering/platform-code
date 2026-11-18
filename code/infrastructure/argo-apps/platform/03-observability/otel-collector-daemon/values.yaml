@@ -43,10 +43,18 @@ alternateConfig:
       collection_interval: 30s
       root_path: /hostfs
       scrapers:
-        cpu: {}
+        cpu:
+          attributes:
+            cpu:
+              enabled: true
+          metrics:
+            system.cpu.utilization:
+              enabled: true
         load: {}
         memory:
           metrics:
+            system.memory.utilization:
+              enabled: true
             system.memory.limit:
               enabled: true
             system.linux.memory.available:

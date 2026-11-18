@@ -1,9 +1,9 @@
 {
   "uid": "node-utilization",
   "title": "Node utilization",
-  "description": "OS metrics from the OTel agent on each k3s VM, collected every 30 seconds via hostmetrics \u2192 cluster collector \u2192 Mimir. Averages and peaks use only available samples in the selected time range; no history is backfilled.",
+  "description": "VM utilization from OTel hostmetrics every 30 seconds. CPU and RAM panels use system.cpu.utilization and system.memory.utilization directly; no history exists before these metrics are enabled.",
   "schemaVersion": 40,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "tags": [
     "platform",
@@ -50,7 +50,7 @@
     {
       "id": 1,
       "title": "CPU average",
-      "description": "Time average over the selected dashboard range. Percentage of all VM vCPUs; sampled from one-minute-or-longer CPU rates.",
+      "description": "OTel CPU utilization: sum non-idle states per logical CPU, then average across CPUs for each node. Average over available samples in the selected range.",
       "type": "stat",
       "gridPos": {
         "x": 0,
@@ -65,7 +65,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg_over_time((sum by (node) (rate(system_cpu_time_seconds_total{node=~\"$node\",state!=\"idle\"}[$__rate_interval])) / sum by (node) (rate(system_cpu_time_seconds_total{node=~\"$node\"}[$__rate_interval])))[$__range:30s])",
+          "expr": "avg_over_time((avg by (node) (sum by (node, cpu) (system_cpu_utilization{node=~\"$node\",state!=\"idle\"})))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -100,7 +100,7 @@
     {
       "id": 2,
       "title": "CPU peak",
-      "description": "Largest sampled CPU rate in the selected range; not an instantaneous peak.",
+      "description": "OTel CPU utilization: sum non-idle states per logical CPU, then average across CPUs for each node. Peak over available samples in the selected range.",
       "type": "stat",
       "gridPos": {
         "x": 6,
@@ -115,7 +115,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time((sum by (node) (rate(system_cpu_time_seconds_total{node=~\"$node\",state!=\"idle\"}[$__rate_interval])) / sum by (node) (rate(system_cpu_time_seconds_total{node=~\"$node\"}[$__rate_interval])))[$__range:30s])",
+          "expr": "max_over_time((avg by (node) (sum by (node, cpu) (system_cpu_utilization{node=~\"$node\",state!=\"idle\"})))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -150,7 +150,7 @@
     {
       "id": 3,
       "title": "RAM average",
-      "description": "Average of total RAM minus Linux MemAvailable over the selected range.",
+      "description": "OTel memory utilization for state=used, excluding separately reported cache and buffers. This differs from total minus MemAvailable and Kubernetes working set. Average over available samples in the selected range.",
       "type": "stat",
       "gridPos": {
         "x": 12,
@@ -165,7 +165,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg_over_time((max by (node) (system_memory_limit_bytes{node=~\"$node\"}) - max by (node) (system_linux_memory_available_bytes{node=~\"$node\"}))[$__range:30s])",
+          "expr": "avg_over_time((max by (node) (system_memory_utilization{node=~\"$node\",state=\"used\"}))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -173,11 +173,13 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "percentunit",
           "color": {
             "mode": "palette-classic"
           },
-          "decimals": 2
+          "decimals": 2,
+          "min": 0,
+          "max": 1
         },
         "overrides": []
       },
@@ -198,7 +200,7 @@
     {
       "id": 4,
       "title": "RAM peak",
-      "description": "Largest observed total RAM minus Linux MemAvailable over the selected range. No samples exist before hostmetrics starts.",
+      "description": "OTel memory utilization for state=used, excluding separately reported cache and buffers. This differs from total minus MemAvailable and Kubernetes working set. Peak over available samples in the selected range.",
       "type": "stat",
       "gridPos": {
         "x": 18,
@@ -213,7 +215,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max_over_time((max by (node) (system_memory_limit_bytes{node=~\"$node\"}) - max by (node) (system_linux_memory_available_bytes{node=~\"$node\"}))[$__range:30s])",
+          "expr": "max_over_time((max by (node) (system_memory_utilization{node=~\"$node\",state=\"used\"}))[$__range:30s])",
           "legendFormat": "{{node}}",
           "range": false,
           "instant": true
@@ -221,11 +223,13 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "percentunit",
           "color": {
             "mode": "palette-classic"
           },
-          "decimals": 2
+          "decimals": 2,
+          "min": 0,
+          "max": 1
         },
         "overrides": []
       },
@@ -246,7 +250,7 @@
     {
       "id": 5,
       "title": "CPU utilization",
-      "description": "Fraction of VM CPU time spent outside idle, including I/O wait and steal. Includes OS, k3s, and workloads.",
+      "description": "OTel CPU utilization: sum non-idle states per logical CPU, then average across CPUs for each node.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
@@ -261,7 +265,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (node) (rate(system_cpu_time_seconds_total{node=~\"$node\",state!=\"idle\"}[$__rate_interval])) / sum by (node) (rate(system_cpu_time_seconds_total{node=~\"$node\"}[$__rate_interval]))",
+          "expr": "avg by (node) (sum by (node, cpu) (system_cpu_utilization{node=~\"$node\",state!=\"idle\"}))",
           "legendFormat": "{{node}}",
           "range": true,
           "instant": false
@@ -296,8 +300,8 @@
     },
     {
       "id": 6,
-      "title": "RAM used and capacity",
-      "description": "Used = total minus MemAvailable. Reclaimable cache remains available; this differs from cAdvisor working set.",
+      "title": "RAM utilization",
+      "description": "OTel memory utilization for state=used, excluding separately reported cache and buffers. This differs from total minus MemAvailable and Kubernetes working set.",
       "type": "timeseries",
       "gridPos": {
         "x": 12,
@@ -312,26 +316,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (node) (system_memory_limit_bytes{node=~\"$node\"}) - max by (node) (system_linux_memory_available_bytes{node=~\"$node\"})",
-          "legendFormat": "{{node}} used",
-          "range": true,
-          "instant": false
-        },
-        {
-          "refId": "B",
-          "expr": "max by (node) (system_memory_limit_bytes{node=~\"$node\"})",
-          "legendFormat": "{{node}} capacity",
+          "expr": "max by (node) (system_memory_utilization{node=~\"$node\",state=\"used\"})",
+          "legendFormat": "{{node}}",
           "range": true,
           "instant": false
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "percentunit",
           "color": {
             "mode": "palette-classic"
           },
-          "decimals": 2
+          "decimals": 2,
+          "min": 0,
+          "max": 1
         },
         "overrides": []
       },
