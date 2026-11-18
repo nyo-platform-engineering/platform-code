@@ -275,7 +275,7 @@ subscriber baru, ikuti [panduan Problem 5](docs/demo-events.md).
 
 ## Deployment Kubernetes lokal — M2
 
-Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan tiga VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`. Workflow
+Deployment memakai [cluster lokal](../../infrastructure/README.md) dengan dua VM berkernel terpisah. Registrasi tujuh service (Aggregator, Auth, Client API, BMKG, PVMBG, dashboard updater, field notifier), runtime values, dan image digest berada di `../../infrastructure/argo-apps/dev/aat/`. Image baseline digunakan ulang dari `infrastructure-main.zip`. Workflow
 [GitHub Actions AAT](../../../.github/workflows/aat-ci.yml) membuild service yang
 berubah di `main`, publish ke GHCR, lalu memperbarui digest GitOps agar Argo CD
 melakukan rollout. Tidak ada job test atau build pada PR. Build manual tersedia
@@ -313,7 +313,7 @@ Workload berada pada namespace `sistem-informasi-kebencanaan-bnpb`. PostgreSQL d
 | api / consumer / other | 128Mi / 256Mi |
 | mock | 64Mi / 128Mi |
 
-Aggregator default tiga replica yang tersebar menurut hostname, rolling update `maxUnavailable: 0`, dan PDB `minAvailable: 2`. Auth tetap satu replica karena sesi image baseline berada dalam memori proses. HPA Aggregator opsional 3–5 replica: tambahkan `../../argo-apps/dev/aat/aggregator/autoscaling.yaml` ke `spec.source.helm.valueFiles` pada Application Aggregator, lalu commit/push. Lepaskan overlay tersebut sebelum pengujian scale manual.
+Aggregator default tiga replica yang tersebar 2+1 pada dua node menurut hostname, rolling update `maxUnavailable: 0`, dan PDB `minAvailable: 2`. Auth tetap satu replica karena sesi image baseline berada dalam memori proses. HPA Aggregator opsional 3–5 replica: tambahkan `../../argo-apps/dev/aat/aggregator/autoscaling.yaml` ke `spec.source.helm.valueFiles` pada Application Aggregator, lalu commit/push. Lepaskan overlay tersebut sebelum pengujian scale manual.
 
 Dari `code/infrastructure`, setelah prasyarat cluster disiapkan:
 
