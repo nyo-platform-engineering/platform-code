@@ -174,7 +174,7 @@ Traefik memakai IngressRoute untuk service internal `api@internal`.
 | Auth | http://auth.localhost |
 | Radar | http://radar.localhost |
 | Grafana | http://grafana.localhost; user `admin`, password dari `task password` |
-| Argo CD | http://argocd.localhost; user `admin`, password dari `task password APP=argocd` |
+| Argo CD | http://argocd.localhost; user `admin`, password dari `task password` |
 | Traefik dashboard | http://traefik.localhost/dashboard/ |
 | OTLP internal | `otel-collector-cluster.monitoring.svc.cluster.local`, HTTP 4318 / gRPC 4317 |
 

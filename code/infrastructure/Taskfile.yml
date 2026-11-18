@@ -15,9 +15,9 @@ tasks:
     desc: Show local VM service URLs
     cmds: [bash scripts/links/main.sh]
   password:
-    desc: Show the admin password (APP=grafana or argocd)
+    desc: Show Grafana and Argo CD admin credentials (optional APP=grafana or argocd)
     cmds:
-      - 'bash scripts/password/main.sh "{{.APP | default "grafana"}}"'
+      - 'bash scripts/password/main.sh "{{.APP | default "all"}}"'
   context:
     desc: Register the VM cluster as aat-local in your kubeconfig
     cmds: [bash scripts/context/main.sh]
