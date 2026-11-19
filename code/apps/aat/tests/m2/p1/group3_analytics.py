@@ -23,7 +23,8 @@ def dashboard(run):
         "Group 2's monitors check the analytics API during node loss.",
     )
 
-    return view["reconciliation"]
+    return dict(view["reconciliation"], analytics_range=view["query"],
+                analytics_by_area=view["analytics"]["by_area"], browser_evidence_pending=True)
 
 
 def run_group(run):

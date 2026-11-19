@@ -80,7 +80,47 @@ class TestConfig:
 CONFIG = TestConfig()
 
 
-def print_result(result):
+CASE_GUIDE = {
+    "catalog-import": ("1 dan 2", "Katalog historis dan sebaran awal",
+        "Dataset harus tersebar ke beberapa node; seluruh katalog tidak boleh berada di satu node.",
+        "Validasi input, bandingkan data sebelum/sesudah impor, ukur CPU/memori, lalu periksa lokasi setiap event katalog.",
+        "catalog-manifest.json, catalog-placement.json, catalog-load-monitor.json, baseline.json"),
+    "regional-surge": ("2", "Lonjakan gempa pada satu wilayah",
+        "Beban geografis yang timpang tidak boleh hanya dinilai dari rata-rata cluster.",
+        "Kirim event baru di Jawa, ukur tiap node selama penulisan, lalu bandingkan penempatan event lonjakan dengan katalog awal.",
+        "after-surge.json, regional-surge-monitor.json, regional-surge-metrics.jsonl"),
+    "global-reads": ("3", "50 event terbaru lintas penyimpanan",
+        "Urutan benar pada satu node belum membuktikan hasil global benar dan lengkap.",
+        "Ikuti cursor dengan halaman berisi maksimal 50 event, periksa urutan dan duplikasi, lalu cocokkan dengan Audit API sebelum/sesudah pembacaan.",
+        "global-reads.json dan http.jsonl"),
+    "first-loss": ("4", "Worker mati dan data lokal dihapus",
+        "Replika harus menjaga event yang sudah ada dan penulisan yang telah diakui berhasil.",
+        "Hapus volume store, matikan worker, pantau request selama gangguan, lalu cocokkan identitas event dan checksum katalog.",
+        "first-loss.json, first-loss-monitor.json, first-loss-storage-erase.json"),
+    "first-worker-rejoin": ("5", "Worker bergabung dengan disk kosong",
+        "Status Ready saja belum membuktikan worker ikut menyimpan data atau penulisan tetap berjalan.",
+        "Nyalakan worker, teruskan probe baca/tulis, tunggu replika pulih, dan verifikasi volume PostgreSQL terbangun kembali.",
+        "first-worker-rejoin.json dan first-worker-rejoin-monitor.json"),
+    "restored-resilience": ("6", "Bertahan dari kehilangan worker berikutnya",
+        "Sesudah pemulihan, sistem harus kembali memiliki cadangan untuk kehilangan satu node lagi.",
+        "Setelah rejoin pertama memverifikasi replika, matikan worker yang lain, ulangi pemeriksaan data, lalu pulihkan redundansi lagi.",
+        "second-loss.json dan final-rejoin.json"),
+    "second-loss": ("6", "Kehilangan worker kedua",
+        "Kita menguji redundansi hasil pemulihan pertama, bukan memakai worker yang masih belum pulih.",
+        "Matikan worker lain dan periksa kembali data serta respons lengkap/parsial pada probe yang berjalan.",
+        "second-loss.json dan second-loss-monitor.json"),
+    "final-rejoin": ("6", "Pulihkan redundansi setelah kehilangan kedua",
+        "Demo harus berakhir dengan replika yang siap menanggung gangguan berikutnya.",
+        "Bangun kembali worker kedua, pastikan ia menyimpan data, dan periksa penulisan yang diakui sampai monitor berhenti.",
+        "final-rejoin.json dan final-rejoin-monitor.json"),
+    "dashboard-analytics": ("7", "Dashboard analitik dan kecocokan Audit API",
+        "Angka harus mencakup penyimpanan lintas node dan tidak boleh mengaku lengkap saat data tidak tersedia.",
+        "Hitung ulang lima kategori bahaya, severity, wilayah, dan bucket waktu dari Audit API; bandingkan dengan API yang dipakai dashboard.",
+        "dashboard-analytics.json; chart, filter waktu, dan banner parsial diperiksa di peramban"),
+}
+
+
+def print_result(name, result):
     """Keep useful measurements visible; detailed requests stay in evidence files."""
     if not isinstance(result, dict):
         return
@@ -102,6 +142,17 @@ def print_result(result):
             'Previous event identities preserved',
         )
 
+    if "records" in result:
+        if result["already_present"]:
+            output("BATASAN", "Kriteria 1 — impor ulang",
+                   f"{result['already_present']} event sudah ada; changed={result['changed_records']}.",
+                   "Penempatan dan kelangsungan data tetap diperiksa, tetapi run ini bukan bukti "
+                   "bahwa semua event katalog baru ditulis dan bebannya tersebar saat impor awal.")
+        areas = result.get("catalog_by_area", {})
+        output("DATASET", "Kriteria 2 — ketidakmerataan alami katalog",
+               *(f"{area}: {count} record ({count / result['records']:.1%})" for area, count in areas.items()),
+               "Distribusi ini dibaca dari katalog asli, bukan dibuat merata untuk mempermudah tes.")
+
     reference = result.get("reference")
     if reference:
         output(
@@ -111,7 +162,7 @@ def print_result(result):
             f"SHA-256: {reference['checksum']}",
         )
 
-    reads = result.get("global_reads")
+    reads = result.get("global_reads", result if "global_order_verified" in result else None)
     if reads:
         output(
             'RESULT',
@@ -121,6 +172,13 @@ def print_result(result):
             f"Live additions/updates: {reads['live_records_added_or_updated']}",
         )
 
+    if reads:
+        output("PENJELASAN", "Kriteria 3 — arti hasil pembacaan",
+               f"Event hasil pagination: {reads.get('recent_events', '?')}; ukuran halaman: 50.",
+               "Urutan global memakai occurred_at terbaru lalu hazard_id sebagai pemecah waktu yang sama.",
+               "Perbandingan seluruh dataset identik: " + ("ya" if reads['exact_whole_dataset_comparison'] else
+               "tidak; sumber masih menulis. Yang dicocokkan tepat adalah event stabil di antara dua ekspor Audit."))
+
     for label, placement in (("Placement", result.get("placement", result)),
                              ("Regional surge", result.get("surge_distribution"))):
         if not placement or "copies_per_node" not in placement:
@@ -129,6 +187,14 @@ def print_result(result):
         rows.extend(f"{node} | {placement['primary_events_per_node'].get(node, 0)} | {count}"
                     for node, count in sorted(placement["copies_per_node"].items()))
         output("RESULT", label, *rows)
+        scope = placement.get("events", result.get("catalog_events"))
+        if scope:
+            output("PENJELASAN", f"Sebaran {label} — {scope} event yang diperiksa",
+                   f"Primary tersebar di {sum(count > 0 for count in placement['primary_events_per_node'].values())} node; "
+                   f"salinan terbanyak pada satu node: {max(placement['copies_per_node'].values())}/{scope} event.",
+                   "Kolom stored copies mencakup primary dan replika, jadi jumlahnya dapat melebihi jumlah event unik.",
+                   "Primary=0 berarti node hanya memegang replika dalam sampel ini; "
+                   "jumlah event bukan ukuran throughput penulisan. Bandingkan CPU/memori dan disk/write IO juga.")
 
     chart = result.get("analytics", result if "selected_events" in result else None)
     if chart:
@@ -140,6 +206,48 @@ def print_result(result):
             'Types: ' + ', '.join((f'{kind}={count}' for kind, count in chart['by_type'].items())),
         )
 
+    if chart:
+        window = result.get("analytics_range")
+        if window:
+            output("CAKUPAN", "Kriteria 7 — rentang angka dashboard",
+                   f"{window['from']} sampai sebelum {window['to']}; interval={window['interval']}.",
+                   "Angka merupakan data lintas sumber dalam rentang ini; bukan seluruh histori di luar filter waktu.")
+        output("RESULT", "Jumlah per severity",
+               *(f"{severity}: {count}" for severity, count in chart['by_severity'].items()))
+        output("RESULT", "Jumlah per area_name",
+               *(f"{row['key']}: {row['count']}" for row in result.get("analytics_by_area", [])))
+        labels = {"SEISMIC": "Gempa", "TSUNAMI": "Tsunami", "VOLCANIC": "Gunung berapi",
+                  "WILDFIRE": "Kebakaran hutan", "COASTAL": "Pesisir"}
+        output("RESULT", "Jumlah per jenis bahaya",
+               *(f"{labels.get(kind, kind)}: {count}" for kind, count in chart["by_type"].items()),
+               "Tsunami dihitung dari peringatan pada event gempa; satu event dapat berkontribusi "
+               "ke Gempa dan Tsunami, sehingga jumlah kategori tidak selalu sama dengan total event unik.")
+        empty_types = [kind for kind, count in chart["by_type"].items() if count == 0]
+        if empty_types:
+            output("BATASAN", "Kategori tanpa kejadian di rentang ini", ", ".join(empty_types),
+                   "Nol dapat benar menurut Audit, tetapi belum menunjukkan contoh kejadian untuk semua kategori.")
+
+    monitor = result.get("monitor")
+    if monitor:
+        output("KETERSEDIAAN", f"Probe selama {name}",
+               f"Baca berhasil: {monitor['read_successes']}; parsial eksplisit: {monitor['partial_responses']}; "
+               f"latensi terlama: {monitor['max_read_seconds']:.3f}s; error: {len(monitor['errors'])}.",
+               f"Tulis diakui pada tahap ini: {monitor['writes_acknowledged']}; "
+               f"ditolak/hasil tidak diketahui: {monitor['writes_rejected_or_unknown']}.",
+               "Probe memeriksa batas waktu dan metadata partial/unavailable_units. "
+               "Ini sampel request selama gangguan, bukan bukti bahwa setiap request semua klien diamati.")
+        if monitor.get("tunnel_reconnections"):
+            output("CONNECTION", "Gangguan tunnel selama tahap ini",
+                   f"Reconnect: {monitor['tunnel_reconnections']}; lihat transport_error/read_retried pada http.jsonl.")
+        if name in ("first-loss", "second-loss"):
+            output("PENJELASAN", "Tulis saat worker hilang",
+                   "Tulis yang ditolak atau belum diketahui hasilnya dihitung terpisah; "
+                   "hanya yang diakui berhasil wajib ditemukan kembali. Respons baca gagal tetap menggagalkan tes.")
+        else:
+            output("PENJELASAN", "Rejoin tanpa interupsi tulis",
+                   "Tahap rejoin mewajibkan tidak ada probe tulis gagal; "
+                   "node Ready juga harus memiliki salinan data dan volume yang telah dibangun kembali.")
+
     storage = result.get("storage_loss")
     if storage:
         status = "erased and verified empty" if storage["operation"] == "erase" else "rebuilt PostgreSQL data"
@@ -149,6 +257,10 @@ def print_result(result):
             f"Worker: {storage['worker']}",
             f"Volumes: {len(storage['volumes'])}; {status}",
         )
+
+    if "disk_erasure_verified" in result and not result["disk_erasure_verified"]:
+        output("MANUAL", "Penghapusan disk belum diverifikasi otomatis",
+               "Mode manual memerlukan bukti Tester Agent; status Ready/NotReady bukan bukti isi disk dihapus.")
 
     if "acknowledged_writes_preserved" in result:
         output(
@@ -196,9 +308,21 @@ class Run(CommonRun):
         }
 
     def stage(self, name, operation, *args, **kwargs):
-        result = super().stage(name, operation, *args, **kwargs)
-        print_result(result)
-
+        criterion, title, purpose, steps, evidence = CASE_GUIDE[name]
+        output("KRITERIA", f"{criterion} — {title}",
+               f"Tujuan: {purpose}", f"Yang dilakukan: {steps}",
+               f"Bukti di {self.folder}: {evidence}")
+        try:
+            result = super().stage(name, operation, *args, **kwargs)
+        except (Exception, KeyboardInterrupt):
+            output("BELUM TERBUKTI", f"Kriteria {criterion} — {title}",
+                   "Tahap berhenti sebelum seluruh pemeriksaannya lolos. "
+                   "Lihat error dan http.jsonl; hasil tahap sebelumnya tetap tersimpan.")
+            raise
+        print_result(name, result)
+        output("KESIMPULAN", f"Kriteria {criterion} — pemeriksaan otomatis tahap ini lolos",
+               "Kesimpulan berlaku untuk data dan request yang diperiksa; "
+               "bukti manual serta batasan yang dicetak tetap berlaku.")
         return result
 
 
@@ -373,6 +497,7 @@ def main():
         )
 
         run.report["finished_at"] = utc()
+        run.report["endpoint_reconnections"] = getattr(config, "endpoint_reconnections", [])
         run.save("result.json", run.report)
 
         # Show stage outcomes and the evidence directory at the end.
@@ -385,6 +510,22 @@ def main():
         if exit_code == 0:
             output("PASS", "All automated P1 checks passed")
         output("INFO", "Evidence", str(folder))
+        reconnects = getattr(config, "endpoint_reconnections", [])
+        output("CONNECTION", "Ringkasan tunnel pengujian", f"Reconnect selama run: {len(reconnects)}.",
+               "Riwayat pod tujuan tersimpan di endpoint_reconnections pada result.json; "
+               "retry GET, jika ada, tetap tercatat bersama kegagalan transport awal.")
+        for criterion, stages, limitation in (
+            (1, ("catalog-import",), "Katalog/checksum resmi dan bukti fresh load tetap diperlukan."),
+            (2, ("catalog-import", "regional-surge"), "Bandingkan metrik per node; tambahkan disk/write IO dan penjelasan ketimpangan."),
+            (3, ("global-reads",), "Urutan dan kelengkapan dibandingkan pada data stabil di antara dua ekspor Audit."),
+            (4, ("first-loss",), "Bukti penghapusan disk otomatis/manual dibedakan; request dipantau dengan probe."),
+            (5, ("first-worker-rejoin",), "Ready, penempatan replika, rebuild volume, dan kelangsungan probe diperiksa."),
+            (6, ("second-loss", "final-rejoin"), "Kehilangan kedua diuji setelah pemulihan pertama; redundansi akhir diverifikasi."),
+            (7, ("dashboard-analytics",), "Chart, filter waktu, lima kategori, dan banner tidak lengkap tetap perlu bukti peramban."),
+        ):
+            passed = all(checks.get(stage, {}).get("status") == "pass" for stage in stages)
+            output("RINGKASAN", f"Kriteria {criterion}: " + ("cek otomatis lolos" if passed else "belum tuntas"), limitation)
+        output("MANUAL", "Bukti penyelesaian yang masih diperlukan", *MANUAL_EVIDENCE)
         output(
             'MANUAL',
             'Pending evidence',
