@@ -548,12 +548,12 @@ Konfigurasi Aggregator tambahan:
 | `STORE_BACKEND` | `citus`; kosong/`postgres` untuk development M1 |
 | `CITUS_MEMBERS_FILE` | `/etc/citus/members.json`, inventory dari ConfigMap storage |
 | `AUDIT_TOKEN` | Secret tersendiri, berbeda dari token aplikasi |
-| `READ_RPS_LIMIT` | `80` read/detik per replica untuk gabungan hazards dan analytics; `0` menonaktifkan batas (default non-Kubernetes) |
-| `READ_RPS_BURST` | `20` token maksimum per replica |
+| `READ_RPS_LIMIT` | `20` read/detik per replica untuk gabungan hazards dan analytics; `0` menonaktifkan batas (default non-Kubernetes) |
+| `READ_RPS_BURST` | `5` token maksimum per replica |
 | `POSTGRES_REPLICATION_PASSWORD` | Secret khusus koneksi replikasi, dibuat bootstrap |
 
 Read admission memakai token bucket per proses, sebelum cache dan query database.
-Tiga replica memiliki total batas nominal 240 read/detik; distribusi routing dapat
+Tiga replica memiliki total batas nominal 60 read/detik; distribusi routing dapat
 membuat hasil aktual lebih rendah. Request berlebih segera mendapat HTTP 429 dan
 `Retry-After: 1`, tanpa antrean tambahan. Health, Audit, polling, dan ingest tidak
 memakai bucket ini. Batas konkurensi database tetap berlaku secara terpisah.

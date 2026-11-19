@@ -77,8 +77,8 @@ config:
   # Five replicas use at most 30 coordinator connections; leave room for Citus/Patroni.
   DB_MAX_CONNS: "6"
   # Shared hazards/analytics token bucket per pod, identical at every replica count.
-  READ_RPS_LIMIT: "80"
-  READ_RPS_BURST: "20"
+  READ_RPS_LIMIT: "20"
+  READ_RPS_BURST: "5"
   POLL_INTERVAL_SECONDS: "3"
   POLL_TIMEOUT_MS: "4000"
   PVMBG_SCHEMA_POLICY: strict

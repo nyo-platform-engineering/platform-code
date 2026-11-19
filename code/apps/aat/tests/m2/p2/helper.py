@@ -488,7 +488,7 @@ class Run:
         for pod in pods:
             # Only these public settings are exported; never dump the pod environment.
             values = self.kube("exec", pod["metadata"]["name"], "-n", NAMESPACE, "-c", "aggregator", "--",
-                               "sh", "-c", 'printf "%s\\n%s\\n" "${READ_RPS_LIMIT:-0}" "${READ_RPS_BURST:-20}"',
+                               "sh", "-c", 'printf "%s\\n%s\\n" "${READ_RPS_LIMIT:-0}" "${READ_RPS_BURST:-5}"',
                                json_output=False).splitlines()
             require(len(values) == 2, "could not read Aggregator admission settings")
             read_limits.add(tuple(map(int, values)))

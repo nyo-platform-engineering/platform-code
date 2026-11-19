@@ -70,7 +70,7 @@ func main() {
 		Node: os.Getenv("STORE_NODE_NAME"), Unit: httpkit.Env("STORE_UNIT", "postgres"),
 	})}
 	ctrl.ReadRPSLimit = httpkit.Integer("READ_RPS_LIMIT", 0)
-	ctrl.ReadRPSBurst = httpkit.Integer("READ_RPS_BURST", 20)
+	ctrl.ReadRPSBurst = httpkit.Integer("READ_RPS_BURST", 5)
 	if ctrl.ReadRPSLimit < 0 || ctrl.ReadRPSBurst < 1 {
 		panic("READ_RPS_LIMIT must be nonnegative and READ_RPS_BURST positive")
 	}

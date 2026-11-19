@@ -81,7 +81,7 @@ The workload retries controlled 429 responses after `Retry-After` (capped at fiv
 seconds per iteration). Rejections remain recorded separately; successful RPS
 counts only complete 200 responses. VUs stay allocated during the retry delay.
 The Aggregator Deployment configures a shared hazards/analytics token bucket of
-80 reads/second with a burst of 20 **per replica**, before the cache. The same
+20 reads/second with a burst of 5 **per replica**, before the cache. The same
 settings apply at 1, 3 and 5 replicas. Throughput evidence reads these two public
 environment values from every Ready pod before/after each sample and rejects
 configuration differences. A capped ratio measures configured admission capacity,
