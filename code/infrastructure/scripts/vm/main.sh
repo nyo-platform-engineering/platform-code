@@ -34,14 +34,42 @@ if [[ "$(cat "$state/mode" 2>/dev/null)" == k3d ]]; then
     # Freezing a container is the k3d equivalent of suspending a VM.
     suspend-worker) docker pause "$(container "${2:-aat-worker-1}")" ;;
     resume-worker) docker unpause "$(container "${2:-aat-worker-1}")" ;;
+    stop-worker) docker stop --time 0 "$(container "${2:-aat-worker-1}")" ;;
+    start-worker) docker start "$(container "${2:-aat-worker-1}")" ;;
     manager) echo 'k3d mode has no VMs; use docker ps or task k9s.' >&2; exit 2 ;;
-    *) echo 'Usage (k3d): scripts/vm/main.sh doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker [worker]' ;;
+    *) echo 'Usage (k3d): scripts/vm/main.sh doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker|stop-worker|start-worker [worker]' ;;
   esac
   exit
 fi
 vm() {
   # The subshell keeps Vagrant's working directory local to this command.
   (cd "$root/local" && vagrant "$@")
+}
+
+worker_power() {
+  local operation="$1" node="$2" identity_file domain_uuid domain_name domain_state
+  identity_file="$root/local/.vagrant/machines/$node/libvirt/id"
+  [[ -s "$identity_file" ]] || { echo "Missing local libvirt identity: $node" >&2; return 1; }
+  domain_uuid="$(cat "$identity_file")"
+  [[ "$domain_uuid" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || return 1
+  domain_name="$(virsh -c qemu:///system domname "$domain_uuid")"
+  [[ "$domain_name" == "aat-m2$node" ]] || { echo "Unexpected domain for $node: $domain_name" >&2; return 1; }
+  domain_state="$(LC_ALL=C virsh -c qemu:///system domstate "$domain_uuid")"
+  if [[ "$operation" == stop-worker ]]; then
+    if [[ "$domain_state" != 'shut off' && "$domain_state" != crashed ]]; then
+      # Cut power directly: vagrant-libvirt's graceful shutdown can time out even
+      # after Kubernetes observes NotReady. destroy does not undefine/delete disks.
+      virsh -c qemu:///system destroy "$domain_uuid"
+    fi
+    [[ "$(LC_ALL=C virsh -c qemu:///system domstate "$domain_uuid")" == 'shut off' ]]
+  else
+    case "$domain_state" in
+      'shut off'|crashed) virsh -c qemu:///system start "$domain_uuid" ;;
+      paused) virsh -c qemu:///system resume "$domain_uuid" ;;
+      running) echo "$node is already running" ;;
+      *) echo "Cannot start $node in state: $domain_state" >&2; return 1 ;;
+    esac
+  fi
 }
 
 case "${1:-help}" in
@@ -73,20 +101,20 @@ case "${1:-help}" in
     vm destroy
     python3 scripts/up/gateway.py stop
     ;;
-  suspend-worker|resume-worker)
+  suspend-worker|resume-worker|stop-worker|start-worker)
     node="${2:-aat-worker-1}"
     if [[ "$node" != aat-worker-1 && "$node" != aat-worker-2 ]]; then
       echo 'Choose aat-worker-1 or aat-worker-2; the control plane must stay running during failure tests.' >&2
       exit 2
     fi
 
-    if [[ "$1" == suspend-worker ]]; then
-      vm suspend "$node"
-    else
-      vm resume "$node"
-    fi
+    case "$1" in
+      suspend-worker) vm suspend "$node" ;;
+      resume-worker) vm resume "$node" ;;
+      stop-worker|start-worker) worker_power "$1" "$node" ;;
+    esac
     ;;
   *)
-    echo 'Usage: scripts/vm/main.sh manager|doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker [worker]'
+    echo 'Usage: scripts/vm/main.sh manager|doctor|up|status|halt|resume|destroy|suspend-worker|resume-worker|stop-worker|start-worker [worker]'
     ;;
 esac

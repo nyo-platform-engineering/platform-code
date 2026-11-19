@@ -1,0 +1,27 @@
+{
+  "source": "BMKG",
+  "count": 300,
+  "checksum": "8d8a329fa66b8f3cc2c295214ffceeebad5b06a34161186a9eae39c79ba448d1",
+  "dataset_origin": "development_mock",
+  "official": false,
+  "scope": "catalog",
+  "source_ref_prefix": "bmkg-",
+  "based_on": [
+    "bmkg/internal/mock/model/events.go",
+    "pvmbg/internal/mock/model/reports.go"
+  ],
+  "description": "Exact mock feed rules with a fixed historical START_TIME; no invented regions or ID prefixes.",
+  "generator": {
+    "start_time": "2020-01-01T00:00:00Z",
+    "event_interval_seconds": 10,
+    "record_count": 300,
+    "pvmbg_schema": "original"
+  },
+  "by_area": {
+    "Pesisir Selatan Jawa": 300
+  },
+  "first_occurred_at": "2019-12-31T23:56:50Z",
+  "last_occurred_at": "2020-01-01T00:46:40Z",
+  "tsunami_warning_count": 75,
+  "volcanic_report_count": 300
+}

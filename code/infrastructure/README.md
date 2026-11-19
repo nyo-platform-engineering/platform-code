@@ -70,7 +70,7 @@ Taskfile memanggil entry point `main.sh` pada folder masing-masing:
 | `context` | `scripts/context/main.sh` |
 | `k9s` | `scripts/k9s/main.sh` |
 | `vm:manager` | `scripts/vm/main.sh manager` |
-| `verify:storage-isolation` | `scripts/verify/storage-isolation.py` |
+| `m2:p1` | `../apps/aat/tests/m2/p1/test-problem-1.py` |
 | `tester:*` | `scripts/tester/main.sh` dengan aksi install/list/practice |
 | `down` (alias `vm:down`, `vm:halt`) | `scripts/vm/main.sh halt` |
 | `destroy` (alias `vm:destroy`) | `scripts/vm/main.sh destroy` |
@@ -115,32 +115,29 @@ bash scripts/up/4-apps.sh
 
 Preflight saat ini membutuhkan minimal tiga node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
 
-### Verifikasi isolasi storage
+### Pengujian Milestone 2 Problem 1
 
-Setelah rollout selesai dan seluruh anggota Citus Ready, jalankan:
+Setelah rollout Citus dan Aggregator selesai, jalankan pengujian interaktif:
 
 ```bash
-task verify:storage-isolation
+task m2:p1
 ```
 
-Pemeriksaan memakai pod aplikasi yang sedang berjalan, tanpa mengubah policy
-atau data. Seluruh Aggregator dan anggota Citus harus dapat membuka koneksi ke
-port PostgreSQL `5432` serta Patroni `8008` pada setiap anggota, termasuk replica.
-Pod aplikasi lain harus ditolak. Service coordinator `postgres:5432` ikut diuji.
-Health endpoint tiap Aggregator juga harus berhasil melakukan ping database
-dengan koneksi aplikasi yang sudah dikonfigurasi.
+Runner memakai `.env.runtime` dan `.state/kubeconfig` pada direktori infrastructure.
+Dengan `CONFIG.url = None`, runner membuat port-forward sementara ke pod Aggregator pada control
+plane agar koneksi tidak ikut hilang saat worker dimatikan. Checkpoint membedakan pertumbuhan feed live dari kehilangan data; grafik
+dibandingkan secara eksak pada rentang historis katalog yang ditampilkan. Atur file katalog/referensi asisten dan nama worker pada
+`CONFIG` di `test-problem-1.py`. Runner menunggu Enter di antara langkah import, verifikasi, lonjakan regional,
+kehilangan worker dan dashboard. Pada langkah loss/rejoin, Enter otomatis
+menghapus isi volume Citus worker terpilih, mematikan VM, lalu menyalakan dan
+memverifikasi rebuild replika serta NotReady/Ready. OS dan volume layanan lain
+tetap dipertahankan; ujian resmi Tester Agent tetap terpisah. Katalog baru harus
+memiliki minimal 51 event unik untuk memeriksa pagination. Seluruh konfigurasi berada dalam file Python; tidak ada opsi CLI.
 
-Setiap pod terlebih dahulu diuji ke port Aggregator yang terbuka sebagai kontrol
-positif. Pod yang tidak dapat menjalankan probe atau terganggu rollout membuat
-hasil gagal/inconclusive, bukan dianggap berhasil diblokir oleh NetworkPolicy.
-Kegagalan expectation membuat command keluar nonzero. Bukti JSON, label/UID pod,
-node, alamat target, dan policy tersimpan di
-`.state/storage-networkpolicy/results.json` untuk laporan.
-Perubahan pod, policy, atau Service selama pengujian juga menggagalkan hasil;
-ulangi setelah rollout stabil agar penolakan tidak berasal dari target yang hilang.
-
-Pengecualian namespace resmi `tester-agent` tetap dipertahankan pada policy;
-command ini menguji pod aplikasi dan tidak membuat atau menyamar sebagai Tester Agent.
+Konfigurasi, format referensi, cakupan otomatis, dan bukti manual dijelaskan dalam
+[panduan M2 P1](../apps/aat/tests/m2/p1/README.md). Task dan script
+`verify:storage-isolation` lama sudah dihapus; suite P1 ini menguji distribusi dan
+pemulihan data, bukan isolasi NetworkPolicy.
 
 ## Mode tanpa VM (k3d, khusus pengembangan)
 
