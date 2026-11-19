@@ -39,7 +39,8 @@ def mapping(run):
         require(h["area_name"], f"{hid}: no area_name")
         require(parse_time(h["occurred_at"]) <= feed_now, f"{hid}: occurred after the feed's virtual_now {vnow}")
         keys = a.get("detection_keys") or []
-        require(all(KEY.match(k) for k in keys), f"{hid}: malformed detection key")
+        bad = [k for k in keys if not KEY.match(k)]
+        require(not bad, f"{hid}: malformed detection key(s) {bad[:3]}")
         require(a.get("detection_count") == len(keys), f"{hid}: detection_count differs from its keys")
         if h["severity"] == "NORMAL":
             # Criterion 3: a fire that shrank, merged, or was retracted keeps its event.
