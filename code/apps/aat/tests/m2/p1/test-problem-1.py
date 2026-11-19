@@ -574,7 +574,7 @@ def main():
         except (Exception, KeyboardInterrupt) as error:
             # Save failures and operator interruptions as unsuccessful runs.
             run.report["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
-            message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+            message = str(error) or type(error).__name__
             run.report["error"] = message
             output("FAIL", "P1 check failed", message)
 
@@ -588,6 +588,7 @@ def main():
 
             run.report["finished_at"] = utc()
             run.report["endpoint_reconnections"] = getattr(config, "endpoint_reconnections", [])
+            run.report["endpoint_connection_attempts"] = getattr(config, "endpoint_connection_attempts", [])
             run.save("result.json", run.report)
 
             # Show stage outcomes and the evidence directory at the end.

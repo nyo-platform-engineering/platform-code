@@ -226,7 +226,7 @@ class Run:
             output("PASS", name, *(f"{k}: {v}" for k, v in (result or {}).items() if not isinstance(v, (dict, list))))
             return result
         except (Exception, KeyboardInterrupt) as error:
-            message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+            message = str(error) or type(error).__name__
             status = "interrupted" if isinstance(error, KeyboardInterrupt) else "fail"
             self.report["automated_checks"][name] = {"status": status, "error": self.clean(message)}
             raise

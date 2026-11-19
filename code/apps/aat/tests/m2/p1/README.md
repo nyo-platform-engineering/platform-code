@@ -46,6 +46,9 @@ serta penjelasan beban dari Grafana, dan rekam demo dashboard. Metrik otomatis
 mencakup CPU/memori; lolos tes otomatis belum berarti seluruh bukti manual lengkap.
 
 Jika pod Aggregator berganti, tunnel `kubectl` yang berhenti disambungkan ulang.
+Control plane diprioritaskan; fallback boleh memakai Aggregator Ready di node lain,
+kecuali worker yang akan dimatikan. Kandidat dan hasil koneksi disimpan di
+`endpoint-connections.json`.
 Hanya GET yang boleh diulang sekali setelah tunnel mati; error HTTP, timeout, dan tulis
 dengan hasil tidak diketahui tetap gagal/dicatat. Reconnect ikut memakai batas waktu request
 dan tercatat di `http.jsonl` serta `result.json`.

@@ -258,7 +258,7 @@ class Monitor:
                         self.partial += int(future.result())
                         self.reads += 1
                     except Exception as error:
-                        message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+                        message = str(error) or type(error).__name__
                         if message not in self.errors:
                             output("PROBE GAGAL", f"{self.name} — pembacaan", message,
                                    "Kesalahan ini dicatat dan akan menggagalkan tahap; "
@@ -360,7 +360,7 @@ class Monitor:
                 sample = cluster_metrics(self.run.config)
                 self.inspect_metrics(sample)
             except Exception as error:
-                message = str(error) if isinstance(error, ValueError) else type(error).__name__
+                message = str(error) or type(error).__name__
                 sample = {"at": utc(), "error": message}
                 self.errors.append("metrics: " + message)
             with path.open("a") as stream:

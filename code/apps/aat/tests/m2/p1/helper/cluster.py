@@ -62,15 +62,17 @@ def cluster_metrics(config):
     }
 
 
-def select_surviving_aggregator(topology):
-    control_nodes = {
-        node["name"] for node in topology["nodes"]
-        if node["control_plane"] and node["ready"]
-    }
-    for pod in topology["pods"]:
-        if pod["role"] == "aggregator" and pod["ready"] and pod["node"] in control_nodes:
-            return pod["name"]
-    raise ValueError("no Ready Aggregator on control plane; set CONFIG.url to a stable Aggregator endpoint")
+def select_surviving_aggregator(topology, excluded_nodes=()):
+    ready_nodes = {node["name"] for node in topology["nodes"]
+                   if node["ready"] and node["name"] not in excluded_nodes}
+    control_nodes = {node["name"] for node in topology["nodes"] if node["control_plane"]}
+    candidates = [pod for pod in topology["pods"]
+                  if pod["role"] == "aggregator" and pod["ready"] and pod["node"] in ready_nodes]
+    # Prefer the control plane, but a healthy worker can serve the same API.
+    candidates.sort(key=lambda pod: pod["node"] not in control_nodes)
+    if candidates:
+        return candidates[0]["name"]
+    raise ValueError("no Ready Aggregator on a surviving node")
 
 
 def wait_for_port(process, port, timeout=15):
@@ -84,7 +86,7 @@ def wait_for_port(process, port, timeout=15):
                 return
         except OSError:
             time.sleep(min(0.1, max(0, deadline - time.monotonic())))
-    raise ValueError("port-forward did not become ready")
+    raise TimeoutError("Aggregator port-forward did not become ready within the request deadline")
 
 
 @contextmanager
@@ -101,6 +103,8 @@ def endpoint(config, folder):
     config.url = f"http://127.0.0.1:{port}"
     config.endpoint_generation = 0
     config.endpoint_reconnections = []
+    config.endpoint_connection_attempts = []
+    config.endpoint_node = None
     process = None
     lock = threading.Lock()
 
@@ -110,11 +114,14 @@ def endpoint(config, folder):
             deadline = time.monotonic() + timeout
             if not lock.acquire(timeout=max(0, timeout)):
                 raise TimeoutError("timed out waiting for the Aggregator tunnel")
+            attempt = None
             try:
+                excluded = set(getattr(config, "endpoint_excluded_nodes", ()))
+                unsafe = config.endpoint_node in excluded
                 # Another probe may already have replaced the failed tunnel.
-                if failed_generation is not None and failed_generation != config.endpoint_generation:
+                if failed_generation is not None and failed_generation != config.endpoint_generation and not unsafe:
                     return True
-                if process is not None and process.poll() is None:
+                if process is not None and process.poll() is None and not unsafe:
                     if failed_generation is None:
                         return False
                     try:
@@ -122,16 +129,30 @@ def endpoint(config, folder):
                     except subprocess.TimeoutExpired:
                         return False  # A live tunnel is not an application-error retry policy.
 
+                attempt = {"at": utc(), "excluded_nodes": sorted(excluded), "status": "connecting",
+                           "reason": "avoid_target_worker" if unsafe else "initial" if process is None else "tunnel_exited"}
+                config.endpoint_connection_attempts.append(attempt)
+                if unsafe and process is not None and process.poll() is None:
+                    output("CONNECTION", "Pindahkan tunnel sebelum worker dimatikan",
+                           f"Worker {config.endpoint_node} menjadi target gangguan; pilih node lain sebelum probe dimulai.")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=min(1, max(0, deadline - time.monotonic())))
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+
                 waiting_reported = False
                 while True:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
-                        raise TimeoutError("no Ready replacement Aggregator within the request deadline")
+                        raise TimeoutError(f"no Ready Aggregator on a surviving node within the request deadline; "
+                                           f"excluded={sorted(excluded)}; see {folder / 'endpoint-connections.json'}")
                     pods = kubectl(
                         config, "get", "pods", "-o", "json", json_output=True,
                         timeout=remaining, request_timeout=f"{remaining:.3f}s",
                     )["items"]
-                    # Worker-loss tests must use a Ready Aggregator on the control plane.
+                    # Never select terminating pods or a worker targeted by the loss test.
                     candidates = [{
                         "name": pod["metadata"]["name"],
                         "node": pod["spec"].get("nodeName"),
@@ -139,12 +160,17 @@ def endpoint(config, folder):
                         "ready": is_ready(pod),
                     } for pod in pods if not pod["metadata"].get("deletionTimestamp")]
                     try:
-                        pod_name = select_surviving_aggregator({"nodes": topology["nodes"], "pods": candidates})
+                        attempt["candidates"] = [pod for pod in candidates if pod["role"] == "aggregator"]
+                        pod_name = select_surviving_aggregator(
+                            {"nodes": topology["nodes"], "pods": candidates}, excluded,
+                        )
+                        node_name = next(pod["node"] for pod in candidates if pod["name"] == pod_name)
+                        attempt.update(pod=pod_name, node=node_name)
                         break
                     except ValueError:
                         if not waiting_reported:
                             output("CONNECTION", "Menunggu Aggregator pengganti",
-                                   "Belum ada pod Ready pada control plane; menunggu dalam sisa batas waktu request.")
+                                   "Belum ada pod Ready pada node yang boleh dipakai; menunggu dalam sisa batas waktu request.")
                             waiting_reported = True
                         time.sleep(min(0.2, max(0, deadline - time.monotonic())))
                 command = [
@@ -154,15 +180,35 @@ def endpoint(config, folder):
                 process = subprocess.Popen(command, stdout=log, stderr=log)
                 wait_for_port(process, port, timeout=max(0, deadline - time.monotonic()))
                 config.endpoint_generation += 1
+                config.endpoint_node = node_name
+                attempt["status"] = "connected"
                 if config.endpoint_generation > 1:
-                    config.endpoint_reconnections.append({"at": utc(), "pod": pod_name})
+                    config.endpoint_reconnections.append({"at": utc(), "pod": pod_name, "node": node_name,
+                                                          "reason": attempt["reason"]})
                     output("CONNECTION", "Tunnel Aggregator tersambung kembali",
-                           f"Pod tujuan: {pod_name}; alamat lokal tetap {config.url}",
-                           "Tunnel kubectl sebelumnya berhenti. Kegagalan transport dicatat; "
+                           f"Pod tujuan: {pod_name} pada {node_name}; alamat lokal tetap {config.url}",
+                           "Tunnel dipindahkan dari worker target sebelum gangguan." if unsafe else
+                           "Tunnel kubectl sebelumnya berhenti; kegagalan transport tetap dicatat.",
                            "HTTP 500, timeout, dan kegagalan validasi data tidak diulang.")
                 return True
+            except subprocess.TimeoutExpired:
+                message = (f"Aggregator tunnel: kubectl timed out within the remaining {timeout:.2f}s budget; "
+                           f"see {folder / 'endpoint-connections.json'} and port-forward.log")
+                if attempt is not None:
+                    attempt.update(status="failed", error=message)
+                raise TimeoutError(message) from None
+            except Exception as error:
+                if attempt is not None:
+                    attempt.update(status="failed", error=str(error) or type(error).__name__)
+                raise
             finally:
-                lock.release()
+                try:
+                    if attempt is not None:
+                        (folder / "endpoint-connections.json").write_text(
+                            json.dumps(config.endpoint_connection_attempts, indent=2) + "\n",
+                        )
+                finally:
+                    lock.release()
 
         config.ensure_endpoint = ensure_forward
         try:

@@ -31,6 +31,12 @@ def lose_worker(run, name, worker):
     else:
         print("Use the official Tester Agent to stop/erase the worker.", flush=True)
 
+    # The tester's own tunnel must not depend on the worker about to lose power.
+    run.config.endpoint_excluded_nodes = (worker,)
+    ensure_endpoint = getattr(run.config, "ensure_endpoint", None)
+    if ensure_endpoint:
+        ensure_endpoint(30)
+
     # Keep read/write probes running through the action and recovery checks.
     # If the automatic check fails, restart the worker before propagating it.
     with restore_worker_on_failure(run, name, worker):
@@ -125,6 +131,7 @@ def rejoin_worker(run, name, worker):
         monitor=monitor.summary(),
         acknowledged_writes_preserved=len(run.acknowledged_writes),
     )
+    run.config.endpoint_excluded_nodes = ()
     return result
 
 
