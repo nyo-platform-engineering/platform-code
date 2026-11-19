@@ -402,6 +402,10 @@ Image asisten `sustuna/sensor-pantai@sha256:51fbd90d…4397d` berjalan apa adany
 - **Jalur kritis**: bacaan `critical` → HazardEvent AWAS, outbox lane `critical` (diklaim lebih dulu) →
   subjek NATS `hazards.critical.v1` → consumer `field-notifier-critical`, log `alert_latency_ms`.
   Bacaan kritis yang melanggar kontrak tetap dikirim sebagai peringatan `verified=false` tanpa disimpan.
+  Notifier menyimpan hasil di `FIELD_NOTIFIER_CRITICAL_EFFECTS` sebelum ACK, termasuk peringatan
+  belum terverifikasi. Jalur reguler mencatat `critical_alert_delegated` agar tidak membuat alert
+  kedua. Log `critical field alert recorded` mengukur sampai hasil inbox terkonfirmasi, bukan sampai
+  perangkat eksternal. Log hanya observasi dan dapat tidak muncul bila consumer crash setelah commit.
 - **Client API**: `sources` memuat `SENSOR_PANTAI` dari state tersimpan (tidak memanggil sensor);
   load shedding: Media maksimal `CLIENT_MEDIA_SHARE_PERCENT` slot, sisanya untuk Tim Lapangan/BNPB Internal.
 - **SLO jalur peringatan**: 99% peringatan kritis sampai notifier ≤ 5 s (p95 ≤ 5 s) per game day;
@@ -487,7 +491,40 @@ aktif dan versinya cocok dapat menandai publikasi selesai serta membersihkan
 payload. Publisher lama yang kembali setelah takeover ditolak. Retry memakai
 `Nats-Msg-Id` yang sama. Delivery tetap at-least-once: crash setelah publish
 sebelum acknowledgement database dapat menyebabkan redelivery, dan deduplikasi
-JetStream dibatasi window 2 menit. Efek consumer tetap perlu idempotensi sendiri.
+JetStream dibatasi window 2 menit.
+
+Consumer menyimpan hasilnya sebagai inbox durable di bucket KV tersendiri:
+`DASHBOARD_PROCESSED_EFFECTS`, `FIELD_NOTIFIER_PROCESSED_EFFECTS`, dan
+`TEST_EFFECTS`; jalur kritis memakai `FIELD_NOTIFIER_CRITICAL_EFFECTS`. Setiap record berisi `delivery_id`, jenis efek, payload hazard,
+serta correlation/trace context. Proyeksi hanya memilih jenis record; penyimpanan
+hasil dan identitas dedup dilakukan dalam satu operasi KV `Create` sebelum ACK
+terkonfirmasi (`DoubleAck`). Crash sebelum penyimpanan akan diproses ulang;
+crash setelah penyimpanan sebelum ACK memakai record yang sudah ada. Versi baru
+dari hazard yang sama tetap menghasilkan record baru. ID delivery yang sama
+dengan payload berbeda ditolak dan tidak di-ACK.
+
+`field_alert` berarti alert SIAGA/AWAS tercatat di inbox notifier, bukan bukti
+terkirim ke perangkat. `no_field_alert` menyimpan keputusan untuk severity lain.
+`dashboard_update` adalah record pembaruan; dashboard analitik tetap membaca API
+Aggregator. Pengiriman eksternal berikutnya harus memakai `delivery_id` sebagai
+idempotency key pada penerima. Log `consume_completed` hanya observasi; duplikasi
+atau kehilangan log tidak mengubah record inbox.
+
+Bucket hasil tidak memakai TTL agar retry tidak melupakan efek lama; pengelolaan
+retensi perlu mempertahankan jaminan dedup. Bucket `*_PROCESSED` lama tidak dihapus,
+tetapi bukan penyimpanan hasil baru. Pesan yang sudah di-ACK versi lama tidak
+otomatis diputar ulang. Broker dan KV saat ini masih satu replika; pengujian ini
+belum membuktikan ketahanan terhadap kehilangan disk/node broker.
+
+Tes consumer dengan broker NATS lokal (tanpa Docker/VM):
+
+```sh
+AAT_TEST_NATS_SERVER=/path/to/nats-server go test -race ./consumers/...
+```
+
+Suite membuat broker sementara dan mematikan subprocess consumer pada tiga batas
+commit/ACK, termasuk recovery setelah broker direstart. Tanpa binary tersebut
+(atau `nats-server` pada PATH), integration test broker dilewati.
 
 Deploy Kubernetes dari root `code/infrastructure` dengan `task up`. Image Citus +
 Patroni dibangun oleh pipeline AAT dan dipasang melalui pin image pada Argo CD.

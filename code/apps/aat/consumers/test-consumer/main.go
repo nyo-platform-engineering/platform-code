@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,9 +15,8 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go worker.Run(ctx, "test-consumer", "TEST", httpkit.Env("NATS_URL", "nats://nats:4222"), func(ctx context.Context, hazard worker.Hazard) error {
-		slog.Info("test consumer hazard", "correlation_id", httpkit.CorrelationID(ctx), "hazard_id", hazard.ID, "source", hazard.Source, "type", hazard.Type, "severity", hazard.Severity, "area", hazard.Area, "occurred_at", hazard.Occurred)
-		return nil
+	go worker.Run(ctx, "test-consumer", "TEST", httpkit.Env("NATS_URL", "nats://nats:4222"), func(worker.Hazard) string {
+		return "test_delivery"
 	})
 	router := httpkit.Router()
 	router.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })

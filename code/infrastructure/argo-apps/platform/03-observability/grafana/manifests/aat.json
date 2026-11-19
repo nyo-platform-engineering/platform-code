@@ -339,12 +339,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(quantile_over_time(0.95, {k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"critical field alert sent\" | __error__=\"\" | unwrap alert_latency_ms | __error__=\"\" [5m]))",
+          "expr": "max(quantile_over_time(0.95, {k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"critical field alert recorded\" | __error__=\"\" | unwrap alert_latency_ms | __error__=\"\" [5m]))",
           "legendFormat": "p95"
         },
         {
           "refId": "B",
-          "expr": "sum(count_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"critical field alert sent\" | __error__=\"\" [5m]))",
+          "expr": "sum(count_over_time({k8s_namespace_name=\"sistem-informasi-kebencanaan-bnpb\"} | json | msg=\"critical field alert recorded\" | __error__=\"\" [5m]))",
           "legendFormat": "alerts per 5m"
         }
       ],
