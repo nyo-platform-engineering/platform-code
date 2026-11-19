@@ -354,16 +354,61 @@ class Run:
                     and all(ready(p) for p in pods))
         self.wait(settled, description=f"Aggregator rollout to {count} Ready replicas")
 
+    def configure_cluster(self, nodes):
+        # task up -- --novm records its mode; API metadata also covers copied kubeconfigs.
+        mode = INFRA / ".state/mode"
+        local_config = self.config.kubeconfig.resolve() == (INFRA / ".state/kubeconfig").resolve()
+        self.container_nodes = (local_config and mode.is_file() and mode.read_text().strip() == "k3d") or any(
+            n["status"]["nodeInfo"].get("osImage", "").startswith("K3s ")
+            or n["metadata"]["name"].startswith("k3d-") for n in nodes)
+        self.report["container_nodes_development_only"] = self.container_nodes
+        self.report["cluster_mode"] = "k3d" if self.container_nodes else "vm/native"
+
+        if self.config.url is None:
+            address = "127.0.0.1"
+            if not self.container_nodes:
+                control = next((n for n in nodes if n["metadata"]["name"] == "aat-control"
+                                or "node-role.kubernetes.io/control-plane" in n["metadata"].get("labels", {})), None)
+                addresses = control.get("status", {}).get("addresses", []) if control else []
+                address = next((a["address"] for a in addresses if a["type"] == "InternalIP"), None)
+                require(address, "cannot determine control-node InternalIP; set CONFIG.url to the reachable Traefik origin")
+            host = f"[{address}]" if ":" in address else address
+            self.config.url = f"http://{host}:30088"
+
+        self.report["gateway_url"] = self.config.url
+        output("INFO", f"Cluster: {self.report['cluster_mode']}; Traefik: {self.config.url}")
+
+    def wait_for_route(self):
+        last_issue = "no response yet"
+
+        def routed():
+            nonlocal last_issue
+            try:
+                page = self.request("/internal/hazards", params={"limit": 1})
+                if (isinstance(page, dict) and isinstance(page.get("items"), list)
+                        and page.get("partial") is False and page.get("unavailable_units") == []):
+                    return True
+                last_issue = "HazardEvent response is incomplete or invalid"
+            except (ValueError, OSError) as error:
+                last_issue = safe_error(str(error), self.credentials)
+            self.status(last_issue)
+            return False
+
+        try:
+            # Route propagation is short; a wrong address should not cost the full recovery budget.
+            self.wait(routed, timeout=min(30, self.config.recovery_seconds),
+                      description=f"Traefik route {self.host} via {self.config.url}")
+        except ValueError as error:
+            raise ValueError(f"{error}; last response: {last_issue}. "
+                             "Check CONFIG.url, Traefik Gateway and HTTPRoute status.") from None
+
     def preflight(self):
         self.credentials = read_credentials(self.config.env_file)
         require(all(self.credentials.get(k) for k in ("AGGREGATOR_TOKEN", "AUDIT_TOKEN")), "configure Aggregator and Audit tokens")
         require(self.credentials["AGGREGATOR_TOKEN"] != self.credentials["AUDIT_TOKEN"], "Audit token must be separate")
         nodes = self.kube("get", "nodes", "-o", "json")["items"]
         require(len(nodes) >= 3 and all(ready(n) for n in nodes), "need >=3 Ready nodes")
-        mode = INFRA / ".state/mode"
-        self.container_nodes = (mode.is_file() and mode.read_text().strip() == "k3d") or any(
-            n["status"]["nodeInfo"].get("osImage", "").startswith("K3s ") for n in nodes)
-        self.report["container_nodes_development_only"] = self.container_nodes
+        self.configure_cluster(nodes)
         hpas = self.kube("get", "hpa", "-n", NAMESPACE, "-o", "json")["items"]
         require(not any(h["spec"]["scaleTargetRef"].get("name") == "aggregator" for h in hpas),
                 "disable the Aggregator HPA before manual scale measurements")
@@ -396,7 +441,11 @@ class Run:
                           json.dumps({"metadata": {"annotations": {"argocd.argoproj.io/skip-reconcile": previous}}}), json_output=False)
             self.cleanup.append(restore)
             self.kube("annotate", "application", name, "-n", "argocd", "argocd.argoproj.io/skip-reconcile=true", "--overwrite", json_output=False)
-            self.wait(lambda name=name: self.kube("get", "application", name, "-n", "argocd", "-o", "json").get("status", {}).get("operationState", {}).get("phase") != "Running")
+            def sync_stopped(name=name):
+                phase = self.kube("get", "application", name, "-n", "argocd", "-o", "json").get("status", {}).get("operationState", {}).get("phase")
+                self.status(f"Application={name}; sync={phase or 'idle'}")
+                return phase != "Running"
+            self.wait(sync_stopped, description=f"Argo Application {name}: active sync finished")
         self.cleanup.append(self.restore_deployment)
         self.replicas(3)
         route = {"apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
@@ -405,16 +454,12 @@ class Run:
                           "hostnames": [self.host], "rules": [{"backendRefs": [{"name": "aggregator", "port": 8083}]}]}}
         self.cleanup.append(lambda: self.kube("delete", "httproute", self.run_id, "-n", NAMESPACE, "--ignore-not-found", json_output=False))
         self.kube("create", "-f", "-", body=route, json_output=False)
-        def route_ready():
-            try:
-                return bool(self.request("/internal/hazards", params={"limit": 1}).get("items"))
-            except Exception:
-                return False
-        self.wait(route_ready)
+        self.wait_for_route()
         self.logs.start()
         self.logs_started = True
         time.sleep(3)
         return {"replicas": 3, "load_balancer": "Traefik -> Aggregator Service", "host": self.host,
+                "gateway_url": self.config.url, "cluster_mode": self.report["cluster_mode"],
                 "gitops": "temporarily skip reconciliation; restore in finally"}
 
     def restore_deployment(self):

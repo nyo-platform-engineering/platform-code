@@ -19,8 +19,9 @@ from helper import INFRA, ROOT, Run, output, require, utc
 class TestConfig:
     kubeconfig: Path = INFRA / ".state/kubeconfig"
     env_file: Path = INFRA / ".env.runtime"
-    # Traefik's published NodePort, not a port-forward to one Aggregator pod.
-    url: str = "http://127.0.0.1:30088"
+    # Auto: VM control-node IP or k3d's published loopback NodePort.
+    # Set an origin explicitly when using another Traefik gateway address.
+    url: str | None = None
     worker: str = "aat-worker-1"
     source: str = "BMKG"
     groups: tuple = (1, 2, 3)
@@ -53,9 +54,10 @@ def validate_config(config):
     require(sys.stdin.isatty(), "run task m2:p2 in an interactive terminal")
     require(config.groups and set(config.groups) <= {1, 2, 3}, "groups must contain 1, 2, and/or 3")
     require(config.source in ("BMKG", "PVMBG"), "source must be BMKG or PVMBG")
-    url = urllib.parse.urlsplit(config.url)
-    require(url.scheme in ("http", "https") and url.hostname and not url.username and not url.password
-            and not url.query and not url.fragment and url.path in ("", "/"), "url must be an HTTP(S) gateway origin without credentials")
+    if config.url is not None:
+        url = urllib.parse.urlsplit(config.url)
+        require(url.scheme in ("http", "https") and url.hostname and not url.username and not url.password
+                and not url.query and not url.fragment and url.path in ("", "/"), "url must be an HTTP(S) gateway origin without credentials")
     require(config.worker in ("aat-worker-1", "aat-worker-2"), "choose a non-control-plane lab worker")
     for name in ("observation_seconds", "takeover_seconds", "recovery_seconds", "freeze_seconds",
                  "request_timeout", "poll_interval"):
