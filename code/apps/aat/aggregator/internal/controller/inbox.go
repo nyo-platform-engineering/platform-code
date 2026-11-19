@@ -162,6 +162,9 @@ func (ctrl *Controller) expandEnvelope(ctx context.Context, tx *gorm.DB, envelop
 	if err != nil {
 		return Invalid{err}
 	}
+	if envelope.Source == SensorSource {
+		records = criticalFirst(records)
+	}
 	var cursor *time.Time
 	for _, raw := range records {
 		child := newInboxMessage(ctx, envelope.Source, envelope.BatchKey, "record", raw)

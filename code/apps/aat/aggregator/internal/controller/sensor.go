@@ -136,6 +136,25 @@ func decodeSensorEnvelope(raw []byte) ([]json.RawMessage, error) {
 	return *page.Items, nil
 }
 
+// criticalFirst moves readings flagged critical to the front of a page, keeping the
+// order inside each group. Records are processed one transaction at a time in the
+// order they are queued, so when the sensor sends a burst ("everything at once") a
+// critical reading no longer waits behind hundreds of ordinary ones. Each reading
+// has its own observation_id, so per-source_ref_id ordering is unaffected.
+func criticalFirst(records []json.RawMessage) []json.RawMessage {
+	ordered := make([]json.RawMessage, 0, len(records))
+	var rest []json.RawMessage
+	for _, raw := range records {
+		var r model.Record
+		if json.Unmarshal(raw, &r) == nil && mapper.CoastalCritical(r) {
+			ordered = append(ordered, raw)
+		} else {
+			rest = append(rest, raw)
+		}
+	}
+	return append(ordered, rest...)
+}
+
 // criticalAlert is returned for a reading that breaks the contract yet is flagged
 // critical: the reading is parked like any other violation, and an unverified
 // alert still goes to the Field Team so no critical event is lost.
