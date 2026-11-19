@@ -8,7 +8,7 @@ Proves against the existing Dockerized system (no app rewrite):
   D. Canonical Store isolation (only aggregator on storage network).
 
 Run from the repository root (code/apps/aat):
-  python tests/test-problem-4.py
+  python tests/m1/test-problem-4.py
 
 Configurable via environment (no secrets printed):
   PROJECT / COMPOSE_PROJECT_NAME  Compose project name (default: aat-part1)
@@ -40,7 +40,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 COMPOSE_MAIN = "compose.yaml"
 PROJECT = os.environ.get("COMPOSE_PROJECT_NAME", os.environ.get("PROJECT", "aat-part1"))

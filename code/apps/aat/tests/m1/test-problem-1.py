@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 ENV = {}
 PORTS = {'bmkg': '8081', 'pvmbg': '8082', 'aggregator': '8083'}
 VOLCANOES = {
