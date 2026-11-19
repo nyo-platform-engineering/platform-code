@@ -1,5 +1,5 @@
-# Published from AAT source commit e2b2abd5079a58710d4e4a821f1dcf3b7c1da731.
+# Published from AAT source commit 6fb9d83c618a2567b53dca01fa8e51103f093989.
 image:
   repository: ghcr.io/nyo-platform-engineering/aat-apps/citus
-  tag: sha-e2b2abd5079a58710d4e4a821f1dcf3b7c1da731
-  digest: sha256:33ed9cf05ca98e30e1f71e8f38c1c7670525048ada59f4a5f427c41bfaf0d4e3
+  tag: sha-6fb9d83c618a2567b53dca01fa8e51103f093989
+  digest: sha256:c0468a717e3c0d877af861d5be34da2c6c1d5b822218da6bfe4ee4bd40a759b6
