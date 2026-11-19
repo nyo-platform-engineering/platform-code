@@ -34,8 +34,8 @@ class TestConfig:
     batch_size: int = 100
     surge_events: int = 100
     load_seconds: float = 20
-    # Export in larger pages; the separate latest-50 check still uses exactly 50.
-    page_size: int = 200
+    # Bulk exports use larger pages; latest-50 explicitly follows its own cursor.
+    page_size: int = 1000
     max_pages: int = 10000
 
     # Criterion 7: UTC calendar buckets covering the full catalog time range.

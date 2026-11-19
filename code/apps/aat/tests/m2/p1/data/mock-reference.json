@@ -1,7 +1,7 @@
 {
   "source": "BMKG",
   "count": 300,
-  "checksum": "8d8a329fa66b8f3cc2c295214ffceeebad5b06a34161186a9eae39c79ba448d1",
+  "checksum": "8cce0abee7d5a818719bb8c3cf639efebabf83d6800438459d90b8711dc6c82e",
   "dataset_origin": "development_mock",
   "official": false,
   "scope": "catalog",
@@ -10,18 +10,37 @@
     "bmkg/internal/mock/model/events.go",
     "pvmbg/internal/mock/model/reports.go"
   ],
-  "description": "Exact mock feed rules with a fixed historical START_TIME; no invented regions or ID prefixes.",
+  "description": "Exact mock feed rules sampled at three fixed historical starts; no invented regions or ID prefixes.",
+  "companion_files": {
+    "tsunami_warnings": "mock-tsunami-warnings.ndjson",
+    "volcanic_reports": "mock-volcanic-reports.ndjson"
+  },
   "generator": {
-    "start_time": "2020-01-01T00:00:00Z",
+    "start_time": "2018-01-01T12:00:00Z",
     "event_interval_seconds": 10,
+    "windows": [
+      {
+        "day_offset": 0,
+        "earthquakes": 200
+      },
+      {
+        "day_offset": 31,
+        "earthquakes": 60
+      },
+      {
+        "day_offset": 59,
+        "earthquakes": 40
+      }
+    ],
     "record_count": 300,
+    "volcanic_reports_per_window": 20,
     "pvmbg_schema": "original"
   },
   "by_area": {
     "Pesisir Selatan Jawa": 300
   },
-  "first_occurred_at": "2019-12-31T23:56:50Z",
-  "last_occurred_at": "2020-01-01T00:46:40Z",
+  "first_occurred_at": "2018-01-01T11:56:50Z",
+  "last_occurred_at": "2018-03-01T12:03:20Z",
   "tsunami_warning_count": 75,
-  "volcanic_report_count": 300
+  "volcanic_report_count": 60
 }

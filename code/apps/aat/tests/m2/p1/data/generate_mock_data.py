@@ -14,9 +14,11 @@ from pathlib import Path
 
 # Same settings as the services' START_TIME and EVENT_INTERVAL_SECONDS.
 # A historical start avoids overlapping the running mocks' current events.
-START_TIME = "2020-01-01T00:00:00Z"
+START_TIME = "2018-01-01T12:00:00Z"
 EVENT_INTERVAL_SECONDS = 10
-RECORD_COUNT = 300
+# Sample the real feed at three historical starts: uneven monthly volume.
+WINDOWS = ((0, 200), (31, 60), (59, 40))  # day offset, earthquake count
+VOLCANIC_REPORTS_PER_WINDOW = 20
 PVMBG_SCHEMA = "original"
 
 OUTPUT_DIR = Path(__file__).resolve().parent
@@ -41,7 +43,7 @@ def feed_times(start, interval_seconds, count):
     if type(interval_seconds) is not int or not 1 <= interval_seconds <= 10:
         raise ValueError("EVENT_INTERVAL_SECONDS must be 1..10, like the mock servers")
     if type(count) is not int or count < 20:
-        raise ValueError("RECORD_COUNT must include at least the initial 20 records")
+        raise ValueError("each window must include at least the initial 20 records")
 
     # Go Time.Truncate aligns against year 1, including for seven-second intervals.
     absolute_seconds = unix_nanos(start) // 1_000_000_000 + GO_ZERO_TO_UNIX_SECONDS
@@ -111,10 +113,15 @@ def write_ndjson(path, records):
 
 def main():
     start = dt.datetime.fromisoformat(START_TIME.replace("Z", "+00:00"))
-    times = list(feed_times(start, EVENT_INTERVAL_SECONDS, RECORD_COUNT))
+    windows = [list(feed_times(start + dt.timedelta(days=offset), EVENT_INTERVAL_SECONDS, count))
+               for offset, count in WINDOWS]
+    times = [at for window in windows for at in window]
     earthquakes = [seismic_event(at, EVENT_INTERVAL_SECONDS) for at in times]
     warnings = [warning for at in times if (warning := tsunami_warning(at, EVENT_INTERVAL_SECONDS))]
-    reports = [volcanic_report(at, EVENT_INTERVAL_SECONDS, PVMBG_SCHEMA) for at in times]
+    report_times = [at for offset, _ in WINDOWS
+                    for at in feed_times(start + dt.timedelta(days=offset), EVENT_INTERVAL_SECONDS,
+                                         VOLCANIC_REPORTS_PER_WINDOW)]
+    reports = [volcanic_report(at, EVENT_INTERVAL_SECONDS, PVMBG_SCHEMA) for at in report_times]
 
     references = sorted((row["event_id"] for row in earthquakes), key=lambda value: value.encode("utf-8"))
     reference = {
@@ -126,9 +133,13 @@ def main():
         "scope": "catalog",
         "source_ref_prefix": "bmkg-",
         "based_on": ["bmkg/internal/mock/model/events.go", "pvmbg/internal/mock/model/reports.go"],
-        "description": "Exact mock feed rules with a fixed historical START_TIME; no invented regions or ID prefixes.",
+        "description": "Exact mock feed rules sampled at three fixed historical starts; no invented regions or ID prefixes.",
+        "companion_files": {"tsunami_warnings": "mock-tsunami-warnings.ndjson",
+                            "volcanic_reports": "mock-volcanic-reports.ndjson"},
         "generator": {"start_time": START_TIME, "event_interval_seconds": EVENT_INTERVAL_SECONDS,
-                      "record_count": RECORD_COUNT, "pvmbg_schema": PVMBG_SCHEMA},
+                      "windows": [{"day_offset": offset, "earthquakes": count} for offset, count in WINDOWS],
+                      "record_count": len(earthquakes), "volcanic_reports_per_window": VOLCANIC_REPORTS_PER_WINDOW,
+                      "pvmbg_schema": PVMBG_SCHEMA},
         "by_area": dict(Counter(row["region_name"] for row in earthquakes)),
         "first_occurred_at": earthquakes[0]["occurred_at"],
         "last_occurred_at": earthquakes[-1]["occurred_at"],

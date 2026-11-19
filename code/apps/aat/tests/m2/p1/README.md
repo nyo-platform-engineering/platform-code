@@ -46,11 +46,13 @@ python3 ../apps/aat/tests/m2/p1/data/generate_mock_data.py
 ```
 
 The settings are at the top of the generator: `START_TIME`,
-`EVENT_INTERVAL_SECONDS`, `RECORD_COUNT`, and `PVMBG_SCHEMA`. The defaults produce:
+`EVENT_INTERVAL_SECONDS`, `WINDOWS`, `VOLCANIC_REPORTS_PER_WINDOW`, and
+`PVMBG_SCHEMA`. The defaults sample the mock models at three historical starts
+in January–March 2018, with 200/60/40 earthquakes per month. They produce:
 
 - `mock-catalog.ndjson`: 300 historical BMKG earthquake records.
 - `mock-tsunami-warnings.ndjson`: 75 warnings correlated with those earthquakes.
-- `mock-volcanic-reports.ndjson`: 300 PVMBG reports.
+- `mock-volcanic-reports.ndjson`: 60 PVMBG reports (20 per window).
 - `mock-reference.json`: the earthquake ID checksum, counts, and generation settings.
 
 The generator includes `NewFeed`'s 20 initial seed records, interval alignment,
@@ -62,10 +64,23 @@ MERAPI, SEMERU, and ANAK_KRAKATAU. Generated Python records were compared with t
 real Go model output, including seven- and ten-second intervals and every schema
 mode.
 
-The P1 runner currently imports `mock-catalog.ndjson`; the warning and volcanic
-files reproduce the other endpoints for inspection or separate ingestion and
-are not automatically imported by this catalog step. They do not supply wildfire
-or coastal events for a complete dashboard demonstration.
+P1 imports the earthquake catalog **together with its tsunami warnings**, then the
+60 volcanic reports, within the same measurement window. Warnings accompany
+their related earthquakes in the same batch so a later warning import cannot
+change an already-established controlled checkpoint. A warning enriches its
+seismic HazardEvent; it does not create an extra canonical event.
+
+The 360 canonical records exercise SEISMIC, TSUNAMI, and VOLCANIC analytics,
+all four severity levels, four areas, and three populated monthly buckets. The
+runner checks that those categories/severities/areas are actually exercised.
+Wildfire and coastal data still come from their real integrations; these mock
+services do not generate them. All five analytic categories are reconciled with
+Audit API, including zeros. Browser behavior still needs demonstration.
+
+The new 2018 IDs avoid rewriting the previous 2020 development catalog, which
+remains in the store. The generated development reference names its two companion
+files; a reference without `companion_files` imports only its configured catalog.
+Switching to official inputs does not automatically mix in these companion files.
 
 The development reference checks exactly the BMKG IDs in the configured catalog,
 not every ID beginning with `bmkg-`. This keeps current live mock records separate
@@ -104,7 +119,7 @@ CONFIG = TestConfig(
 Their input format must be checked before using the existing BMKG importer.
 
 The defaults in `TestConfig` select workers `aat-worker-1` and `aat-worker-2`,
-latest-50 checks, 200-record export pages, a 100-event regional surge over at least
+two explicit 50-event cursor pages, 1,000-record bulk export pages, a 100-event regional surge over at least
 20 seconds, and
 calendar-month analytics buckets. `analytics_end = None` ends the exact chart
 comparison after the catalog's last UTC day. This avoids treating active source
@@ -113,6 +128,8 @@ source filter; records outside the displayed range are not part of that chart
 comparison. Set an explicit RFC3339 `analytics_end` to verify a different range.
 If the selected window changes during measurement, it is retried rather than
 claimed to match. The actual range is printed and saved for the browser demo.
+With companion fixtures enabled, keep the full fixture range so tsunami/volcanic
+and severity coverage remain meaningful.
 Connection paths, sampling intervals, per-request bounds, and evidence destination
 are declared in the same block. These are test settings; the PDF does not prescribe
 a P1 load size.
@@ -161,7 +178,7 @@ power with `bash scripts/vm/main.sh start-worker aat-worker-1` from infrastructu
 before restarting the full test.
 
 These smaller defaults speed up development runs while preserving pagination
-beyond 50 events and the two-loss sequence. Regenerating 300 records does not
+beyond 50 events and the two-loss sequence. Regenerating the small fixture does not
 delete older records from the running database; full-store queries still scan
 those records using larger pages. Changes to `CONFIG` and regenerated files
 should be used in a new run: stop an old run with Ctrl+C, restore any disrupted
@@ -312,8 +329,8 @@ a new folder. Existing evidence is never overwritten. Artifacts include:
 
 A stable-cohort check is not proof that separate live requests shared a database
 snapshot; `global_reads.exact_whole_dataset_comparison` records whether the full
-exports stayed identical. Development fixtures still do not establish all five
-hazard types with nonzero counts in the historical range. Retain separate browser
+exports stayed identical. Development fixtures establish three hazard categories with nonzero historical
+counts; wildfire and coastal examples require their real sources. Retain separate browser
 and official dataset evidence; `full_demo_certified` remains false.
 
 Exit 0 means the **selected automatic checks** passed. `full_demo_certified` stays

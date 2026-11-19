@@ -303,7 +303,7 @@ def verify_reference(run, events):
             "scope": reference.get("scope", "source")}
 
 
-def verify_global_reads(before, after, recent, latest):
+def verify_global_reads(before, after, recent, latest, next_page):
     """Verify global order and completeness for records stable across live reads."""
     before_by_id = {event["hazard_id"]: event for event in before}
     after_by_id = {event["hazard_id"]: event for event in after}
@@ -320,12 +320,23 @@ def verify_global_reads(before, after, recent, latest):
     require(len(latest["items"]) == 50, "latest-50 returned fewer than 50 events")
     keys = [event_key(event, "recent") for event in latest["items"]]
     require(all(a > b for a, b in zip(keys, keys[1:])), "latest-50 global ordering violation")
+    require(latest["next_cursor"] is not None, "latest-50 omitted its continuation cursor")
+    availability(next_page, "recent", complete=True)
+    require(min(50, len(before) - 50) <= len(next_page["items"]) <= 50,
+            "second latest-50 page lost known events or exceeded its limit")
+    combined = latest["items"] + next_page["items"]
+    combined_keys = [event_key(event, "recent") for event in combined]
+    require(all(a > b for a, b in zip(combined_keys, combined_keys[1:])),
+            "latest-50 cursor continuation is unordered or duplicates an event")
     latest_ids = {event["hazard_id"] for event in latest["items"]}
     boundary = keys[-1]
+    combined_ids = {event["hazard_id"] for event in combined}
     for hazard_id, event in stable.items():
+        if event_key(event, "recent") >= combined_keys[-1]:
+            require(hazard_id in combined_ids, "latest-50 cursor continuation skipped a stable event")
         if event_key(event, "recent") >= boundary:
             require(hazard_id in latest_ids, f"latest-50 omitted a higher-ranked stable event: {hazard_id}")
-    for event in latest["items"] + recent:
+    for event in combined + recent:
         saved = after_by_id.get(event["hazard_id"])
         require(saved is not None, "recent query returned an event absent from the later audit export")
         require((saved["source"], saved["source_ref_id"]) == (event["source"], event["source_ref_id"]),
@@ -336,10 +347,12 @@ def verify_global_reads(before, after, recent, latest):
     unchanged = before_by_id == after_by_id
     if unchanged:
         expected = sorted(before, key=lambda event: event_key(event, "recent"), reverse=True)
-        require(recent == expected and latest["items"] == expected[:50],
+        require(recent == expected and latest["items"] == expected[:50]
+                and next_page["items"] == expected[50:100],
                 "recent pagination/latest-50 disagrees with the unchanged full audit")
     return {
         "global_order_verified": True,
+        "latest_50_pages_checked": 2,
         "stable_events_compared": len(stable),
         "live_records_added_or_updated": len(after_by_id) - len(stable),
         "exact_whole_dataset_comparison": unchanged,
@@ -406,6 +419,11 @@ def read_live_view(run):
         require(len(before) >= 51, "need at least 51 events to exercise latest-50 pagination")
         recent = export(run.api, "recent", run.config.page_size, run.config.max_pages)
         latest = run.api.request("/internal/hazards", "AGGREGATOR_TOKEN", {"order": "recent", "limit": 50})
+        availability(latest, "recent", complete=True)
+        require(latest["next_cursor"] is not None, "latest-50 omitted its continuation cursor")
+        next_page = run.api.request("/internal/hazards", "AGGREGATOR_TOKEN", {
+            "order": "recent", "limit": 50, "cursor": latest["next_cursor"],
+        })
         query = analytic_query(before, run.config.interval, run.config.analytics_end)
         output("PROGRESS", "Analytics comparison range", f"From: {query['from']}", f"To: {query['to']}")
         summary = run.api.request("/internal/analytics", "AGGREGATOR_TOKEN", query)
@@ -416,9 +434,15 @@ def read_live_view(run):
         live_updates = verify_preservation(run, after, expected_writes)
         reference = verify_reference(run, after)
         source_checks = verify_sources(sums_before, sums_after, before, after)
-        global_reads = verify_global_reads(before, after, recent, latest)
+        global_reads = verify_global_reads(before, after, recent, latest, next_page)
         try:
             comparison = reconcile_stable_window(before, after, summary, query)
+            if run.development_data:
+                require(all(comparison["by_type"][kind] > 0 for kind in ("SEISMIC", "TSUNAMI", "VOLCANIC")),
+                        "historical window did not exercise all bundled hazard categories")
+                require(all(comparison["by_severity"][level] > 0 for level in analytics.SEVERITIES),
+                        "historical window did not exercise every severity level")
+                require(comparison["areas"] >= 4, "historical window needs all four bundled areas")
         except ConcurrentDataChange as error:
             output("WAIT", "Waiting", f"{error}; retrying comparison window (Ctrl+C to stop)")
             time.sleep(run.config.sample_interval)
@@ -427,6 +451,7 @@ def read_live_view(run):
             "events": after, "checksum": sums_after["all"], "reference": reference,
             "source_checks": source_checks, "global_reads": global_reads,
             "query": query, "analytics": summary, "reconciliation": comparison,
+            "latest_50_pages": [latest, next_page],
             "live_updates_since_previous_checkpoint": live_updates,
         }
 

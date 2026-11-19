@@ -115,7 +115,7 @@ def preserve(before, after, immutable_refs=()):
         if saved != event:
             fields = sorted(key for key in event.keys() | saved.keys() if event.get(key) != saved.get(key))
             require(identity not in immutable_refs,
-                    f"controlled catalog event changed: {hazard_id}; fields: {', '.join(fields)}")
+                    f"controlled fixture event changed: {hazard_id}; fields: {', '.join(fields)}")
             updates.append({"hazard_id": hazard_id, "source": event["source"], "changed_fields": fields})
     return updates
 
@@ -201,7 +201,16 @@ def ingest_catalog(run):
     })
 
     with Monitor(run, "catalog-load", writes=False):
-        changed_records = send_seismic(run, records)
+        changed_records = send_seismic(run, records, run.development_data.get("tsunami_warnings", []))
+        reports = run.development_data.get("volcanic_reports", [])
+        changed_reports = 0
+        for offset in range(0, len(reports), run.config.batch_size):
+            batch = reports[offset:offset + run.config.batch_size]
+            result = run.api.request("/internal/ingest/pvmbg", "AGGREGATOR_TOKEN",
+                                     body={"volcanic_reports": batch})
+            require(type(result.get("changed")) is int and 0 <= result["changed"] <= len(batch),
+                    "invalid volcanic ingest acknowledgement")
+            changed_reports += result["changed"]
 
     events = export(run.api, page_size=run.config.page_size, max_pages=run.config.max_pages)
     updates = preserve(before, events, run.catalog_identities)
@@ -210,6 +219,13 @@ def ingest_catalog(run):
         event["source_ref_id"] for event in events if event["source"] == "BMKG"
     }
     require(catalog_references <= stored_references, "imported catalog events missing")
+    by_ref = {(event["source"], event["source_ref_id"]): event for event in events}
+    for warning in run.development_data.get("tsunami_warnings", []):
+        stored = by_ref[("BMKG", warning["related_event_id"])]["attributes"].get("tsunami_warnings", [])
+        require(warning in stored, "generated tsunami warning missing from canonical event")
+    for report in run.development_data.get("volcanic_reports", []):
+        require(("PVMBG", report["report_id"]) in by_ref, "generated volcanic report missing")
+
     imported = [
         event for event in events
         if event["source"] == "BMKG" and event["source_ref_id"] in catalog_references
@@ -221,6 +237,8 @@ def ingest_catalog(run):
     run.save("catalog-placement.json", placement)
     return {
         "records": len(records),
+        "development_fixtures": run.report.get("development_fixtures"),
+        "changed_volcanic_reports": changed_reports,
         "primary_events_per_node": placement["primary_events_per_node"],
         "copies_per_node": placement["copies_per_node"],
         "live_events_updated_during_import": len(updates),
@@ -230,7 +248,7 @@ def ingest_catalog(run):
     }
 
 
-def send_seismic(run, records):
+def send_seismic(run, records, warnings=()):
     """Spread batches over the measurement window so node metrics can refresh."""
     started = time.monotonic()
     batch_size = run.config.batch_size
@@ -240,9 +258,13 @@ def send_seismic(run, records):
 
     for batch_number, offset in enumerate(range(0, len(records), batch_size), start=1):
         batch = records[offset:offset + batch_size]
+        batch_refs = {record["event_id"] for record in batch}
         result = run.api.request(
             "/internal/ingest/bmkg", "AGGREGATOR_TOKEN",
-            body={"seismic_events": batch, "tsunami_warnings": []},
+            body={"seismic_events": batch, "tsunami_warnings": [
+                warning for warning in warnings
+                if warning["related_event_id"] in batch_refs
+            ]},
         )
         changed = result.get("changed")
         require(

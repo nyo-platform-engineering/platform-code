@@ -252,6 +252,7 @@ class Run:
         self.acknowledged_writes = set()
         self.surge_refs = set()
         self.storage_plans = {}
+        self.development_data = {}
         self.report = {
             "problem": "M2 P1",
             "started_at": utc(),
@@ -329,6 +330,30 @@ def verify_environment(run):
     run.report["analytics_end"] = run.config.analytics_end
     reference = read_reference(run.config.reference)
     origin = reference.get("dataset_origin", "external_unverified")
+    companion_files = reference.get("companion_files", {})
+    if companion_files:
+        require(origin == "development_mock" and reference.get("official") is False,
+                "companion fixtures are only supported for the development mock reference")
+        require(set(companion_files) == {"tsunami_warnings", "volcanic_reports"},
+                "development reference must name warning and volcanic fixtures")
+        for kind, filename in companion_files.items():
+            require(isinstance(filename, str) and Path(filename).name == filename
+                    and filename.endswith(".ndjson"), "companion fixture must be a local NDJSON filename")
+            path = run.config.reference.parent / filename
+            rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+            require(bool(rows) and all(isinstance(row, dict) for row in rows), "empty/invalid companion fixture")
+            run.development_data[kind] = rows
+        expected_refs = {record["event_id"] for record in records}
+        warnings = run.development_data["tsunami_warnings"]
+        reports = run.development_data["volcanic_reports"]
+        require(all(w["related_event_id"] in expected_refs for w in warnings), "warning is outside the catalog")
+        require(len({w["warning_id"] for w in warnings}) == len(warnings), "duplicate warning fixture ID")
+        require(len({r["report_id"] for r in reports}) == len(reports), "duplicate volcanic fixture ID")
+        require(len(warnings) == reference["tsunami_warning_count"]
+                and len(reports) == reference["volcanic_report_count"], "companion counts disagree with reference")
+        run.catalog_identities.update(("PVMBG", row["report_id"]) for row in reports)
+        run.report["development_fixtures"] = {kind: len(rows) for kind, rows in run.development_data.items()}
+
     run.report["dataset_origin"] = origin
     run.report["reference_scope"] = reference.get("scope", "source")
     print(f"Dataset: {origin}; reference scope: {run.report['reference_scope']}", flush=True)
@@ -363,9 +388,14 @@ def print_result(result):
         return
     if "records" in result:
         output("RESULT", "Catalog", f"Records: {result['records']}",
-               f"Already stored: {result['already_present']}; changed: {result['changed_records']}")
+               f"Already stored: {result['already_present']}; changed: {result['changed_records']}",
+               f"Volcanic reports changed: {result.get('changed_volcanic_reports', 0)}")
     if "events" in result:
         output("RESULT", "Audit", f"Events: {result['events']}", "Previous event identities preserved")
+    if result.get("development_fixtures"):
+        output("RESULT", "Development fixtures", *(
+            f"{kind.replace('_', ' ')}: {count}"
+            for kind, count in result["development_fixtures"].items()))
     reference = result.get("reference")
     if reference:
         output("RESULT", "Reference", f"Events matched: {reference['count']}",
@@ -374,7 +404,8 @@ def print_result(result):
     if reads:
         output("RESULT", "Latest 50 + pagination", "Correct global order",
                f"Stable events compared: {reads['stable_events_compared']}",
-               f"Live additions/updates: {reads['live_records_added_or_updated']}")
+               f"Live additions/updates: {reads['live_records_added_or_updated']}",
+               f"50-event cursor pages checked: {reads['latest_50_pages_checked']}")
     for label, placement in (("Placement", result.get("placement", result)),
                              ("Regional surge", result.get("surge_distribution"))):
         if not placement or "copies_per_node" not in placement:
@@ -387,7 +418,8 @@ def print_result(result):
     if chart:
         output("RESULT", "Analytics", f"Events matched against Audit API: {chart['selected_events']}",
                f"Time buckets: {chart['buckets']}; areas: {chart['areas']}",
-               "Types: " + ", ".join(f"{kind}={count}" for kind, count in chart["by_type"].items()))
+               "Types: " + ", ".join(f"{kind}={count}" for kind, count in chart["by_type"].items()),
+               "Severity: " + ", ".join(f"{level}={count}" for level, count in chart["by_severity"].items()))
     storage = result.get("storage_loss")
     if storage:
         status = "erased and verified empty" if storage["operation"] == "erase" else "rebuilt PostgreSQL data"
