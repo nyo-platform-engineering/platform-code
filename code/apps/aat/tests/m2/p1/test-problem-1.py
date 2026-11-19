@@ -14,12 +14,16 @@
 #    - jumlah kejadian per tingkat severity;
 #    - jumlah kejadian per wilayah (area_name) dalam bentuk chart atau tabel.
 # 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
+import builtins
 import datetime as dt
 import math
 from pathlib import Path
 import shutil
 import sys
+import threading
+import time
 import uuid
 
 import group1_distribution
@@ -76,8 +80,80 @@ class TestConfig:
     # None creates a fresh evidence/m2-p1-<timestamp>-<id> folder beside this file.
     output_dir: Path | None = None
 
+    # Full details always go to console.log; optionally show them in the terminal too.
+    verbose_output: bool = False
+    console_progress_seconds: float = 30
+
 
 CONFIG = TestConfig()
+
+
+class ConsoleOutput:
+    """Save every output block; keep normal terminal runs short and readable."""
+
+    def __init__(self, terminal, log, lock, verbose, progress_seconds):
+        self.terminal = terminal
+        self.log = log
+        self.lock = lock
+        self.verbose = verbose
+        self.progress_seconds = progress_seconds
+        self.last_progress = {}
+        self.original_input = builtins.input
+
+    def __getattr__(self, name):
+        return getattr(self.terminal, name)
+
+    def write(self, text):
+        # Also capture ordinary prints and stderr, not only common.output calls.
+        with self.lock:
+            self.log.write(text)
+            self.log.flush()
+            return self.terminal.write(text)
+
+    def flush(self):
+        with self.lock:
+            self.log.flush()
+            self.terminal.flush()
+
+    def read_input(self, prompt=""):
+        # Write prompts through the logger too; input() may otherwise bypass it on a TTY.
+        self.write(str(prompt))
+        self.flush()
+        try:
+            return self.original_input()
+        finally:
+            with self.lock:
+                self.log.write("\n")
+                self.log.flush()
+
+    def write_output(self, kind, title, details, full_text):
+        with self.lock:
+            self.log.write(full_text)
+            self.log.flush()
+            if self.verbose or kind in ("FAIL", "PROBE GAGAL", "BELUM TERBUKTI", "MANUAL"):
+                shown = full_text
+            elif kind == "PENJELASAN":
+                return  # The full explanation stays in console.log.
+            elif kind in ("PROGRESS", "WAIT"):
+                now = time.monotonic()
+                key = (kind, title)
+                complete = any(str(detail).strip() == "complete" or "(100%)" in str(detail) for detail in details)
+                previous = self.last_progress.get(key)
+                if previous is not None and now - previous < self.progress_seconds and not complete:
+                    return
+                self.last_progress[key] = now
+                summary = " | ".join(str(detail).replace("\n", "; ") for detail in details)
+                shown = f"[{kind}] {title}: {summary}\n"
+            elif kind == "RESULT" and (title == "Stage summary" or any("Node |" in str(detail) for detail in details)):
+                shown = full_text  # Keep the per-node placement table visible.
+            else:
+                # Retain numeric results; long scope explanations remain in the file.
+                limit = 1 if kind in ("KRITERIA", "INFO", "CAKUPAN", "BATASAN") else 2 if kind in ("LOAD", "KETERSEDIAAN") else len(details)
+                selected = () if kind in ("PASS", "RUN", "KESIMPULAN", "RINGKASAN") else details[:limit]
+                summary = " | ".join(str(detail).replace("\n", "; ") for detail in selected)
+                shown = f"[{kind}] {title}" + (f": {summary}" if summary else "") + "\n"
+            self.terminal.write(shown)
+            self.terminal.flush()
 
 
 CASE_GUIDE = {
@@ -415,7 +491,7 @@ def validate_config(config):
     # Reject zero, negative, or non-finite timing settings.
     for name in (
         "request_timeout", "max_read_seconds", "sample_interval",
-        "metrics_interval", "min_window_seconds", "load_seconds",
+        "metrics_interval", "min_window_seconds", "load_seconds", "console_progress_seconds",
     ):
         duration = getattr(config, name)
         require(
@@ -463,74 +539,83 @@ def main():
     # Use a fresh config copy and evidence folder for this run.
     config = replace(CONFIG)
     folder = create_evidence_folder(config)
-    run = Run(config, folder)
-    exit_code = 1
+    # Restore terminal streams and close the log even after errors or Ctrl+C.
+    with ExitStack() as console:
+        log_path = folder / "console.log"
+        log = console.enter_context(log_path.open("a", buffering=1))
+        lock = threading.RLock()
+        stdout = ConsoleOutput(sys.stdout, log, lock, config.verbose_output, config.console_progress_seconds)
+        console.enter_context(redirect_stdout(stdout))
+        console.enter_context(redirect_stderr(ConsoleOutput(
+            sys.stderr, log, lock, True, config.console_progress_seconds,
+        )))
+        console.callback(setattr, builtins, "input", builtins.input)
+        builtins.input = stdout.read_input
+        output("INFO", "Output lengkap", str(log_path),
+               "Terminal diringkas; set CONFIG.verbose_output=True untuk menampilkan semua detail.")
+        run = Run(config, folder)
+        exit_code = 1
 
-    try:
-        validate_config(config)
-        verify_environment(run)
+        try:
+            validate_config(config)
+            verify_environment(run)
 
-        # Keep the Aggregator endpoint reachable while worker nodes are disrupted.
-        with endpoint(config, folder):
-            group1_distribution.run_group(run)  # Criteria 1–3: data, load, global reads.
+            # Keep the Aggregator endpoint reachable while worker nodes are disrupted.
+            with endpoint(config, folder):
+                group1_distribution.run_group(run)  # Criteria 1–3: data, load, global reads.
 
-            group2_recovery.run_group(run)      # Criteria 4–6: loss, rejoin, another loss.
+                group2_recovery.run_group(run)      # Criteria 4–6: loss, rejoin, another loss.
 
-            group3_analytics.run_group(run)     # Dashboard correctness and partial results.
+                group3_analytics.run_group(run)     # Dashboard correctness and partial results.
 
-        run.report["status"] = "automated_checks_passed_manual_evidence_pending"
-        exit_code = 0
+            run.report["status"] = "automated_checks_passed_manual_evidence_pending"
+            exit_code = 0
 
-    except (Exception, KeyboardInterrupt) as error:
-        # Save failures and operator interruptions as unsuccessful runs.
-        run.report["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
-        message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
-        run.report["error"] = message
-        output("FAIL", "P1 check failed", message)
+        except (Exception, KeyboardInterrupt) as error:
+            # Save failures and operator interruptions as unsuccessful runs.
+            run.report["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+            message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+            run.report["error"] = message
+            output("FAIL", "P1 check failed", message)
 
-    finally:
-        # Always save the outcome, including failed and interrupted runs.
-        checks = run.report["automated_checks"]
-        run.report["disk_erasure_verified"] = all(
-            checks.get(name, {}).get("result", {}).get("disk_erasure_verified", False)
-            for name in ("first-loss", "first-worker-rejoin", "second-loss", "final-rejoin")
-        )
+        finally:
+            # Always save the outcome, including failed and interrupted runs.
+            checks = run.report["automated_checks"]
+            run.report["disk_erasure_verified"] = all(
+                checks.get(name, {}).get("result", {}).get("disk_erasure_verified", False)
+                for name in ("first-loss", "first-worker-rejoin", "second-loss", "final-rejoin")
+            )
 
-        run.report["finished_at"] = utc()
-        run.report["endpoint_reconnections"] = getattr(config, "endpoint_reconnections", [])
-        run.save("result.json", run.report)
+            run.report["finished_at"] = utc()
+            run.report["endpoint_reconnections"] = getattr(config, "endpoint_reconnections", [])
+            run.save("result.json", run.report)
 
-        # Show stage outcomes and the evidence directory at the end.
-        output(
-            'RESULT',
-            'Stage summary',
-            *(f"{check['status'].upper()}: {name}" for name, check in run.report['automated_checks'].items()),
-        )
+            # Show stage outcomes and the evidence directory at the end.
+            output(
+                'RESULT',
+                'Stage summary',
+                *(f"{check['status'].upper()}: {name}" for name, check in run.report['automated_checks'].items()),
+            )
 
-        if exit_code == 0:
-            output("PASS", "All automated P1 checks passed")
-        output("INFO", "Evidence", str(folder))
-        reconnects = getattr(config, "endpoint_reconnections", [])
-        output("CONNECTION", "Ringkasan tunnel pengujian", f"Reconnect selama run: {len(reconnects)}.",
-               "Riwayat pod tujuan tersimpan di endpoint_reconnections pada result.json; "
-               "retry GET, jika ada, tetap tercatat bersama kegagalan transport awal.")
-        for criterion, stages, limitation in (
-            (1, ("catalog-import",), "Katalog/checksum resmi dan bukti fresh load tetap diperlukan."),
-            (2, ("catalog-import", "regional-surge"), "Bandingkan metrik per node; tambahkan disk/write IO dan penjelasan ketimpangan."),
-            (3, ("global-reads",), "Urutan dan kelengkapan dibandingkan pada data stabil di antara dua ekspor Audit."),
-            (4, ("first-loss",), "Bukti penghapusan disk otomatis/manual dibedakan; request dipantau dengan probe."),
-            (5, ("first-worker-rejoin",), "Ready, penempatan replika, rebuild volume, dan kelangsungan probe diperiksa."),
-            (6, ("second-loss", "final-rejoin"), "Kehilangan kedua diuji setelah pemulihan pertama; redundansi akhir diverifikasi."),
-            (7, ("dashboard-analytics",), "Chart, filter waktu, lima kategori, dan banner tidak lengkap tetap perlu bukti peramban."),
-        ):
-            passed = all(checks.get(stage, {}).get("status") == "pass" for stage in stages)
-            output("RINGKASAN", f"Kriteria {criterion}: " + ("cek otomatis lolos" if passed else "belum tuntas"), limitation)
-        output("MANUAL", "Bukti penyelesaian yang masih diperlukan", *MANUAL_EVIDENCE)
-        output(
-            'MANUAL',
-            'Pending evidence',
-            'Official dataset/Tester Agent, browser demo, and report/IO measurements',
-        )
+            if exit_code == 0:
+                output("PASS", "All automated P1 checks passed")
+            output("INFO", "Evidence", str(folder))
+            reconnects = getattr(config, "endpoint_reconnections", [])
+            output("CONNECTION", "Ringkasan tunnel pengujian", f"Reconnect selama run: {len(reconnects)}.",
+                   "Riwayat pod tujuan tersimpan di endpoint_reconnections pada result.json; "
+                   "retry GET, jika ada, tetap tercatat bersama kegagalan transport awal.")
+            for criterion, stages, limitation in (
+                (1, ("catalog-import",), "Katalog/checksum resmi dan bukti fresh load tetap diperlukan."),
+                (2, ("catalog-import", "regional-surge"), "Bandingkan metrik per node; tambahkan disk/write IO dan penjelasan ketimpangan."),
+                (3, ("global-reads",), "Urutan dan kelengkapan dibandingkan pada data stabil di antara dua ekspor Audit."),
+                (4, ("first-loss",), "Bukti penghapusan disk otomatis/manual dibedakan; request dipantau dengan probe."),
+                (5, ("first-worker-rejoin",), "Ready, penempatan replika, rebuild volume, dan kelangsungan probe diperiksa."),
+                (6, ("second-loss", "final-rejoin"), "Kehilangan kedua diuji setelah pemulihan pertama; redundansi akhir diverifikasi."),
+                (7, ("dashboard-analytics",), "Chart, filter waktu, lima kategori, dan banner tidak lengkap tetap perlu bukti peramban."),
+            ):
+                passed = all(checks.get(stage, {}).get("status") == "pass" for stage in stages)
+                output("RINGKASAN", f"Kriteria {criterion}: " + ("cek otomatis lolos" if passed else "belum tuntas"), limitation)
+            output("MANUAL", "Bukti penyelesaian yang masih diperlukan", *MANUAL_EVIDENCE)
 
     return exit_code
 
