@@ -26,13 +26,18 @@ def mapping(run):
     fires = run.hazards("SATELIT")
     require(fires, "no SATELIT HazardEvents stored yet")
     refs, owner, active, retired, multi = set(), {}, 0, 0, 0
+    # occurred_at is feed (virtual) time and ingested_at is wall time; the feed's
+    # clock can run ahead of the wall, so bound event time by the feed's own clock.
+    vnow = (run.aggregator("/internal/satellite/stats").get("feed") or {}).get("virtual_now")
+    require(vnow, "virtual_now not reported by /internal/satellite/stats")
+    feed_now = parse_time(vnow)
     for h in fires:
         a, hid = h["attributes"], h["hazard_id"]
         require(h["source"] == "SATELIT" and h["hazard_type"] == "WILDFIRE", f"{hid}: wrong source/type")
         require(h["source_ref_id"] not in refs, f"duplicate source_ref_id {h['source_ref_id']}")
         refs.add(h["source_ref_id"])
         require(h["area_name"], f"{hid}: no area_name")
-        require(parse_time(h["occurred_at"]) <= parse_time(h["ingested_at"]), f"{hid}: occurred after ingest")
+        require(parse_time(h["occurred_at"]) <= feed_now, f"{hid}: occurred after the feed's virtual_now {vnow}")
         keys = a.get("detection_keys") or []
         require(all(KEY.match(k) for k in keys), f"{hid}: malformed detection key")
         require(a.get("detection_count") == len(keys), f"{hid}: detection_count differs from its keys")
