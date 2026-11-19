@@ -48,10 +48,40 @@ fi
 mkdir -p "$state"
 chmod 700 "$state"
 
+api_ready() {
+  local kubeconfig
+  kubeconfig="$(mktemp)"
+  k3d kubeconfig get "$cluster" > "$kubeconfig" 2>/dev/null &&
+    KUBECONFIG="$kubeconfig" kubectl get --raw /readyz >/dev/null 2>&1
+  local ready=$?
+  rm -f "$kubeconfig"
+  return "$ready"
+}
+
+# After a stop/start, k3s inside the server container can exit at boot ("failed
+# to find interface with specified node ip") while the container keeps running,
+# and the load balancer may stay stopped. Restart the containers once, in order.
+restart_stuck_nodes() {
+  docker start "k3d-$cluster-serverlb" >/dev/null 2>&1 || true
+  for _ in $(seq 1 30); do
+    api_ready && return 0
+    sleep 2
+  done
+  echo 'Kubernetes API did not come back after start; restarting the k3d node containers once.' >&2
+  docker restart "k3d-$cluster-server-0" >/dev/null
+  for _ in $(seq 1 60); do
+    api_ready && break
+    sleep 2
+  done
+  docker restart "k3d-$cluster-agent-0" "k3d-$cluster-agent-1" >/dev/null
+  api_ready || { echo 'k3d API still unreachable; try task destroy and task up -- --novm.' >&2; exit 1; }
+}
+
 create_or_start_cluster() {
   if k3d cluster list "$cluster" >/dev/null 2>&1; then
     # An existing cluster keeps its nodes and local-path volumes across restarts.
-    k3d cluster start "$cluster" --wait --timeout 300s
+    k3d cluster start "$cluster" --wait --timeout 300s || true
+    restart_stuck_nodes
     return
   fi
   local ports=()

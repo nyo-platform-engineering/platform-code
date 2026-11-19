@@ -71,6 +71,8 @@ Taskfile memanggil entry point `main.sh` pada folder masing-masing:
 | `k9s` | `scripts/k9s/main.sh` |
 | `vm:manager` | `scripts/vm/main.sh manager` |
 | `m2:p1` | `../apps/aat/tests/m2/p1/test-problem-1.py` |
+| `m2:p4` | `../apps/aat/tests/m2/p4/test-problem-4.py` |
+| `m2:p5` | `../apps/aat/tests/m2/p5/test-problem-5.py` |
 | `tester:*` | `scripts/tester/main.sh` dengan aksi install/list/practice |
 | `down` (alias `vm:down`, `vm:halt`) | `scripts/vm/main.sh halt` |
 | `destroy` (alias `vm:destroy`) | `scripts/vm/main.sh destroy` |
@@ -114,6 +116,17 @@ bash scripts/up/4-apps.sh
 ```
 
 Preflight saat ini membutuhkan minimal tiga node VM/native. Sediakan StorageClass `local-path`, metrics-server, serta CNI yang menegakkan NetworkPolicy; sesuaikan `nodeSelector` backend dengan hostname cluster. Kubeconfig lab disimpan di `.state/kubeconfig`, terpisah dari context default host. Konfigurasi resource dan storage berada di values masing-masing chart.
+
+### Pengujian Milestone 2 Problem 4 dan 5
+
+Sama seperti P1: interaktif (Enter di antara langkah), memakai `.env.runtime` dan
+`.state/kubeconfig`, konfigurasi di `CONFIG` bagian atas skrip, bukti di
+`docs/evidence/m2-p4-*` / `m2-p5-*`. Detail: [tests/m2](../apps/aat/tests/m2/README.md).
+
+```bash
+task m2:p4   # Feed Satelit: butuh SATELLITE_GROUP_TOKEN; menghapus semua pod Aggregator sekali
+task m2:p5   # Sensor Pantai: menskalakan sensor ke 0 sebentar dan membanjiri Client API dengan klien Media
+```
 
 ### Pengujian Milestone 2 Problem 1
 

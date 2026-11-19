@@ -39,6 +39,16 @@ tasks:
     interactive: true
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p1/test-problem-1.py"'
+  m2:p4:
+    desc: Run the guided M2 P4 test (Feed Satelit); needs SATELLITE_GROUP_TOKEN in .env.runtime
+    interactive: true
+    cmds:
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p4/test-problem-4.py"'
+  m2:p5:
+    desc: Run the guided M2 P5 test (Sensor Pantai); stops the sensor briefly and floods the Client API
+    interactive: true
+    cmds:
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p5/test-problem-5.py"'
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
     cmds: [bash scripts/tester/main.sh install]
