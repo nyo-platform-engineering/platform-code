@@ -85,10 +85,13 @@ def catalog_distribution(run):
     run.save("catalog-placement.json", placement)
 
     # Keep a verified baseline for the later surge and recovery cases.
-    capture_snapshot(run, "baseline")
+    baseline = capture_snapshot(run, "baseline")
 
     return {
         "records": len(records),
+        "catalog_events": len(imported),
+        "catalog_by_area": dict(Counter(record["region_name"] for record in records)),
+        "reference": baseline["reference"],
         "primary_events_per_node": placement["primary_events_per_node"],
         "copies_per_node": placement["copies_per_node"],
         "live_events_updated_during_import": len(updates),

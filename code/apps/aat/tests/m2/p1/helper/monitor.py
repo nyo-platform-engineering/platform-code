@@ -18,6 +18,10 @@ from .cluster import cluster_metrics
 from .data import availability, event_key
 
 
+class TransportError(RuntimeError):
+    """The HTTP exchange failed before receiving a valid HTTP response."""
+
+
 class API:
     def __init__(self, url, env_file=None, timeout=10):
         parsed = urllib.parse.urlsplit(url)
@@ -38,7 +42,10 @@ class API:
         self.curl = shutil.which("curl")
         require(self.curl is not None, "curl is required for HTTP requests with a total deadline")
 
-    def request(self, path, token_key, params=None, body=None):
+    def request(self, path, token_key, params=None, body=None, timeout=None):
+        timeout = self.timeout if timeout is None else timeout
+        if timeout <= 0:
+            raise TimeoutError(f"{path}: request deadline exhausted")
         token = self.credentials.get(token_key)
         if not token:
             raise ValueError(f"set {token_key} or provide --env-file")
@@ -54,7 +61,7 @@ class API:
             response_file = Path(folder) / "response.json"
             command = [
                 self.curl, "--disable", "--silent", "--show-error",
-                "--proto", "=http,https", "--max-time", str(self.timeout),
+                "--proto", "=http,https", "--max-time", str(timeout),
                 "--max-filesize", str(8 << 20), "--header", "@-",
                 "--output", str(response_file), "--write-out", "%{http_code}",
             ]
@@ -65,13 +72,15 @@ class API:
             command.extend(["--url", url])
             try:
                 response = subprocess.run(command, input=headers, capture_output=True,
-                                          text=True, timeout=self.timeout)
+                                          text=True, timeout=timeout)
             except subprocess.TimeoutExpired:
-                raise TimeoutError(f"{path}: request exceeded {self.timeout}s deadline") from None
+                raise TimeoutError(f"{path}: request exceeded {timeout}s deadline") from None
             if response.returncode == 28:
-                raise TimeoutError(f"{path}: request exceeded {self.timeout}s deadline")
+                raise TimeoutError(f"{path}: request exceeded {timeout}s deadline")
             if response.returncode == 63:
                 raise ValueError("API response exceeds 8 MiB")
+            if response.returncode in (5, 6, 7, 18, 52, 55, 56):
+                raise TransportError(f"cannot reach {path} (curl exit {response.returncode})")
             if response.returncode != 0:
                 raise RuntimeError(f"cannot reach {path} (curl exit {response.returncode})")
             status = int(response.stdout)
@@ -96,26 +105,36 @@ class EvidenceAPI:
         self.local = threading.local()
 
     def request(self, path, token, params=None, body=None):
-        if not hasattr(self.local, "api"):
-            self.local.api = API(
-                self.config.url,
-                self.config.env_file,
-                self.config.request_timeout,
-            )
-
         started = time.monotonic()
+        deadline = started + self.config.request_timeout
         entry = {
-            "at": utc(),
-            "path": path,
-            "method": "POST" if body is not None else "GET",
-            "params": params,
+            "at": utc(), "path": path,
+            "method": "POST" if body is not None else "GET", "params": params,
         }
         try:
-            result = self.local.api.request(path, token, params, body)
+            ensure = getattr(self.config, "ensure_endpoint", None)
+            if ensure:
+                entry["tunnel_reconnected"] = ensure(deadline - time.monotonic())
+            generation = getattr(self.config, "endpoint_generation", None)
+            if not hasattr(self.local, "api"):
+                self.local.api = API(self.config.url, self.config.env_file, self.config.request_timeout)
+            try:
+                result = self.local.api.request(path, token, params, body, timeout=deadline - time.monotonic())
+            except TransportError as error:
+                entry["transport_error"] = str(error)
+                # GET is safe to repeat only when kubectl's own tunnel has exited.
+                # Never replay writes with an unknown outcome or retry a live server's errors.
+                if body is not None or ensure is None or not ensure(
+                    deadline - time.monotonic(), failed_generation=generation,
+                ):
+                    raise
+                entry["tunnel_reconnected"] = True
+                entry["read_retried"] = True
+                result = self.local.api.request(path, token, params, body, timeout=deadline - time.monotonic())
             entry.update(ok=True, response=result)
             return result
         except Exception as error:
-            entry.update(ok=False, error_type=type(error).__name__)
+            entry.update(ok=False, error_type=type(error).__name__, error=str(error))
             raise
         finally:
             entry["seconds"] = time.monotonic() - started
@@ -141,6 +160,7 @@ class Monitor:
         self.target = target
         self.expect_ready = expect_ready
         self.stop = threading.Event()
+        self.reconnections_before = len(getattr(run.config, "endpoint_reconnections", []))
 
         self.errors = []
         self.reads = 0
@@ -150,6 +170,7 @@ class Monitor:
         self.write_failed = 0
         self.metric_samples = 0
         self.metric_times = {}
+        self.node_load = {}
         self.target_seen = False
         self.target_ready = None
 
@@ -290,6 +311,23 @@ class Monitor:
             node_name = metric["metadata"]["name"]
             timestamps = self.metric_times.setdefault(node_name, set())
             timestamps.add(metric["timestamp"])
+            if "usage" in metric:
+                # Present Kubernetes quantities as millicores and MiB for the demo.
+                usage = {}
+                for field, scales in (
+                    ("cpu", {"n": 0.000001, "u": 0.001, "m": 1}),
+                    ("memory", {"Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40,
+                                "K": 10**3, "M": 10**6, "G": 10**9}),
+                ):
+                    raw = metric["usage"][field]
+                    for suffix, scale in scales.items():
+                        if raw.endswith(suffix):
+                            usage[field] = float(raw[:-len(suffix)]) * scale
+                            break
+                    else:
+                        usage[field] = float(raw) * (1000 if field == "cpu" else 1)
+                samples = self.node_load.setdefault(node_name, [])
+                samples.append((usage["cpu"], usage["memory"] / 2**20))
 
         for node in nodes:
             if node["name"] == self.target:
@@ -315,11 +353,21 @@ class Monitor:
     def summary(self):
         return {
             "read_successes": self.reads,
+            "tunnel_reconnections": len(getattr(self.run.config, "endpoint_reconnections", [])) - self.reconnections_before,
             "max_read_seconds": round(max(self.read_seconds, default=0), 3),
             "partial_responses": self.partial,
             "writes_acknowledged": self.write_ok,
             "writes_rejected_or_unknown": self.write_failed,
             "metric_samples": self.metric_samples,
+            "node_load": {
+                node: {
+                    "samples": len(samples),
+                    "cpu_avg_millicores": round(sum(cpu for cpu, _ in samples) / len(samples), 2),
+                    "cpu_peak_millicores": round(max(cpu for cpu, _ in samples), 2),
+                    "memory_avg_mib": round(sum(memory for _, memory in samples) / len(samples), 2),
+                    "memory_peak_mib": round(max(memory for _, memory in samples), 2),
+                } for node, samples in self.node_load.items()
+            },
             "target_state_observed": self.target_seen,
             "last_observed_target_ready": self.target_ready,
             "distinct_node_metric_timestamps": {
@@ -367,5 +415,17 @@ class Monitor:
                    f"Slowest read: {summary['max_read_seconds']:.3f}s",
                    f"Writes: {summary['writes_acknowledged']} acknowledged; {summary['writes_rejected_or_unknown']} rejected/unknown",
                    f"Read/metrics errors: {len(summary['errors'])}")
+            if summary["tunnel_reconnections"]:
+                output("CONNECTION", f"Tunnel diperbaiki {summary['tunnel_reconnections']} kali selama {self.name}",
+                       "Gangguan transport dan GET yang diulang tetap tercatat di http.jsonl; "
+                       "ini bukan respons parsial dari server.")
+            for node, load in summary["node_load"].items():
+                output("LOAD", f"Beban node {node} — {self.name}",
+                       f"CPU rata-rata/puncak: {load['cpu_avg_millicores']:.2f} / "
+                       f"{load['cpu_peak_millicores']:.2f} millicore (1000 = 1 core)",
+                       f"Memori rata-rata/puncak: {load['memory_avg_mib']:.2f} / "
+                       f"{load['memory_peak_mib']:.2f} MiB; sampel: {load['samples']}",
+                       "Ini penggunaan seluruh node; disk/write IO dan penyebab ketimpangan "
+                       "tetap perlu dibandingkan dengan Grafana.")
         if kind is None:
             self.verify_window()

@@ -8,6 +8,7 @@ task m2:p1
 
 Atur katalog, checksum referensi, dan worker di `CONFIG` pada
 [test-problem-1.py](test-problem-1.py). Tekan **Enter** untuk melanjutkan tiap tahap.
+Output tiap tahap menjelaskan tujuan kriteria, langkah pemeriksaan, hasil, batasan, dan lokasi bukti.
 Mode otomatis mematikan worker dan menghapus data store lokal sebelum membangunnya kembali.
 
 ## Kriteria penyelesaian
@@ -40,3 +41,8 @@ Dataset bawaan adalah **mock pengembangan**, bukan katalog/checksum resmi asiste
 Untuk bukti penyelesaian, gunakan dataset resmi, sertakan pengukuran disk/write IO
 serta penjelasan beban dari Grafana, dan rekam demo dashboard. Metrik otomatis
 mencakup CPU/memori; lolos tes otomatis belum berarti seluruh bukti manual lengkap.
+
+Jika pod Aggregator berganti, tunnel `kubectl` yang berhenti disambungkan ulang.
+Hanya GET yang boleh diulang sekali setelah tunnel mati; error HTTP, timeout, dan tulis
+dengan hasil tidak diketahui tetap gagal/dicatat. Reconnect ikut memakai batas waktu request
+dan tercatat di `http.jsonl` serta `result.json`.

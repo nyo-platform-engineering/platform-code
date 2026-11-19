@@ -5,6 +5,7 @@ import json
 import shlex
 import socket
 import subprocess
+import threading
 import time
 
 from common import INFRA, NAMESPACE, kubectl, output, require, utc
@@ -72,47 +73,111 @@ def select_surviving_aggregator(topology):
     raise ValueError("no Ready Aggregator on control plane; set CONFIG.url to a stable Aggregator endpoint")
 
 
-def wait_for_port(process, port):
-    deadline = time.monotonic() + 15
+def wait_for_port(process, port, timeout=15):
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         require(process.poll() is None, "port-forward exited; see port-forward.log")
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+            with socket.create_connection(
+                ("127.0.0.1", port), timeout=min(0.2, max(0.001, deadline - time.monotonic())),
+            ):
                 return
         except OSError:
-            time.sleep(0.1)
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
     raise ValueError("port-forward did not become ready")
 
 
 @contextmanager
 def endpoint(config, folder):
-    """Keep the chosen Aggregator reachable while workers are disrupted."""
+    """Reconnect a dead kubectl tunnel without retrying application failures."""
     if config.url:
         yield
         return
 
-    pod_name = select_surviving_aggregator(cluster_topology(config))
+    topology = cluster_topology(config)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     config.url = f"http://127.0.0.1:{port}"
+    config.endpoint_generation = 0
+    config.endpoint_reconnections = []
+    process = None
+    lock = threading.Lock()
 
-    command = [
-        "kubectl", "--kubeconfig", str(config.kubeconfig), "-n", NAMESPACE,
-        "port-forward", "pod/" + pod_name, f"{port}:8083", "--address=127.0.0.1",
-    ]
-    with (folder / "port-forward.log").open("w") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=log)
+    with (folder / "port-forward.log").open("a") as log:
+        def ensure_forward(timeout, failed_generation=None):
+            nonlocal process
+            deadline = time.monotonic() + timeout
+            if not lock.acquire(timeout=max(0, timeout)):
+                raise TimeoutError("timed out waiting for the Aggregator tunnel")
+            try:
+                # Another probe may already have replaced the failed tunnel.
+                if failed_generation is not None and failed_generation != config.endpoint_generation:
+                    return True
+                if process is not None and process.poll() is None:
+                    if failed_generation is None:
+                        return False
+                    try:
+                        process.wait(timeout=min(0.2, max(0, deadline - time.monotonic())))
+                    except subprocess.TimeoutExpired:
+                        return False  # A live tunnel is not an application-error retry policy.
+
+                waiting_reported = False
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("no Ready replacement Aggregator within the request deadline")
+                    pods = kubectl(
+                        config, "get", "pods", "-o", "json", json_output=True,
+                        timeout=remaining, request_timeout=f"{remaining:.3f}s",
+                    )["items"]
+                    # Worker-loss tests must use a Ready Aggregator on the control plane.
+                    candidates = [{
+                        "name": pod["metadata"]["name"],
+                        "node": pod["spec"].get("nodeName"),
+                        "role": pod["metadata"].get("labels", {}).get("role"),
+                        "ready": is_ready(pod),
+                    } for pod in pods if not pod["metadata"].get("deletionTimestamp")]
+                    try:
+                        pod_name = select_surviving_aggregator({"nodes": topology["nodes"], "pods": candidates})
+                        break
+                    except ValueError:
+                        if not waiting_reported:
+                            output("CONNECTION", "Menunggu Aggregator pengganti",
+                                   "Belum ada pod Ready pada control plane; menunggu dalam sisa batas waktu request.")
+                            waiting_reported = True
+                        time.sleep(min(0.2, max(0, deadline - time.monotonic())))
+                command = [
+                    "kubectl", "--kubeconfig", str(config.kubeconfig), "-n", NAMESPACE,
+                    "port-forward", "pod/" + pod_name, f"{port}:8083", "--address=127.0.0.1",
+                ]
+                process = subprocess.Popen(command, stdout=log, stderr=log)
+                wait_for_port(process, port, timeout=max(0, deadline - time.monotonic()))
+                config.endpoint_generation += 1
+                if config.endpoint_generation > 1:
+                    config.endpoint_reconnections.append({"at": utc(), "pod": pod_name})
+                    output("CONNECTION", "Tunnel Aggregator tersambung kembali",
+                           f"Pod tujuan: {pod_name}; alamat lokal tetap {config.url}",
+                           "Tunnel kubectl sebelumnya berhenti. Kegagalan transport dicatat; "
+                           "HTTP 500, timeout, dan kegagalan validasi data tidak diulang.")
+                return True
+            finally:
+                lock.release()
+
+        config.ensure_endpoint = ensure_forward
         try:
-            wait_for_port(process, port)
+            ensure_forward(30)
             yield
         finally:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+            del config.ensure_endpoint
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            config.url = None
 
 
 def worker_action_driver(config, worker):

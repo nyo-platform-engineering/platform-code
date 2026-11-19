@@ -468,6 +468,7 @@ def verify_global_reads(before, after, recent, latest):
                 "recent pagination/latest-50 disagrees with the unchanged full audit")
     return {
         "global_order_verified": True,
+        "recent_events": len(recent),
         "stable_events_compared": len(stable),
         "live_records_added_or_updated": len(after_by_id) - len(stable),
         "exact_whole_dataset_comparison": unchanged,
@@ -527,11 +528,16 @@ def read_live_view(run):
     attempt = 0
     while True:
         attempt += 1
-        output("PROGRESS", f"Live comparison window {attempt}", "Export, recent pages, analytics, re-export")
+        output("PROGRESS", f"Live comparison window {attempt}",
+               "Audit sebelum → latest-50 beserta seluruh cursor → analytics → Audit sesudah.",
+               "Dua ekspor membedakan perubahan feed yang sah dari event yang hilang; "
+               "permintaan terpisah tidak dianggap memiliki snapshot database yang sama.")
         expected_writes = set(run.acknowledged_writes)
         sums_before = read_checksums(run)
         before = export(run.api, page_size=run.config.page_size, max_pages=run.config.max_pages)
         require(len(before) >= 51, "need at least 51 events to exercise latest-50 pagination")
+        output("CAKUPAN", "Pembacaan global", f"Audit awal: {len(before)} event.",
+               "Seluruh halaman recent dibaca dengan limit=50; dataset besar memerlukan lebih banyak request.")
         latest = run.api.request("/internal/hazards", "AGGREGATOR_TOKEN", {"order": "recent", "limit": 50})
         recent = export(run.api, "recent", 50, run.config.max_pages, first_page=latest)
         query = analytic_query(before, run.config.interval, run.config.analytics_end)
@@ -592,4 +598,5 @@ def capture_snapshot(run, name, redundant=True):
     return {"events": len(events), "checksum": view["checksum"]["checksum"],
             "source_checks": {source: result["status"] for source, result in view["source_checks"].items()},
             "global_reads": view["global_reads"], "placement": placement_summary,
-            "analytics": view["reconciliation"], "reference": view["reference"]}
+            "analytics": view["reconciliation"], "reference": view["reference"],
+            "analytics_range": view["query"], "analytics_by_area": view["analytics"]["by_area"]}
