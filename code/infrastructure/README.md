@@ -101,8 +101,8 @@ bukan glob eksekusi.
 
 Commit/push konfigurasi terlebih dahulu. Application membaca `https://github.com/nyo-platform-engineering/platform-code.git` pada revision `main`. Untuk fork atau branch lain, sesuaikan URL/revision pada root dan child Applications. Repository private membutuhkan kredensial pada Argo CD.
 
-`task up` selalu menggunakan tiga VM Vagrant/libvirt dan kubeconfig lab di
-`.state/kubeconfig`. Tidak ada mode startup tanpa VM.
+`task up` menggunakan tiga VM Vagrant/libvirt secara default. `task up -- --novm`
+memakai k3d untuk pengembangan; kedua mode menyimpan kubeconfig lab di `.state/kubeconfig`.
 
 Untuk hanya menjalankan deployment ke cluster yang sudah tersedia:
 
@@ -153,7 +153,7 @@ tanpa perubahan. Traefik dan ServiceLB bawaan k3s dimatikan seperti di VM; NodeP
 **Tidak sah untuk demo**: semua node berbagi satu kernel (spesifikasi melarang kind/k3d/minikube untuk
 demo). Preflight topologi mencetak peringatan ini di mode k3d.
 
-Prasyarat (jalankan di WSL Ubuntu dengan integrasi WSL Docker Desktop aktif, atau Linux):
+Prasyarat (macOS dengan Docker Desktop, WSL Ubuntu dengan integrasi Docker Desktop, atau Linux):
 Docker, k3d, kubectl, Helm, Task, Python 3. Docker Desktop membutuhkan RAM cukup untuk seluruh stack;
 di Windows atur `%UserProfile%\.wslconfig` (`[wsl2]` `memory=11GB`), lalu `wsl --shutdown`.
 
@@ -174,6 +174,42 @@ Perintah lain mengikuti mode yang tercatat di `.state/mode`:
 | `task clock:status` | tidak berlaku: semua node memakai jam host |
 
 Satu checkout hanya menjalankan satu lab; jalankan `task destroy` sebelum berpindah antara VM dan k3d.
+
+CI bersama tetap membangun image amd64. Untuk memakai kode lokal secara native
+di Mac ARM64 (atau mesin amd64), tambahkan `--local-build`:
+
+```bash
+task up PORT=8080 -- --novm --local-build
+```
+
+Mode ini memeriksa kubeconfig lab k3d dan arsitektur ketiga node, membangun delapan
+image AAT/Citus, menguji SQL Citus, lalu mengimpor image ke seluruh node. Build
+pertama mengunduh dependency; build berikutnya memakai cache Docker. Image tidak
+di-push. Citus lokal dikompilasi dari source melalui `Dockerfile.local`; CI tetap
+memakai Dockerfile/base image semula.
+
+Setelah semua image diimpor, `.state/local-build/images.json` menyimpan tag unik.
+Application `dev-apps` mendapat inline Kustomize patches untuk Helm image
+repository/tag/digest/pull policy. Root `platform` memakai ignoreDifferences dan
+RespectIgnoreDifferences khusus konfigurasi Kustomize `dev-apps`, sehingga sync
+berikutnya mempertahankan override lokal. Aplikasi lain tetap dikelola Argo CD.
+Pin image di repository tidak berubah. Chart/konfigurasi selain image tetap dari
+Git; perubahan kode aplikasi lokal masuk melalui build image.
+
+`task up -- --novm` berikutnya mempertahankan image lokal yang terakhir berhasil
+diimpor. Tambahkan `--local-build` lagi untuk rebuild kode terbaru. Untuk kembali
+ke mode image remote, gunakan lab baru setelah `task destroy` (menghapus data
+cluster); perintah destroy juga membuang state tag lokal. Build yang gagal tidak
+mengganti state image sebelumnya. Smoke test lokal dapat dijalankan ulang:
+
+```bash
+docker run --rm -i --entrypoint /bin/sh IMAGE_CITUS_LOKAL -s \
+  < ../apps/aat/storage/postgres/smoke-test.sh
+```
+
+Image eksternal dari asisten tidak dibangun ulang. Sensor Pantai yang dipin masih
+amd64-only; kompatibilitas emulasinya pada node ARM64 perlu diuji terpisah sebelum
+menyatakan seluruh stack siap. Mode ini tetap khusus development, bukan demo M2.
 
 ## GitOps
 

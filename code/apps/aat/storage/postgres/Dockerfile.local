@@ -1,0 +1,28 @@
+FROM postgres:17-bookworm@sha256:837bed18782820fe967067cb5328b02b0d9992c1be9a37ee0c9c492cfc03af3b AS postgres
+
+FROM postgres AS citus-build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential ca-certificates curl flex \
+       postgresql-server-dev-17 libcurl4-openssl-dev liblz4-dev libzstd-dev \
+       libssl-dev libkrb5-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+RUN curl --fail --show-error --location --retry 3 \
+       https://codeload.github.com/citusdata/citus/tar.gz/refs/tags/v13.0.1 -o citus.tar.gz \
+    && echo 'b7fdc3ad6eca9dd6a1066e897a249fdca289e96d81921d4c7bf98cb4302ce817  citus.tar.gz' | sha256sum -c - \
+    && tar -xzf citus.tar.gz --strip-components=1 \
+    && PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config ./configure \
+    && make -j2 \
+    && make install DESTDIR=/citus
+
+FROM postgres
+COPY --from=citus-build /citus/ /
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3-venv ca-certificates libcurl4 liblz4-1 libzstd1 \
+    && python3 -m venv /opt/patroni \
+    && /opt/patroni/bin/pip install --no-cache-dir 'patroni[kubernetes]==4.1.0' 'psycopg[binary]==3.2.10' \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH="/opt/patroni/bin:$PATH"
+USER postgres
+ENTRYPOINT ["patroni"]
+CMD ["/etc/patroni/patroni.yaml"]

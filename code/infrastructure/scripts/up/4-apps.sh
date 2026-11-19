@@ -52,6 +52,10 @@ preflight_check
 # show_gateway_links - print the URLs and explicit stop command.
 
 register_root_application() {
+  if [[ "$lab_mode" == k3d && -f .state/local-build/images.json ]]; then
+    python3 scripts/up/local-build.py register
+    return
+  fi
   # This creates/updates an Argo CD Application, rather than deploying each
   # workload directly. The root points to the Git directory of child apps.
   # Argo CD then fetches the configured revision and reconciles those apps.

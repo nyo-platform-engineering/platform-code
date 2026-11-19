@@ -528,6 +528,15 @@ commit/ACK, termasuk recovery setelah broker direstart. Tanpa binary tersebut
 
 Deploy Kubernetes dari root `code/infrastructure` dengan `task up`. Image Citus +
 Patroni dibangun oleh pipeline AAT dan dipasang melalui pin image pada Argo CD.
+CI bersama tetap membangun `linux/amd64`. Untuk development native di Mac ARM64,
+jalankan `task up PORT=8080 -- --novm --local-build` dari `code/infrastructure`.
+Mode ini membangun delapan image sesuai arsitektur node, menjalankan smoke SQL
+Citus, dan mengimpor image ke seluruh node k3d. Citus lokal memakai
+`storage/postgres/Dockerfile.local`: source Citus 13.0.1 ber-checksum di atas
+PostgreSQL 17, dengan Patroni 4.1.0 dan psycopg 3.2.10. Dockerfile Citus untuk CI
+tetap memakai base image semula. Tidak ada push image atau perubahan pin GitOps
+oleh mode lokal ini.
+
 Pada merge pertama, tunggu pipeline menerbitkan image dan memperbarui digest
 sebelum menilai readiness. Compose M1 tetap memakai PostgreSQL tunggal untuk
 pengembangan; Compose bukan bukti pemenuhan P1/P2.

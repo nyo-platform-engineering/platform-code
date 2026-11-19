@@ -5,7 +5,7 @@ tasks:
     desc: Check VM startup tools and libvirt/KVM prerequisites (task doctor -- --novm checks k3d)
     cmds: ['bash scripts/doctor/main.sh {{.CLI_ARGS}}']
   up:
-    desc: Start three local VMs and deploy AAT plus LGTM (task up -- --novm uses k3d, development only)
+    desc: Start the lab (-- --novm uses k3d; add --local-build for native local images)
     cmds:
       - 'GATEWAY_PORT="{{.PORT | default "80"}}" bash scripts/up/main.sh {{.CLI_ARGS}}'
   status:

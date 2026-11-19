@@ -127,13 +127,34 @@ printf 'helm %s\\n' "$*" >> "$CALL_LOG"
     def test_up_rejects_arguments_before_starting_vms(self):
         with tempfile.TemporaryDirectory() as folder:
             root, env = self.make_lab(folder)
-            for option in ("--vm=false", "--vm=true", "unexpected"):
+            for option in ("--vm=false", "--vm=true", "--local-build", "unexpected"):
                 result = subprocess.run(
                     ["bash", str(root / "scripts/up/main.sh"), option],
                     env=env, capture_output=True,
                 )
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse((root / "calls").exists())
+
+    def test_local_images_are_built_before_argocd_and_registered_instead_of_remote_pins(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, env = self.make_lab(folder)
+            (root / "scripts/up/1-k3d.sh").write_text(
+                'echo k3d > .state/mode\nprintf "server: https://127.0.0.1:6550\\n" > .state/kubeconfig\n')
+            (root / "scripts/up/local-build.py").write_text('''import os, sys
+from pathlib import Path
+with open(os.environ["CALL_LOG"], "a") as log:
+    log.write("local-build " + sys.argv[1] + "\\n")
+if sys.argv[1] == "build":
+    Path(".state/local-build").mkdir(exist_ok=True)
+    Path(".state/local-build/images.json").write_text("{}")
+''')
+            subprocess.run(["bash", str(root / "scripts/up/main.sh"), "--novm", "--local-build"],
+                           env=env, check=True, capture_output=True)
+            calls = (root / "calls").read_text()
+            self.assertNotIn("vagrant ", calls)
+            self.assertLess(calls.index("local-build build"), calls.index("helm "))
+            self.assertLess(calls.index("helm "), calls.index("local-build register"))
+            self.assertNotIn("apply -f argo-apps/root.yaml", calls)
 
     def test_doctor_only_checks_vm_prerequisites(self):
         with tempfile.TemporaryDirectory() as folder:

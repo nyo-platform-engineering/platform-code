@@ -29,6 +29,7 @@ if [[ "$(cat "$state/mode" 2>/dev/null)" == k3d ]]; then
       k3d cluster delete "$cluster"
       python3 scripts/up/gateway.py stop
       rm -f "$state/mode" "$state/kubeconfig"
+      rm -f "$state/local-build/images.json"
       ;;
     # Freezing a container is the k3d equivalent of suspending a VM.
     suspend-worker) docker pause "$(container "${2:-aat-worker-1}")" ;;

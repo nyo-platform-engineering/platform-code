@@ -4,16 +4,24 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 novm=0
+local_build=0
 for arg in "$@"; do
   case "$arg" in
     --novm) novm=1 ;;
+    --local-build) local_build=1 ;;
     *)
       echo "Unknown option $arg. Usage: task up            (three VMs)" >&2
       echo "                              task up -- --novm (k3d containers, development only)" >&2
+      echo "                              task up -- --novm --local-build (native local images)" >&2
       exit 2
       ;;
   esac
 done
+
+if (( local_build && !novm )); then
+  echo '--local-build requires --novm.' >&2
+  exit 2
+fi
 
 # Startup always targets this lab, even if the caller selected another cluster.
 export KUBECONFIG="$root/.state/kubeconfig"
@@ -31,5 +39,8 @@ else
   bash scripts/up/1-vms.sh
 fi
 bash scripts/up/2-cluster.sh
+if (( local_build )); then
+  python3 scripts/up/local-build.py build
+fi
 bash scripts/up/3-argocd.sh
 bash scripts/up/4-apps.sh
