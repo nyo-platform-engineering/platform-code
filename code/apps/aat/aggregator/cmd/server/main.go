@@ -32,7 +32,7 @@ func main() {
 	defer stop()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	token := httpkit.Secret("AGGREGATOR_TOKEN")
-	startupCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	startupCtx, cancel := context.WithTimeout(workerCtx, 90*time.Second)
 	defer cancel()
 	startupCtx = httpkit.WithCorrelationID(startupCtx, httpkit.ID())
 
@@ -78,7 +78,7 @@ func main() {
 		panic("SATELLITE_ALLOWED_LATENESS_MINUTES must be positive")
 	}
 	ctrl.SatelliteLateness = time.Duration(lateness) * time.Minute
-	if err := ctrl.Ping(startupCtx); err != nil {
+	if err := waitForDatabase(startupCtx, ctrl.Ping); err != nil {
 		panic(err)
 	}
 	if err := model.Migrate(startupCtx, db); err != nil {

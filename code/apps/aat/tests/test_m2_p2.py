@@ -2,6 +2,7 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import shutil
@@ -51,6 +52,63 @@ def summary():
         metrics[f"p2_successes{{window:{window}}}"] = {"values": {"count": 10}}
         metrics[f"p2_active_vus{{window:{window}}}"] = {"values": {"min": 2}}
     return {"metrics": metrics}
+
+
+class HelperCompatibilityTests(unittest.TestCase):
+    def test_initial_attachment_waits_for_ready(self):
+        logs = p2_helper.Logs(SimpleNamespace(credentials={}))
+        pod = {"metadata": {"uid": "starting", "name": "aggregator-starting"}}
+        self.assertFalse(logs.attachable(pod, None))
+        pod["status"] = {"conditions": [{"type": "Ready", "status": "True"}]}
+        self.assertTrue(logs.attachable(pod, None))
+        self.assertEqual(logs.errors, [])
+
+    def test_terminating_pod_is_not_reattached(self):
+        run = SimpleNamespace(credentials={}, pods=lambda: self.fail("must not query a terminating pod"))
+        logs = p2_helper.Logs(run)
+        pod = {"metadata": {"uid": "old", "name": "aggregator-old", "deletionTimestamp": "now"}}
+        self.assertFalse(logs.attachable(pod, None))
+        self.assertEqual(logs.errors, [])
+
+    def test_stream_end_rechecks_pod_deletion(self):
+        pod = {"metadata": {"uid": "old", "name": "aggregator-old"}}
+        deleting = {"metadata": dict(pod["metadata"], deletionTimestamp="now")}
+        for current in ([], [deleting]):
+            logs = p2_helper.Logs(SimpleNamespace(credentials={}, pods=lambda: current))
+            self.assertFalse(logs.attachable(pod, SimpleNamespace(returncode=0)))
+            self.assertEqual(logs.errors, [])
+
+    def test_live_pod_stream_failure_remains_fatal_and_is_saved(self):
+        pod = {"metadata": {"uid": "live", "name": "aggregator-live"}}
+        saved = {}
+        run = SimpleNamespace(credentials={}, pods=lambda: [pod], save=lambda name, value: saved.update({name: value}))
+        logs = p2_helper.Logs(run)
+        self.assertTrue(logs.attachable(pod, SimpleNamespace(returncode=1)))
+        self.assertIn("exit 1", logs.errors[0])
+        self.assertEqual(saved["log-errors.json"], logs.errors)
+
+    def test_runner_imports_in_fresh_process(self):
+        script = "import runpy, sys; sys.path.insert(0, sys.argv[1]); runpy.run_path(sys.argv[2], run_name='p2_import_check')"
+        subprocess.run([sys.executable, "-I", "-c", script, str(P2), str(P2 / "test-problem-2.py")],
+                       check=True, capture_output=True, text=True)
+
+    def test_credentials_preserve_values_and_environment_precedence(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "runtime.env"
+            path.write_text("# test\n\nAGGREGATOR_TOKEN=file=value\nAUDIT_TOKEN=file-audit\n")
+            with patch.dict(os.environ, {"AUDIT_TOKEN": "environment-audit"}, clear=True):
+                values = p2_helper.read_credentials(path)
+            self.assertEqual(values, {"AGGREGATOR_TOKEN": "file=value", "AUDIT_TOKEN": "environment-audit"})
+
+    def test_invalid_environment_file_fails(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "runtime.env"
+            path.write_text("not an assignment\n")
+            with self.assertRaisesRegex(ValueError, "invalid environment"):
+                p2_helper.read_credentials(path)
+
+    def test_redirects_are_not_followed(self):
+        self.assertIsNone(p2_helper.NoRedirect().redirect_request(None, None, 302, "Found", {}, "http://other"))
 
 
 class PollingEvidenceTests(unittest.TestCase):

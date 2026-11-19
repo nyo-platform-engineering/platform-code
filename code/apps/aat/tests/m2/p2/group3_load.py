@@ -90,7 +90,8 @@ def load(run, name, action=None, strict=False):
             result = validate_summary(summary, config.load_vus, config.load_seconds, strict)
             result["actions"] = actions
             time.sleep(2)
-            require(not run.logs.errors, "log collection interrupted during load")
+            run.save(name + "-load-result.json", result)
+            require(not run.logs.errors, "log collection interrupted during load: " + "; ".join(run.logs.errors[:3]))
             result["polling_during_load"] = polling_evidence(run.logs.snapshot(), measurement, measurement + config.load_seconds, config.poll_interval)
             return result
         finally:
@@ -138,9 +139,13 @@ def throughput(run):
         run.replicas(count)
         results[count] = load(run, f"throughput-{count}")
     ratio = results[3]["successes_per_second"] / results[1]["successes_per_second"]
-    require(ratio >= 2, f"3-replica throughput is {ratio:.2f}x baseline, below 2.0x")
-    return {"one": results[1], "three": results[3], "ratio": ratio,
-            "workload": "same VUs, duration, route, query and resource limits; successful responses only"}
+    comparison = {"one": results[1], "three": results[3], "ratio": ratio,
+                  "workload": "same VUs, duration, route, query and resource limits; successful responses only"}
+    run.save("throughput-comparison.json", comparison)
+    require(ratio >= 2, f"3-replica throughput is {ratio:.2f}x baseline, below 2.0x "
+            f"(1 replica: {results[1]['successes_per_second']:.2f} successful RPS; "
+            f"3 replicas: {results[3]['successes_per_second']:.2f} successful RPS)")
+    return comparison
 
 
 def rolling(run):

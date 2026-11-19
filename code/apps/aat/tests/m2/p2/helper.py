@@ -9,7 +9,6 @@ import os
 import re
 from pathlib import Path
 import subprocess
-import sys
 import threading
 import time
 import urllib.error
@@ -19,8 +18,25 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[3]
 INFRA = ROOT.parents[1] / "infrastructure"
 NAMESPACE = "sistem-informasi-kebencanaan-bnpb"
-sys.path.insert(0, str(ROOT / "scripts"))
-from analytics_http import API, NoRedirect
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def read_credentials(env_file):
+    credentials = {}
+    if env_file:
+        for line in Path(env_file).read_text().splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            key, separator, value = line.partition("=")
+            if not separator or not key.isidentifier():
+                raise ValueError("invalid environment file")
+            credentials[key] = value
+    credentials.update(os.environ)
+    return credentials
 
 
 def utc():
@@ -115,10 +131,31 @@ class Logs:
         self.lock, self.stop = threading.Lock(), threading.Event()
         self.traffic = Counter()
         self.seen = set()
+        self.pod_states = {}
 
     def start(self):
         self.watch = threading.Thread(target=self.discover, daemon=True)
         self.watch.start()
+
+    def record_error(self, message):
+        message = safe_error(message, self.run.credentials)
+        with self.lock:
+            self.errors.append(message)
+            self.run.save("log-errors.json", list(self.errors))
+
+    def attachable(self, pod, previous):
+        if pod["metadata"].get("deletionTimestamp"):
+            return False
+        if previous is None and not ready(pod):
+            return False
+        if previous is not None:
+            # The pod may start terminating after the discovery snapshot.
+            current = next((p for p in self.run.pods()
+                            if p["metadata"]["uid"] == pod["metadata"]["uid"]), None)
+            if current is None or current["metadata"].get("deletionTimestamp"):
+                return False
+            self.record_error(f"log stream interrupted for {pod['metadata']['name']} (exit {previous.returncode})")
+        return True
 
     def discover(self):
         while not self.stop.is_set():
@@ -131,8 +168,14 @@ class Logs:
                     running = any(s.get("state", {}).get("running") for s in pod.get("status", {}).get("containerStatuses", []))
                     old = self.streams.get(uid)
                     if role in ("aggregator", "bmkg", "pvmbg") and running and (old is None or old.poll() is not None):
-                        if old is not None and not pod["metadata"].get("deletionTimestamp"):
-                            self.errors.append("log stream interrupted for " + name)
+                        if not self.attachable(pod, old):
+                            continue
+                        self.pod_states[uid] = {"pod": name, "attached_at": utc(), "containers": [
+                            {"name": s["name"], "restart_count": s.get("restartCount", 0),
+                             "last_termination": {k: v for k, v in s.get("lastState", {}).get("terminated", {}).items()
+                                                  if k in ("exitCode", "reason", "startedAt", "finishedAt")}}
+                            for s in pod.get("status", {}).get("containerStatuses", [])]}
+                        self.run.save("log-pods.json", self.pod_states)
                         process = subprocess.Popen(self.run.command("logs", "-f", name, "-n", NAMESPACE, "--tail=1000", "--request-timeout=0"),
                                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
                         self.streams[uid] = process
@@ -140,7 +183,7 @@ class Logs:
                         self.threads.append(thread)
                         thread.start()
             except Exception as error:
-                self.errors.append(type(error).__name__)
+                self.record_error(f"pod discovery: {type(error).__name__}: {error}")
             self.stop.wait(2)
 
     def read(self, process, pod, role):
@@ -282,7 +325,7 @@ class Run:
         self.wait(settled)
 
     def preflight(self):
-        self.credentials = API(self.config.url, self.config.env_file).credentials
+        self.credentials = read_credentials(self.config.env_file)
         require(all(self.credentials.get(k) for k in ("AGGREGATOR_TOKEN", "AUDIT_TOKEN")), "configure Aggregator and Audit tokens")
         require(self.credentials["AGGREGATOR_TOKEN"] != self.credentials["AUDIT_TOKEN"], "Audit token must be separate")
         nodes = self.kube("get", "nodes", "-o", "json")["items"]
@@ -405,7 +448,7 @@ class Run:
         time.sleep(self.config.observation_seconds)
         end = time.monotonic()
         time.sleep(2)
-        require(not self.logs.errors, "log collection has errors; evidence is incomplete")
+        require(not self.logs.errors, "log collection has errors; evidence is incomplete: " + "; ".join(self.logs.errors[:3]))
         result = polling_evidence(self.logs.snapshot(), start, end, self.config.poll_interval)
         result["audit"] = self.checkpoint("observation-" + os.urandom(3).hex(), wall, time.time())
         return result
