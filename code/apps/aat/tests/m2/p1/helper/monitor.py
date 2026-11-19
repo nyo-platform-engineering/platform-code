@@ -1,4 +1,5 @@
 """Background read/write probes, HTTP clients, and request evidence."""
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
@@ -103,6 +104,9 @@ class EvidenceAPI:
         self.folder = folder
         self.lock = threading.Lock()
         self.local = threading.local()
+        # Both endpoints share one read-admission slot in the default lab.
+        # Serialize runner reads across foreground checks and background probes.
+        self.read_slot = threading.Lock()
 
     def request(self, path, token, params=None, body=None):
         started = time.monotonic()
@@ -111,7 +115,14 @@ class EvidenceAPI:
             "at": utc(), "path": path,
             "method": "POST" if body is not None else "GET", "params": params,
         }
+        read_slot_acquired = False
         try:
+            if path in ("/internal/hazards", "/internal/analytics"):
+                queued_at = time.monotonic()
+                read_slot_acquired = self.read_slot.acquire(timeout=max(0, deadline - queued_at))
+                entry["read_queue_seconds"] = time.monotonic() - queued_at
+                if not read_slot_acquired:
+                    raise TimeoutError(f"{path}: runner read queue exceeded the request deadline")
             ensure = getattr(self.config, "ensure_endpoint", None)
             if ensure:
                 entry["tunnel_reconnected"] = ensure(deadline - time.monotonic())
@@ -137,6 +148,8 @@ class EvidenceAPI:
             entry.update(ok=False, error_type=type(error).__name__, error=str(error))
             raise
         finally:
+            if read_slot_acquired:
+                self.read_slot.release()
             entry["seconds"] = time.monotonic() - started
             with self.lock, (self.folder / "http.jsonl").open("a") as stream:
                 stream.write(json.dumps(entry, ensure_ascii=False, allow_nan=False) + "\n")
@@ -246,6 +259,10 @@ class Monitor:
                         self.reads += 1
                     except Exception as error:
                         message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+                        if message not in self.errors:
+                            output("PROBE GAGAL", f"{self.name} — pembacaan", message,
+                                   "Kesalahan ini dicatat dan akan menggagalkan tahap; "
+                                   "tidak dianggap respons parsial yang sah.")
                         self.errors.append(message)
                 if write:
                     write.result()
@@ -378,7 +395,13 @@ class Monitor:
         }
 
     def verify_window(self):
-        require(not self.errors, f"{self.name}: read or metrics probe failed; see monitor evidence")
+        if self.errors:
+            output("FAIL", f"{self.name} — rincian probe gagal",
+                   *(f"{count}x: {message}" for message, count in Counter(self.errors).items()),
+                   f"Bukti: {self.run.folder / (self.name + '-monitor.json')}",
+                   "HTTP 429 berarti kapasitas baca ditolak server; HTTP 500 dan timeout juga tetap gagal.")
+            raise ValueError(f"{self.name}: {len(self.errors)} probe gagal; "
+                             f"penyebab pertama: {self.errors[0]}")
         require(self.reads >= 3 and self.metric_samples >= 2, f"{self.name}: insufficient read/metrics samples")
         require(self.metrics_are_fresh(), f"{self.name}: metrics did not refresh")
         require(not self.target or self.target_seen, f"{self.name}: target node state was never observed")

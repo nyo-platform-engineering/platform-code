@@ -46,3 +46,7 @@ Jika pod Aggregator berganti, tunnel `kubectl` yang berhenti disambungkan ulang.
 Hanya GET yang boleh diulang sekali setelah tunnel mati; error HTTP, timeout, dan tulis
 dengan hasil tidak diketahui tetap gagal/dicatat. Reconnect ikut memakai batas waktu request
 dan tercatat di `http.jsonl` serta `result.json`.
+
+Runner mengantrekan `/internal/hazards` dan `/internal/analytics` agar probe sendiri
+tidak berebut satu slot baca pada konfigurasi lab. Penulisan tetap berjalan bersamaan.
+429 dari server tetap menggagalkan tahap dan penyebabnya dicetak langsung di terminal.
