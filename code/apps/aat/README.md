@@ -5,7 +5,7 @@ penyimpanan, polling otomatis beserta pencatatan kesehatan sumber, API internal
 Aggregator, Auth Service, Client-Facing API, NATS JetStream, dashboard updater,
 dan field notifier. Load testing sustained M1 tersedia di
 [panduan load testing](docs/load-testing.md). Test per problem tersedia di
-[panduan integration tests](tests/README.md), termasuk `test-problem-2.py` dan
+[panduan integration tests](tests/m1/README.md), termasuk `test-problem-2.py` dan
 `test-problem-3.py`. Laporan PDF M1 belum dibuat; audit implementasi tidak menggantikan laporan pengumpulan.
 
 Petunjuk demo tersedia di [demo data](docs/demo.md),
@@ -214,11 +214,11 @@ perubahan schema, outage, dan restart antartest tidak saling mengganggu.
 
 | Problem | Cara memicu | Yang diperiksa |
 | --- | --- | --- |
-| P1 — interoperabilitas | `python3 tests/test-problem-1.py`; tekan Enter saat diminta | Mapping kedua sumber; toggle schema PVMBG tanpa restart; `confidence_level` masuk `attributes` |
-| P2 — concurrency dan availability | Atur delay PVMBG 3 detik seperti contoh berikut, lalu `python3 tests/test-problem-2.py` | BMKG-only p95 <300 ms; load ≥50 VU selama ≥60 detik; metrik throughput/latensi/error/429; outage, stale, dan pemulihan |
-| P3 — autentikasi | `python3 tests/test-problem-3.py` | Kredensial silang ditolak; field Media dibatasi; access token kedaluwarsa alami, refresh, dan penolakan token lama |
-| P4 — service dan storage | `python3 tests/test-problem-4.py` | Stop/rebuild PVMBG tanpa restart service lain; atribut dinamis tanpa migrasi; isolasi Canonical Store |
-| P5 — pub-sub | `python3 tests/test-problem-5.py` | Dua consumer independen; stop/resume consumer dan backlog; container subscriber ketiga tanpa perubahan producer; deduplikasi |
+| P1 — interoperabilitas | `python3 tests/m1/test-problem-1.py`; tekan Enter saat diminta | Mapping kedua sumber; toggle schema PVMBG tanpa restart; `confidence_level` masuk `attributes` |
+| P2 — concurrency dan availability | Atur delay PVMBG 3 detik seperti contoh berikut, lalu `python3 tests/m1/test-problem-2.py` | BMKG-only p95 <300 ms; load ≥50 VU selama ≥60 detik; metrik throughput/latensi/error/429; outage, stale, dan pemulihan |
+| P3 — autentikasi | `python3 tests/m1/test-problem-3.py` | Kredensial silang ditolak; field Media dibatasi; access token kedaluwarsa alami, refresh, dan penolakan token lama |
+| P4 — service dan storage | `python3 tests/m1/test-problem-4.py` | Stop/rebuild PVMBG tanpa restart service lain; atribut dinamis tanpa migrasi; isolasi Canonical Store |
+| P5 — pub-sub | `python3 tests/m1/test-problem-5.py` | Dua consumer independen; stop/resume consumer dan backlog; container subscriber ketiga tanpa perubahan producer; deduplikasi |
 
 Persiapan P2: ubah dua nilai berikut di `.env`, lalu buat ulang hanya PVMBG:
 
@@ -229,7 +229,7 @@ PVMBG_DELAY_MAX_MS=3000
 
 ```sh
 docker compose -p aat-part1 -f compose.yaml -f compose.client.yaml up -d --no-deps pvmbg
-python3 tests/test-problem-2.py --vus 50 --seconds 65
+python3 tests/m1/test-problem-2.py --vus 50 --seconds 65
 ```
 
 Pertahankan TTL access default 60 detik untuk demo P3. P4 menghentikan dan
@@ -237,7 +237,7 @@ me-rebuild PVMBG; P5 menghentikan sementara dashboard updater dan menambahkan
 `test-consumer` melalui `compose.consumer.yaml` dengan project yang sama.
 Secara default P5 membiarkan container tambahan tersebut berjalan.
 
-Detail prasyarat dan hasil ada di [panduan integration tests](tests/README.md).
+Detail prasyarat dan hasil ada di [panduan integration tests](tests/m1/README.md).
 Demo manual tersedia untuk [schema/outage/kredensial silang](docs/demo.md),
 [login/field/refresh](docs/demo-client.md), dan
 [stop/resume/penambahan subscriber](docs/demo-events.md).

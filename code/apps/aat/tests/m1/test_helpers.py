@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SUMMARY = {'hazard_id', 'source', 'hazard_type', 'severity', 'area_name', 'occurred_at', 'ingested_at'}
 RAW = {'source_ref_id', 'latitude', 'longitude', 'attributes'}
 SECRET_KEYS = ('BMKG_API_KEY', 'PVMBG_TOKEN', 'AGGREGATOR_TOKEN', 'POSTGRES_PASSWORD',

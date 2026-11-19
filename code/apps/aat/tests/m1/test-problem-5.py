@@ -19,7 +19,7 @@ Flow:
   F. delivery semantics + idempotency (at-least-once + KV dedupe)
 
 Run from code/apps/aat:
-  python tests/test-problem-5.py
+  python tests/m1/test-problem-5.py
 
 Env (no secrets printed):
   PROJECT / COMPOSE_PROJECT_NAME   default aat-part1 (must match stack)
@@ -46,7 +46,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 COMPOSE_MAIN = "compose.yaml"
 COMPOSE_EXTRA = "compose.consumer.yaml"
