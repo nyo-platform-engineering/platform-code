@@ -670,59 +670,25 @@ sebelumnya, grafiknya diberi label belum mutakhir dan ekspor dinonaktifkan.
 Ketersediaan sumber ditampilkan terpisah: storage yang dapat dibaca tidak berarti
 semua sumber sudah berhasil mengirim kejadian terbaru.
 
-### Import katalog gempa
+### Import katalog dan verifikasi analitik P1
 
-Tool import memakai kontrak **SeismicEvent BMKG** yang sudah ada: JSON array atau
-NDJSON dengan `event_id`, `region_name`, `occurred_at` bertimezone,
-`epicenter_lat`, `epicenter_lon`, `magnitude`, `depth_km`, dan `potential_tsunami`
-(boolean). Field tambahan tetap diteruskan ke mapper. Bila format katalog asisten
-berbeda, petakan ke kontrak tersebut sebelum import; tool tidak menebak nama kolom.
-
-Jalankan dari `code/apps/aat`. Port-forward Aggregator pada terminal terpisah:
+Gunakan [suite M2 P1](tests/m2/p1/README.md) untuk memuat katalog, memeriksa
+sebaran data, dan mencocokkan agregasi dashboard dengan Audit API. Atur lokasi
+katalog dan checksum referensi pada `CONFIG` di
+[test-problem-1.py](tests/m2/p1/test-problem-1.py), lalu jalankan dari
+`code/infrastructure`:
 
 ```sh
-kubectl --kubeconfig ../../infrastructure/.state/kubeconfig \
-  -n sistem-informasi-kebencanaan-bnpb port-forward service/aggregator 8083:8083
+task m2:p1
 ```
 
-Validasi seluruh file dahulu, lalu import melalui jalur ingestion biasa:
+Katalog memakai kontrak **SeismicEvent BMKG**: JSON array atau NDJSON dengan
+`event_id`, `region_name`, `occurred_at` bertimezone, `epicenter_lat`,
+`epicenter_lon`, `magnitude`, `depth_km`, dan `potential_tsunami` (boolean).
+Bila format katalog asisten berbeda, petakan ke kontrak tersebut sebelum import.
+Validasi katalog dan perhitungan analitik berada di `tests/m2/p1/helper/`.
 
-```sh
-python3 scripts/import-catalog.py /path/katalog.json --dry-run
-python3 scripts/import-catalog.py /path/katalog.json \
-  --env-file ../../infrastructure/.env.runtime --batch-size 100
-```
-
-Seluruh input divalidasi sebelum request pertama. Setiap batch menggunakan transaksi
-endpoint ingestion; kegagalan di tengah file dapat dilanjutkan dengan menjalankan
-ulang tool. Payload identik didedup dan identitas event tetap dipertahankan. Tool
-menampilkan jumlah record, unique source_ref_id, serta checksum referensi katalog.
-Checksum katalog hanya mencakup ID pada file, sehingga tidak sama dengan checksum
-seluruh source jika sebelumnya sudah ada event BMKG lain.
-
-### Cocokkan dashboard dengan Audit API
-
-Gunakan dataset stabil selama pengambilan bukti. Verifier membaca seluruh halaman
-Audit API, memeriksa ordering/ID duplikat, menghitung checksum secara independen,
-kemudian membandingkan total, jenis bahaya, severity, wilayah, dan setiap bucket
-waktu dengan hasil analitik:
-
-```sh
-python3 scripts/verify-analytics.py \
-  --env-file ../../infrastructure/.env.runtime \
-  --from 2026-11-01T00:00:00Z --to 2026-11-19T00:00:00Z \
-  --interval day --source BMKG
-```
-
-Gunakan `--interval month` atau `year` untuk katalog yang mencakup bertahun-tahun.
-Tambahkan `--expected-count` dan `--expected-checksum` dari referensi asisten
-untuk memeriksa keseluruhan source, serta `--output /path/bukti.json` untuk menyimpan
-hasil. Tanpa referensi tersebut, hasil hanya membuktikan kecocokan internal dengan
-Audit API. Respons parsial, duplikat, data berubah saat export, atau angka yang
-berbeda menghasilkan exit nonzero; hasil tersebut tidak dinyatakan lulus.
-
-Untuk demo P1, simpan hasil sebelum gangguan, rekam response partial selama worker
-hilang, lalu ulangi verifier setelah recovery dan kehilangan worker berikutnya.
-Gunakan Tester Agent resmi pada VM untuk pembuktian akhir. Tool di bagian ini tidak
-mematikan node atau menghapus disk. Pengukuran beban saat import/lonjakan wilayah,
-dataset asisten yang sebenarnya, dan laporan final tetap memerlukan eksekusi demo.
+Suite juga menjalankan skenario kehilangan worker dan penghapusan data lokal;
+baca prosedur P1 sebelum menjalankannya. Dataset/checksum resmi asisten,
+rekaman dashboard di peramban, dan pengukuran disk/write IO tetap diperlukan
+sebagai bukti demo.

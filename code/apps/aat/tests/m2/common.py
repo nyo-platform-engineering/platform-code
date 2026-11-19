@@ -1,6 +1,7 @@
-"""Shared setup for the guided M2 P4 and P5 tests (same style as p1/helper.py).
+"""Shared M2 utilities and setup for the guided P4 and P5 tests.
 
-Both tests run against the Kubernetes lab (VM cluster, or `task up -- --novm` for
+P1 also reuses the paths, validation, timestamps, and console output here.
+The tests run against the Kubernetes lab (VM cluster, or `task up -- --novm` for
 development), read credentials from code/infrastructure/.env.runtime, reach the
 services through temporary `kubectl port-forward`s, and save evidence under
 docs/evidence/m2-p<n>-<timestamp>-<id>/.
@@ -90,19 +91,25 @@ def json_logs(text, *messages):
             yield record
 
 
+def kubectl(config, *command, json_output=False, timeout=60,
+            request_timeout="20s", namespace=NAMESPACE):
+    """Run kubectl without an instance; callers choose namespace and time bounds."""
+    args = ["kubectl", "--kubeconfig", str(config.kubeconfig)]
+    if namespace is not None:
+        args.extend(["-n", namespace])
+    args.extend([f"--request-timeout={request_timeout}", *command])
+    completed = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    require(completed.returncode == 0, "kubectl failed: " + " ".join(command[:3]) + ": "
+            + (completed.stderr or "").strip()[-300:])
+    return json.loads(completed.stdout) if json_output else completed.stdout
+
+
 class Cluster:
     def __init__(self, config):
         self.config = config
 
     def kubectl(self, *command, json_output=False, timeout=60):
-        completed = subprocess.run(
-            ["kubectl", "--kubeconfig", str(self.config.kubeconfig), "-n", NAMESPACE,
-             "--request-timeout=20s", *command],
-            capture_output=True, text=True, timeout=timeout,
-        )
-        require(completed.returncode == 0, "kubectl failed: " + " ".join(command[:3]) + ": "
-                + (completed.stderr or "").strip()[-300:])
-        return json.loads(completed.stdout) if json_output else completed.stdout
+        return kubectl(self.config, *command, json_output=json_output, timeout=timeout)
 
     def nodes(self):
         return self.kubectl("get", "nodes", "-o", "json", json_output=True)["items"]
@@ -203,7 +210,7 @@ class Run:
         return data
 
     def save(self, name, data):
-        (self.folder / name).write_text(json.dumps(self.clean(data), indent=2, ensure_ascii=False) + "\n")
+        (self.folder / name).write_text(json.dumps(self.clean(data), indent=2, ensure_ascii=False, allow_nan=False) + "\n")
 
     def stage(self, name, operation, *args, **kwargs):
         output("RUN", name)
