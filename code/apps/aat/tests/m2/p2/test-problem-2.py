@@ -83,7 +83,7 @@ def main():
         return 2
     config = replace(CONFIG)
     name = "m2-p2-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S").lower() + "-" + uuid.uuid4().hex[:8]
-    folder = Path(config.output_dir or ROOT / "docs/evidence" / name).resolve()
+    folder = Path(config.output_dir or Path(__file__).resolve().parent / "evidence" / name).resolve()
     folder.mkdir(parents=True, exist_ok=False)
     run = Run(config, folder, name)
     code = 1

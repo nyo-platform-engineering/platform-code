@@ -192,8 +192,15 @@ class Forwards:
 class Run:
     """Shared run state: config, cluster access, HTTP with evidence, report."""
 
-    def __init__(self, problem, config, manual_evidence, folder):
-        self.problem, self.config, self.folder = problem, config, folder
+    def __init__(self, problem, config, manual_evidence, folder=None, *, evidence_root=None):
+        self.problem, self.config = problem, config
+        if folder is not None:
+            self.folder = Path(folder).resolve()
+        else:
+            stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
+            base = Path(evidence_root) if evidence_root is not None else ROOT / "docs/evidence"
+            self.folder = (config.output_dir or base / f"m2-p{problem}-{stamp}-{uuid.uuid4().hex[:8]}").resolve()
+            self.folder.mkdir(parents=True, exist_ok=False)
         self.env = read_env(config.env_file)
         self.cluster = Cluster(config)
         self.forwards = Forwards(config, self.folder)

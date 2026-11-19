@@ -1,6 +1,6 @@
 """P2 cluster access, evidence, polling observations, and cleanup."""
 from collections import Counter, defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import datetime as dt
 import hashlib
 import json
@@ -9,11 +9,15 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from run_progress import Progress
 
 ROOT = Path(__file__).resolve().parents[3]
 INFRA = ROOT.parents[1] / "infrastructure"
@@ -243,6 +247,7 @@ class Run:
         self.logs = Logs(self)
         self.cleanup = []
         self.previous = set()
+        self.progress = None
         self.report = {"problem": "M2 P2", "started_at": utc(), "checks": {},
                        "route_name": run_id, "worker": config.worker, "source": config.source,
                        "full_demo_certified": False, "selected_groups": list(config.groups),
@@ -272,7 +277,13 @@ class Run:
     def stage(self, name, operation):
         output("RUN", name)
         try:
-            result = operation()
+            with Progress(self.folder, name, clean=lambda text: safe_error(text, self.credentials),
+                          writer=lambda text: output("WAIT", text)) as progress:
+                self.progress = progress
+                try:
+                    result = operation()
+                finally:
+                    self.progress = None
             self.report["checks"][name] = {"status": "pass", "result": result}
             output("PASS", name)
             return result
@@ -287,7 +298,20 @@ class Run:
         output("SKIP", f"{name}: {reason}")
 
     def prompt(self, message):
-        input(f"\n{message}\nPress Enter to continue: ")
+        with self.phase("waiting for Enter", quiet=True):
+            input(f"\n{message}\nPress Enter to continue: ")
+
+    def phase(self, description, timeout=None, quiet=False, announce=True):
+        progress = getattr(self, "progress", None)
+        return progress.phase(description, timeout, quiet, announce) if progress else nullcontext()
+
+    def status(self, detail):
+        if getattr(self, "progress", None):
+            self.progress.detail(detail)
+
+    def pause(self, seconds, description):
+        with self.phase(description, max(0, seconds)):
+            time.sleep(max(0, seconds))
 
     def request(self, path, token="AGGREGATOR_TOKEN", params=None):
         url = self.config.url.rstrip("/") + path
@@ -303,14 +327,16 @@ class Run:
         except urllib.error.HTTPError as error:
             raise ValueError(f"{path}: HTTP {error.code}") from None
 
-    def wait(self, operation, timeout=None):
-        deadline = time.monotonic() + (timeout or self.config.recovery_seconds)
-        while True:
-            result = operation()
-            if result:
-                return result
-            require(time.monotonic() < deadline, "timed out waiting for required state")
-            time.sleep(1)
+    def wait(self, operation, timeout=None, description="required state"):
+        timeout = timeout or self.config.recovery_seconds
+        deadline = time.monotonic() + timeout
+        with self.phase(description, timeout):
+            while True:
+                result = operation()
+                if result:
+                    return result
+                require(time.monotonic() < deadline, "timed out waiting for " + description)
+                time.sleep(1)
 
     def replicas(self, count):
         self.kube("scale", "deployment/aggregator", "-n", NAMESPACE, f"--replicas={count}", json_output=False)
@@ -319,10 +345,14 @@ class Run:
             pods = [p for p in self.pods() if p["metadata"].get("labels", {}).get("role") == "aggregator"
                     and not p["metadata"].get("deletionTimestamp")]
             status = deployment.get("status", {})
+            self.status(f"target={count}; updated={status.get('updatedReplicas', 0)}; "
+                        f"Ready={sum(ready(p) for p in pods)}/{len(pods)}; "
+                        + ", ".join(p["metadata"]["name"] + ":" + p.get("status", {}).get("phase", "Unknown")
+                                    for p in pods if not ready(p)))
             return (status.get("observedGeneration", 0) >= deployment["metadata"]["generation"]
                     and status.get("updatedReplicas", 0) == count and len(pods) == count
                     and all(ready(p) for p in pods))
-        self.wait(settled)
+        self.wait(settled, description=f"Aggregator rollout to {count} Ready replicas")
 
     def preflight(self):
         self.credentials = read_credentials(self.config.env_file)
@@ -393,12 +423,17 @@ class Run:
         self.replicas(self.original_replicas)
 
     def audit(self):
+        with self.phase("exporting Audit events and checking identities"):
+            return self._audit()
+
+    def _audit(self):
         cursor, seen, identities, items, versions, hazard_keys = None, set(), {}, [], set(), {}
         for _ in range(10000):
             params = {"limit": 1000}
             if cursor:
                 params["cursor"] = cursor
             page = self.request("/internal/audit/events", "AUDIT_TOKEN", params)
+            self.status(f"page={_ + 1}; events read={len(items) + len(page.get('items', []))}")
             require(page.get("partial") is False and page.get("unavailable_units") == [], "Audit export is incomplete")
             for event in page["items"]:
                 key = (event["source"], event["source_ref_id"])
@@ -436,16 +471,17 @@ class Run:
                 return {"logical_events": len({(e['source'], e['source_ref_id']) for e in events}),
                         "previous_identities_preserved": True, "mock_window": [start_wall, end_wall],
                         "expected_mock_events_checked": dict(expected)}
-            except ValueError:
+            except ValueError as error:
+                self.status("last reconciliation issue: " + str(error))
                 return False
-        result = self.wait(reconcile)
+        result = self.wait(reconcile, description="Audit reconciliation: " + name)
         self.save(name + "-audit.json", result)
         return result
 
     def observe(self):
         start, wall = time.monotonic(), time.time()
         self.audit()
-        time.sleep(self.config.observation_seconds)
+        self.pause(self.config.observation_seconds, "observing upstream polling and ownership")
         end = time.monotonic()
         time.sleep(2)
         require(not self.logs.errors, "log collection has errors; evidence is incomplete: " + "; ".join(self.logs.errors[:3]))
@@ -464,14 +500,25 @@ class Run:
         return self
 
     def __exit__(self, *_):
-        errors = []
-        for operation in reversed(self.cleanup):
+        with Progress(self.folder, "cleanup", clean=lambda text: safe_error(text, self.credentials),
+                      writer=lambda text: output("WAIT", text)) as progress:
+            self.progress = progress
             try:
-                operation()
+                self.restore_run()
+            finally:
+                self.progress = None
+
+    def restore_run(self):
+        errors = []
+        for index, operation in enumerate(reversed(self.cleanup), 1):
+            try:
+                with self.phase(f"restoring cluster settings {index}/{len(self.cleanup)}"):
+                    operation()
             except BaseException as error:
                 errors.append(type(error).__name__)
         if self.logs_started:
-            self.logs.close()
+            with self.phase("closing log collector"):
+                self.logs.close()
         self.report["cleanup_errors"] = errors
         if errors:
             raise ValueError("cleanup incomplete: restore deployment, workers, and Argo reconciliation before another run")

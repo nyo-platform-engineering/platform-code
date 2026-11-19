@@ -15,9 +15,11 @@ def topology(run):
     require({p["metadata"]["uid"] for p in pods} <= routed, "Ready replicas missing from Service endpoints")
     before = dict(run.logs.traffic)
     for _ in range(60):
+        run.status(f"load-balancer probe {_ + 1}/60")
         page = run.request("/internal/hazards", params={"limit": 1})
         require(isinstance(page.get("items"), list), "invalid routed response")
-    run.wait(lambda: len([uid for uid, count in run.logs.traffic.items() if count > before.get(uid, 0)]) >= 3, timeout=15)
+    run.wait(lambda: len([uid for uid, count in run.logs.traffic.items() if count > before.get(uid, 0)]) >= 3,
+             timeout=15, description="requests observed on three Aggregator backends")
     return {"pods": [{"name": p["metadata"]["name"], "uid": p["metadata"]["uid"], "node": p["spec"]["nodeName"]} for p in pods],
             "three_backends_observed": True, "ready_endpoints": sorted(routed)}
 
@@ -28,7 +30,8 @@ def takeover(run):
     run.prompt(f"P2.3: delete active {run.config.source} owner pod {old['pod']} (epoch {old_epoch}); no node/data erasure.")
     run.audit()
     wall, started = time.time(), time.monotonic()
-    run.kube("delete", "pod", old["pod"], "-n", NAMESPACE, "--grace-period=0", "--force", "--wait=false", json_output=False)
+    with run.phase("deleting active owner pod " + old["pod"], 30):
+        run.kube("delete", "pod", old["pod"], "-n", NAMESPACE, "--grace-period=0", "--force", "--wait=false", json_output=False)
 
     def new_success():
         matches = [r for r in run.logs.snapshot() if r["observed"] >= started and not r.get("initial")
@@ -36,18 +39,20 @@ def takeover(run):
                    and int(r["log"].get("epoch", 0)) > old_epoch and r["pod_uid"] != old["pod_uid"]]
         return min(matches, key=lambda r: r["observed"]) if matches else False
 
-    success = run.wait(new_success, timeout=run.config.takeover_seconds)
+    success = run.wait(new_success, timeout=run.config.takeover_seconds,
+                       description=f"{run.config.source} takeover: successful poll with epoch > {old_epoch}")
     elapsed = success["observed"] - started
     require(elapsed <= 60, "takeover exceeded 60 seconds")
     def removed():
         slices = run.kube("get", "endpointslices", "-n", NAMESPACE, "-l", "kubernetes.io/service-name=aggregator", "-o", "json")
         return not any(e.get("targetRef", {}).get("uid") == old["pod_uid"] and e.get("conditions", {}).get("ready") is True
                        for s in slices["items"] for e in s.get("endpoints", []))
-    run.wait(removed, timeout=30)
+    run.wait(removed, timeout=30, description="old owner removed from Ready Service endpoints")
     for _ in range(10):
         run.request("/internal/hazards", params={"limit": 1})
     run.replicas(3)
-    time.sleep(max(0, 3 * max(run.config.event_intervals.values()) - (time.time() - wall)))
+    run.pause(max(0, 3 * max(run.config.event_intervals.values()) - (time.time() - wall)),
+              "collecting enough mock events after takeover")
     audit = run.checkpoint("takeover", wall, time.time())
     return {"old_pod": old["pod"], "old_epoch": old_epoch, "new_pod": success["pod"],
             "new_epoch": success["log"]["epoch"], "takeover_seconds_upper_bound": elapsed,

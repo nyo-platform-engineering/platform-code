@@ -44,6 +44,11 @@ tasks:
     interactive: true
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p2/test-problem-2.py"'
+  m2:p3:
+    desc: Run guided M2 P3 schema, poison, replay and durable field-report checks on an isolated lab
+    interactive: true
+    cmds:
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p3/test-problem-3.py"'
   m2:p4:
     desc: Run the guided M2 P4 test (Feed Satelit); needs SATELLITE_GROUP_TOKEN in .env.runtime
     interactive: true

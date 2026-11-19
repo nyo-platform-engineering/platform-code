@@ -4,13 +4,15 @@ These are guided, interactive runs against the Kubernetes lab (VM cluster, or
 `task up -- --novm` for development). Run them from `code/infrastructure`; each one
 uses `.env.runtime` and `.state/kubeconfig`, keeps its settings in `CONFIG` at the
 top of its `test-problem-N.py`, waits for **Enter** between steps, and saves
-evidence. P1, P4 and P5 write to `tests/m2/p<N>/evidence/m2-p<N>-<timestamp>-<id>/`
-(`result.json`, `http.jsonl`, the full terminal session in `console.log`) and ask
-before each run whether to delete older folders (**Enter** keeps them). P2 still
-writes to `docs/evidence/m2-p2-<timestamp>-<id>/`.
+evidence to `tests/m2/p<N>/evidence/m2-p<N>-<timestamp>-<id>/`
+(`result.json`, `http.jsonl`). P1, P4 and P5 also save the full terminal session
+in `console.log` and ask before each run whether to delete older folders
+(**Enter** keeps them). P2/P3 print wait progress every five seconds and save
+`progress.jsonl`.
 
 - [Problem 1: distributed storage and recovery](p1/README.md) — `task m2:p1`.
 - [Problem 2: Aggregator coordination, failover and scaling](p2/README.md) — configure the run, then `task m2:p2`.
+- [Problem 3: schema, poison messages, replay and durable field reports](p3/README.md) — `task m2:p3` on an isolated lab.
 - Problem 4: Feed Satelit — `task m2:p4` ([p4/](p4/)).
 - Problem 5: Sensor Pantai — `task m2:p5` ([p5/](p5/)).
 

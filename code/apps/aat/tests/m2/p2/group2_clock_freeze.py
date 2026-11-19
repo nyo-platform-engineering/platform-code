@@ -54,20 +54,23 @@ def freeze(run):
     run.prompt(f"P2.5: suspend {run.config.worker} for {run.config.freeze_seconds}s, then resume it. This freezes every workload on that worker.")
     started, wall = time.monotonic(), time.time()
     def action(command):
-        subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker], cwd=INFRA, check=True, timeout=90)
+        with run.phase(command + ": " + run.config.worker, 90):
+            subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker], cwd=INFRA, check=True, timeout=90)
     run.cleanup.append(lambda: action("resume-worker"))
     try:
         action("suspend-worker")
-        time.sleep(run.config.freeze_seconds)
+        run.pause(run.config.freeze_seconds, "holding worker frozen")
         new = run.wait(lambda: next((r for r in run.logs.snapshot() if r["observed"] >= started
                            and r["node"] != run.config.worker and r["log"].get("msg") == "poll succeeded"
                            and r["log"].get("source") == run.config.source
-                           and int(r["log"].get("epoch", 0)) > epoch), False), timeout=run.config.takeover_seconds)
+                           and int(r["log"].get("epoch", 0)) > epoch), False), timeout=run.config.takeover_seconds,
+                       description="successful takeover while worker is frozen")
     finally:
         action("resume-worker")
         run.cleanup.pop()
     resumed = time.monotonic()
-    run.wait(lambda: any(p["metadata"]["name"] == old["pod"] and ready(p) for p in run.pods()))
+    run.wait(lambda: any(p["metadata"]["name"] == old["pod"] and ready(p) for p in run.pods()),
+             description="original pod Ready after worker resume")
     run.checkpoint("freeze-recovered")
     result = run.observe()
     stale = [r for r in run.logs.snapshot() if r["observed"] >= resumed and r["pod_uid"] == old["pod_uid"]

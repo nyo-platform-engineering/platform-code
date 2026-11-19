@@ -55,6 +55,17 @@ def summary():
 
 
 class HelperCompatibilityTests(unittest.TestCase):
+    def test_wait_timeout_keeps_the_condition_name(self):
+        run = object.__new__(p2_helper.Run)
+        run.config = SimpleNamespace(recovery_seconds=5)
+        clock = [0]
+        def stalled():
+            clock[0] = 6
+            return False
+        with patch.object(p2_helper.time, "monotonic", side_effect=lambda: clock[0]):
+            with self.assertRaisesRegex(ValueError, "timed out waiting for new owner"):
+                run.wait(stalled, description="new owner")
+
     def test_initial_attachment_waits_for_ready(self):
         logs = p2_helper.Logs(SimpleNamespace(credentials={}))
         pod = {"metadata": {"uid": "starting", "name": "aggregator-starting"}}

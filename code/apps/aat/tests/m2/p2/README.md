@@ -89,7 +89,7 @@ the candidate rolling image into **all nodes**; a missing/unavailable image must
 fail rather than being counted as a successful rollout. A same-image restart
 does not satisfy P2.8; without a candidate that criterion is SKIP.
 
-Evidence is written to `docs/evidence/m2-p2-<timestamp>-<id>/`:
+Evidence is written to `tests/m2/p2/evidence/m2-p2-<timestamp>-<id>/` (ignored by Git):
 
 - `result.json`: individual pass/fail/skip, measurements, cleanup errors, limits.
 - `deployment-baseline.json`: original image, resources, strategy and node kernels.
@@ -99,6 +99,14 @@ Evidence is written to `docs/evidence/m2-p2-<timestamp>-<id>/`:
   HTTP status counters distinguish transport errors (status 0) from HTTP errors.
 - `scale-transitions.json`: requested and Ready times for each replica transition, including failed runs.
 - `kubectl-errors.jsonl`: bounded/redacted stderr when a Kubernetes command fails.
+- `progress.jsonl`: timestamped phases, wait durations, budgets and last observed state.
+
+While an automated stage or cleanup is waiting, `[WAIT]` appears every five
+seconds. It names the current operation: owner takeover, Ready replicas, Audit
+pages, VM actions or the active k6 run. Ready counts and retry/reconciliation
+details show the last observation. Messages pause at Enter prompts. A heartbeat
+shows that the runner is waiting; it does not claim the underlying condition has
+advanced or passed. Existing timeouts and pass/fail thresholds are unchanged.
 
 Each generator log is capped at 2 MiB; repeated connection errors are counted in
 the k6 summary instead of filling the disk with warning lines. If the local stack

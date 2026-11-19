@@ -78,12 +78,14 @@ def load(run, name, action=None, strict=False):
         reader.start()
         try:
             deadline = time.monotonic() + 90 + config.warmup_seconds
-            while not started.wait(0.2):
-                require(process.poll() is None, "k6 exited before measurement; see generator log")
-                require(time.monotonic() < deadline, "load generator did not enter measurement")
+            with run.phase(f"k6 {name}: starting and warming up ({config.warmup_seconds}s warmup)", 90 + config.warmup_seconds):
+                while not started.wait(0.2):
+                    require(process.poll() is None, "k6 exited before measurement; see generator log")
+                    require(time.monotonic() < deadline, "load generator did not enter measurement")
             measurement = time.monotonic()
-            actions = action(measurement, process) if action else None
-            code = process.wait(timeout=config.load_seconds + 60)
+            with run.phase(f"k6 {name}: measured traffic ({config.load_vus} VUs, {config.load_seconds}s)", config.load_seconds):
+                actions = action(measurement, process) if action else None
+                code = process.wait(timeout=config.load_seconds + 60)
             summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
             require(code == 0, failure_message(summary, code))
             require(summary_path.is_file(), "k6 summary missing")
