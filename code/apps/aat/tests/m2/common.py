@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import textwrap
 import threading
 import time
@@ -65,7 +66,12 @@ def output(kind, title, *details):
                 lines.append(textwrap.fill(line, width=100, initial_indent="  ", subsequent_indent="  ",
                                            break_long_words=False, break_on_hyphens=False))
     with OUTPUT_LOCK:
-        print("\n".join(lines), flush=True)
+        # P1 can log the complete block while presenting a compact terminal view.
+        writer = getattr(sys.stdout, "write_output", None)
+        if writer is not None:
+            writer(kind, title, details, "\n".join(lines) + "\n")
+        else:
+            print("\n".join(lines), flush=True)
 
 
 def read_env(path):

@@ -8,7 +8,9 @@ task m2:p1
 
 Atur katalog, checksum referensi, dan worker di `CONFIG` pada
 [test-problem-1.py](test-problem-1.py). Tekan **Enter** untuk melanjutkan tiap tahap.
-Output tiap tahap menjelaskan tujuan kriteria, langkah pemeriksaan, hasil, batasan, dan lokasi bukti.
+Terminal menampilkan ringkasan; output lengkap (tujuan, langkah, hasil, batasan)
+tersimpan di `console.log` pada folder evidence. Progress terminal dibatasi tiap
+30 detik. Set `CONFIG.verbose_output=True` untuk detail penuh di terminal.
 Mode otomatis mematikan worker dan menghapus data store lokal sebelum membangunnya kembali.
 
 ## Kriteria penyelesaian
@@ -34,7 +36,8 @@ harus ditunjukkan langsung di peramban, terpisah dari dashboard metrik.
 ## Bukti dan batasan
 
 Hasil tersimpan di `code/apps/aat/tests/m2/p1/evidence/m2-p1-*/`: `result.json`,
-rekaman HTTP, metrik per node, penempatan data, dan checkpoint checksum/analitik.
+output lengkap `console.log`, rekaman HTTP, metrik per node, penempatan data,
+dan checkpoint checksum/analitik.
 Sebelum setiap run, pilih apakah folder evidence P1 lama dihapus; **Enter** menyimpannya.
 
 Dataset bawaan adalah **mock pengembangan**, bukan katalog/checksum resmi asisten.

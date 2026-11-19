@@ -492,6 +492,7 @@ def read_checksums(run):
 def verify_sources(before_sums, after_sums, before_events, after_events):
     """An exact checksum comparison requires identical bookend source identities."""
     results = {}
+    growing = []
     for source, first in before_sums.items():
         last = after_sums[source]
         old_rows = [e for e in before_events if source == "all" or e["source"] == source]
@@ -504,14 +505,19 @@ def verify_sources(before_sums, after_sums, before_events, after_events):
             verify_checksum(last, new_rows)
         else:
             require(last["count"] > first["count"], f"{source}: checksum changed without source growth")
-            output("INFO", "Information", f"{source}: source grew {first['count']} → {last['count']}; "
-                  "whole-source checksum comparison is not a shared snapshot.")
+            growing.append(f"{source}: {first['count']} → {last['count']} (+{last['count'] - first['count']})")
         results[source] = {
             "before": first, "after": last,
             "independent_checksum_verified": unchanged,
             "status": "exact_match" if unchanged else "concurrent_writes_observed",
             "exported_before": len(old_rows), "exported_after": len(new_rows),
         }
+    if growing:
+        output("INFO", "Feed masih menambah event selama pemeriksaan", growing[0],
+               "Angka sebelum dan sesudah diambil pada waktu berbeda, bukan satu snapshot database.",
+               "Checksum seluruh source yang bertambah tidak diklaim sama. Checksum katalog referensi "
+               "tetap diperiksa tepat; event stabil dan data yang sudah diketahui tetap harus terjaga.",
+               *growing[1:])
     return results
 
 
