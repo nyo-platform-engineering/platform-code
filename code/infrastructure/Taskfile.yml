@@ -34,9 +34,11 @@ tasks:
   clock:sync:
     desc: Configure chrony and wait for clock synchronization on existing VMs
     cmds: [bash scripts/vm/clock.sh sync]
-  verify:storage-isolation:
-    desc: Verify Citus ingress from existing application pods and save JSON evidence
-    cmds: [python3 scripts/verify/storage-isolation.py]
+  m2:p1:
+    desc: Run the guided M2 P1 test; press Enter between steps
+    interactive: true
+    cmds:
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p1/test-problem-1.py"'
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
     cmds: [bash scripts/tester/main.sh install]
