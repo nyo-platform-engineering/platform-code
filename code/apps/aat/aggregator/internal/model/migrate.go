@@ -11,7 +11,7 @@ var retiredConstraints = []string{"hazards_source_check", "hazards_hazard_type_c
 
 // Serialize startup migrations across aggregator replicas.
 func Migrate(ctx context.Context, db *gorm.DB) error {
-	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("SELECT pg_advisory_xact_lock(403100)").Error; err != nil {
 			return err
 		}
@@ -42,5 +42,15 @@ func Migrate(ctx context.Context, db *gorm.DB) error {
 			}
 		}
 		return tx.AutoMigrate(&SeismicEvent{}, &TsunamiWarning{}, &HazardEvent{}, &PollState{}, &PollOwner{}, &InboxMessage{}, &FieldReportSubmission{}, &FieldReport{}, &HazardOutbox{}, &SatelliteDetection{}, &SatelliteFire{}, &SatelliteFeed{}, &SatelliteReject{}, &SensorStation{}, &SensorState{})
+	}); err != nil {
+		return err
+	}
+	// Citus forbids function DDL after parallel distributed operations in one
+	// transaction. Install invalidation separately, before this process serves.
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(403100)").Error; err != nil {
+			return err
+		}
+		return migrateReadRevision(tx)
 	})
 }

@@ -548,7 +548,19 @@ Konfigurasi Aggregator tambahan:
 | `STORE_BACKEND` | `citus`; kosong/`postgres` untuk development M1 |
 | `CITUS_MEMBERS_FILE` | `/etc/citus/members.json`, inventory dari ConfigMap storage |
 | `AUDIT_TOKEN` | Secret tersendiri, berbeda dari token aplikasi |
+| `READ_RPS_LIMIT` | `80` read/detik per replica untuk gabungan hazards dan analytics; `0` menonaktifkan batas (default non-Kubernetes) |
+| `READ_RPS_BURST` | `20` token maksimum per replica |
 | `POSTGRES_REPLICATION_PASSWORD` | Secret khusus koneksi replikasi, dibuat bootstrap |
+
+Read admission memakai token bucket per proses, sebelum cache dan query database.
+Tiga replica memiliki total batas nominal 240 read/detik; distribusi routing dapat
+membuat hasil aktual lebih rendah. Request berlebih segera mendapat HTTP 429 dan
+`Retry-After: 1`, tanpa antrean tambahan. Health, Audit, polling, dan ingest tidak
+memakai bucket ini. Batas konkurensi database tetap berlaku secara terpisah.
+Nilai batas harus sama pada semua replica dan semua sampel benchmark. Rasio dari
+pengujian dengan rate cap mengukur kapasitas admission yang dikonfigurasi, bukan
+kapasitas maksimum tanpa pembatasan. Rolling update tetap harus diuji dengan beban
+di bawah kapasitas yang tersedia agar tidak ada request gagal atau ditolak.
 
 API biasa mendukung `GET /hazards?order=recent&limit=50` dan `cursor` dari
 `next_cursor`, diurutkan global menurut `occurred_at DESC, hazard_id DESC`.
@@ -561,6 +573,32 @@ pagination dapat mengubah keanggotaan halaman. Untuk pembandingan checksum demo,
 gunakan dataset stabil dan catat waktu pengukuran. Write canonical, source cursor,
 dan outbox tetap berada dalam satu transaksi; kegagalan transaksi tidak dianggap
 sebagai ingest berhasil.
+
+Halaman awal `order=recent` dengan limit sampai 100 memakai cache JSON per
+Aggregator, dibatasi 32 entri/4 MiB dan 1 MiB per respons. Setiap hit tetap membaca
+`hazard_read_revision` pada coordinator. Trigger INSERT outbox menaikkan revisi
+dalam transaksi write yang sama, termasuk write dari binary lama saat rolling
+update. Revisi yang berubah/tidak dapat dibaca tidak boleh memakai cache lama;
+hasil parsial dan halaman lanjutan tidak dicache. Cache baru diisi jika revisi
+sebelum/sesudah pembacaan sama. Tidak ada TTL yang mengizinkan data stale.
+JSON dan gzip dibuat sekali saat pengisian; `Accept-Encoding` menentukan respons
+yang dikirim, dengan `Vary: Accept-Encoding`. Kedua bentuk masuk batas memori cache.
+Cache hit tidak memegang slot query terdistribusi, tetapi tetap dibatasi 128
+request aktif per replica dan connection pool yang sama. Cache miss dan analitik
+tetap memakai batas konkurensi query database.
+Request yang sudah antre dapat memvalidasi revisi melalui satu SELECT bersama.
+Request yang datang setelah SELECT dimulai masuk batch berikutnya, sehingga
+pembacaan revisi tidak mendahului kedatangan request yang memakainya.
+Saat halaman yang sama belum dicache, satu request mengisinya sementara request
+lain menunggu dengan deadline yang sama. Setelah menunggu, revisi diperiksa lagi;
+hasil partial atau revisi yang berubah tidak dipakai sebagai cache lengkap.
+Penulisan canonical harus melalui transaksi HazardEvent + outbox; perubahan SQL
+langsung di luar kontrak itu tidak didukung oleh invalidasi cache.
+
+Query recent mengambil sort key lintas shard lebih dahulu, lalu mengambil payload
+JSON untuk hasil akhir dalam satu statement SQL. Ini menghindari pemindahan
+payload besar dari setiap kandidat shard. Audit dan analitik tetap membaca
+penyimpanan langsung; cache ini tidak mengubah perhitungan dashboard.
 
 Selama worker belum tersedia, query dibatasi waktu dan mengembalikan HTTP 200,
 `partial:true`, serta `unavailable_units`; checksum bernilai null. Bila query SQL

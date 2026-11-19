@@ -49,6 +49,7 @@ func main() {
 		panic("DB_MAX_CONNS must be at least 3: two polling sessions plus API connections")
 	}
 	sqlDB.SetMaxOpenConns(maxConns)
+	sqlDB.SetMaxIdleConns(maxConns)
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
 		DisableAutomaticPing: true,
 		Logger:               logger.Default.LogMode(logger.Silent),
@@ -65,9 +66,15 @@ func main() {
 	if auditToken != "" && (auditToken == token || auditToken == os.Getenv("BMKG_API_KEY") || auditToken == os.Getenv("PVMBG_TOKEN")) {
 		panic("AUDIT_TOKEN must differ from application tokens")
 	}
-	ctrl := &controller.Controller{DB: db, Store: storage.NewPostgres(db, storage.Identity{
+	ctrl := &controller.Controller{DB: db, PageCache: &controller.HazardPageCache{}, Store: storage.NewPostgres(db, storage.Identity{
 		Node: os.Getenv("STORE_NODE_NAME"), Unit: httpkit.Env("STORE_UNIT", "postgres"),
 	})}
+	ctrl.ReadRPSLimit = httpkit.Integer("READ_RPS_LIMIT", 0)
+	ctrl.ReadRPSBurst = httpkit.Integer("READ_RPS_BURST", 20)
+	if ctrl.ReadRPSLimit < 0 || ctrl.ReadRPSBurst < 1 {
+		panic("READ_RPS_LIMIT must be nonnegative and READ_RPS_BURST positive")
+	}
+	slog.Info("read admission configured", "rps_per_replica", ctrl.ReadRPSLimit, "burst", ctrl.ReadRPSBurst)
 	schemaPolicy := httpkit.Env("PVMBG_SCHEMA_POLICY", "strict")
 	if schemaPolicy != "strict" && schemaPolicy != "v2" {
 		panic("PVMBG_SCHEMA_POLICY must be strict or v2")

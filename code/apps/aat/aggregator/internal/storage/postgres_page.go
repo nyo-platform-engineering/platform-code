@@ -7,6 +7,12 @@ import (
 	"aat/aggregator/internal/model"
 )
 
+func (p *Postgres) Revision(ctx context.Context) (int64, error) {
+	var revision int64
+	err := p.db.WithContext(ctx).Raw("SELECT revision FROM hazard_read_revision WHERE id = 1").Row().Scan(&revision)
+	return revision, err
+}
+
 func (p *Postgres) Page(ctx context.Context, q HazardQuery) (HazardPage, error) {
 	page := HazardPage{Items: []model.HazardEvent{}, Availability: p.available()}
 	if q.Limit == 0 {
@@ -38,14 +44,11 @@ func (p *Postgres) Page(ctx context.Context, q HazardQuery) (HazardPage, error) 
 	if err != nil {
 		return page, err
 	}
-	query := p.db.WithContext(ctx).Order("occurred_at DESC, id DESC").Limit(q.Limit + 1)
-	if q.Source != "" {
-		query = query.Where("source = ?", q.Source)
-	}
-	if !cursor.Start {
-		query = query.Where("(occurred_at,id) < (?,?)", cursor.At, cursor.ID)
-	}
-	if err = query.Find(&page.Items).Error; err != nil {
+	// Transfer narrow sort keys from each shard, then fetch full JSON only for
+	// the winning rows. One statement preserves the page's snapshot semantics.
+	err = p.db.WithContext(ctx).Raw(recentPageSQL, q.Source, q.Source,
+		cursor.Start, cursor.At, cursor.ID, q.Limit+1).Scan(&page.Items).Error
+	if err != nil {
 		page.Items = []model.HazardEvent{}
 		page.Availability = p.unavailable()
 		retry := encodeGlobal(cursor)

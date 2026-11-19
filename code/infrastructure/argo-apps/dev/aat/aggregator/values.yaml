@@ -76,6 +76,9 @@ config:
   NATS_URL: nats://nats:4222
   # Five replicas use at most 30 coordinator connections; leave room for Citus/Patroni.
   DB_MAX_CONNS: "6"
+  # Shared hazards/analytics token bucket per pod, identical at every replica count.
+  READ_RPS_LIMIT: "80"
+  READ_RPS_BURST: "20"
   POLL_INTERVAL_SECONDS: "3"
   POLL_TIMEOUT_MS: "4000"
   PVMBG_SCHEMA_POLICY: strict
@@ -142,6 +145,8 @@ topologySpreadConstraints:
     topologyKey: kubernetes.io/hostname
     whenUnsatisfiable: DoNotSchedule
     nodeTaintsPolicy: Honor
+    # Spread each revision independently while old pods drain during rollout.
+    matchLabelKeys: [pod-template-hash]
     labelSelector:
       matchLabels:
         app.kubernetes.io/instance: aggregator
