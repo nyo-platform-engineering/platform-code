@@ -2,6 +2,13 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../../local"
 
+# k3d nodes are containers on one kernel: they share the host clock, so there is
+# no per-node chrony to configure or inspect.
+if [[ "$(cat ../.state/mode 2>/dev/null)" == k3d ]]; then
+  echo 'k3d mode: all nodes share the host clock; per-node clock sync applies to the VM lab only.'
+  exit 0
+fi
+
 case "${1:-status}" in
   sync)
     # Only the clock provisioner runs; k3s and application configuration stay live.

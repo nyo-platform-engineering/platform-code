@@ -3,16 +3,33 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-if (( $# > 0 )); then
-  echo 'task up uses the VM lab and does not accept options.' >&2
-  exit 2
-fi
+novm=0
+for arg in "$@"; do
+  case "$arg" in
+    --novm) novm=1 ;;
+    *)
+      echo "Unknown option $arg. Usage: task up            (three VMs)" >&2
+      echo "                              task up -- --novm (k3d containers, development only)" >&2
+      exit 2
+      ;;
+  esac
+done
 
 # Startup always targets this lab, even if the caller selected another cluster.
 export KUBECONFIG="$root/.state/kubeconfig"
 
 # Each numbered script checks its own prerequisites before changing anything.
-bash scripts/up/1-vms.sh
+if (( novm )); then
+  # k3d: the same three node names as Docker containers. Shared kernel, so not for the demo.
+  export AAT_NOVM=1
+  bash scripts/up/1-k3d.sh
+else
+  if [[ "$lab_mode" == k3d ]]; then
+    echo 'This checkout runs the k3d lab. Use task up -- --novm, or task destroy before starting VMs.' >&2
+    exit 2
+  fi
+  bash scripts/up/1-vms.sh
+fi
 bash scripts/up/2-cluster.sh
 bash scripts/up/3-argocd.sh
 bash scripts/up/4-apps.sh

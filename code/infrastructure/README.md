@@ -142,6 +142,39 @@ ulangi setelah rollout stabil agar penolakan tidak berasal dari target yang hila
 Pengecualian namespace resmi `tester-agent` tetap dipertahankan pada policy;
 command ini menguji pod aplikasi dan tidak membuat atau menyamar sebagai Tester Agent.
 
+## Mode tanpa VM (k3d, khusus pengembangan)
+
+Untuk mesin yang tidak sanggup menjalankan tiga VM, `task up -- --novm` membuat cluster yang sama
+dengan **k3d**: tiga node k3s sebagai container Docker bernama `aat-control`, `aat-worker-1`,
+`aat-worker-2`, sehingga nodeSelector, penempatan Citus, Argo CD, LGTM, dan seluruh aplikasi berjalan
+tanpa perubahan. Traefik dan ServiceLB bawaan k3s dimatikan seperti di VM; NodePort 30080, 30084,
+30088, dan 30300 dipublikasikan di `127.0.0.1`.
+
+**Tidak sah untuk demo**: semua node berbagi satu kernel (spesifikasi melarang kind/k3d/minikube untuk
+demo). Preflight topologi mencetak peringatan ini di mode k3d.
+
+Prasyarat (jalankan di WSL Ubuntu dengan integrasi WSL Docker Desktop aktif, atau Linux):
+Docker, k3d, kubectl, Helm, Task, Python 3. Docker Desktop membutuhkan RAM cukup untuk seluruh stack;
+di Windows atur `%UserProfile%\.wslconfig` (`[wsl2]` `memory=11GB`), lalu `wsl --shutdown`.
+
+```bash
+cd code/infrastructure
+task doctor -- --novm          # cek prasyarat k3d
+task up PORT=8080 -- --novm    # PORT >= 1024 tidak butuh sudo
+task links                     # URL gateway dan NodePort di 127.0.0.1
+```
+
+Perintah lain mengikuti mode yang tercatat di `.state/mode`:
+
+| Perintah | Mode k3d |
+| --- | --- |
+| `task down` / `task destroy` | `k3d cluster stop` / `k3d cluster delete` (data hilang saat delete) |
+| `bash scripts/vm/main.sh suspend-worker aat-worker-1` | `docker pause` container worker (setara membekukan VM) |
+| `bash scripts/vm/main.sh resume-worker aat-worker-1` | `docker unpause` |
+| `task clock:status` | tidak berlaku: semua node memakai jam host |
+
+Satu checkout hanya menjalankan satu lab; jalankan `task destroy` sebelum berpindah antara VM dan k3d.
+
 ## GitOps
 
 Root menemukan Application secara rekursif pada `argo-apps/platform/`, dengan filter `{**/app.yaml,**/[0-9][0-9]-*.yaml}`. Values, dashboard, dan manifest workload diproses oleh child Application masing-masing. Ekstensi `.yaml.disabled` menonaktifkan registrasi komponen opsional.

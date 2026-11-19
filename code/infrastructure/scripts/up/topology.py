@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Preflight only: API metadata cannot prove that guests have separate kernels."""
 import json
+import os
 import sys
 
 
-def validate(nodes):
+def validate(nodes, allow_containers=False):
     if len(nodes) < 3:
         raise ValueError("Use >=3 VM/native nodes with separate kernels for this local topology.")
+    if allow_containers:
+        # task up -- --novm: k3d nodes are containers sharing the host kernel.
+        return True
     for node in nodes:
         info = node["status"]["nodeInfo"]
         name = node["metadata"]["name"]
@@ -17,7 +21,12 @@ def validate(nodes):
 
 if __name__ == "__main__":
     try:
-        validate(json.load(sys.stdin)["items"])
-        print("Topology preflight passed; record per-VM boot IDs and host specifications for the report.")
+        novm = os.environ.get("AAT_NOVM") == "1"
+        validate(json.load(sys.stdin)["items"], allow_containers=novm)
+        if novm:
+            print("Topology preflight passed in k3d mode (development only): nodes share one kernel "
+                  "and do not satisfy the demo requirement.")
+        else:
+            print("Topology preflight passed; record per-VM boot IDs and host specifications for the report.")
     except (ValueError, KeyError) as error:
         sys.exit(str(error))
