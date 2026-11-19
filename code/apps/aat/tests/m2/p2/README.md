@@ -21,7 +21,7 @@ Edit `CONFIG` at the top of `test-problem-2.py`:
 | Setting | Default / purpose |
 | --- | --- |
 | `groups` | `(1, 2, 3)`; choose `(1,)` for coordination/failover first |
-| `url` | `http://127.0.0.1:30088`, the published Traefik NodePort |
+| `url` | `None`: auto-select VM control-node InternalIP on port 30088, or `http://127.0.0.1:30088` on k3d. Set an explicit Traefik origin to override. |
 | `source` | `BMKG`, whose owner is killed/frozen |
 | `worker` | `aat-worker-1`, only for VM clock/freeze tests |
 | `observation_seconds` | 30 seconds of polling observations; at least three mock event intervals |
@@ -41,9 +41,10 @@ debugging so pod readiness and both scale transitions fit inside the load window
 checks do not by themselves prove the generator is free from CPU/network limits.
 Run the generator outside application pods and retain host resource evidence.
 
-On Mac/k3d, begin with `groups=(1,)`. Both VM clock/freeze checks are **SKIP** on
-container nodes. All k3d results are development observations, not qualifying
-separate-kernel demo evidence. The script never adjusts the shared Docker clock.
+The same command supports `task up` (VM) and `task up -- --novm` (k3d). Groups 1
+and 3 run on either mode. Both VM clock/freeze checks are **SKIP** on container
+nodes. All k3d results are development observations, not qualifying separate-kernel
+demo evidence. The script never adjusts the shared Docker clock.
 
 The VM clock test is guided: the operator disables synchronization, applies +45 s,
 then -30 s relative to the original clock, and restores synchronization in the
@@ -76,8 +77,11 @@ same URL, query, VUs, and resource limits for the 1/3-replica comparison. They d
 not traverse Client/Auth, so a singleton Client/Auth does not conceal Aggregator
 scaling. This is explicitly an Aggregator benchmark; add end-to-end Client load
 evidence separately. A port-forward to one pod/service is not a valid substitute
-for this routing test. VM deployments may set `url` to their reachable Traefik
-origin; the existing `http://client.localhost` listener is a different hostname.
+for this routing test. The selected mode and gateway URL appear before the first
+prompt and are saved in `result.json`. For a custom gateway/network, set `url` to
+its reachable Traefik origin; the existing `http://client.localhost` listener is a
+different hostname. Route readiness has a maximum 30-second budget, accepts a
+complete empty dataset, and reports the last connection/HTTP error on failure.
 
 The runner temporarily sets Argo's `skip-reconcile` annotation on the root,
 dev parent, and Aggregator Application, waiting for active syncs to finish. This

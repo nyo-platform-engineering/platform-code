@@ -122,6 +122,99 @@ class HelperCompatibilityTests(unittest.TestCase):
         self.assertIsNone(p2_helper.NoRedirect().redirect_request(None, None, 302, "Found", {}, "http://other"))
 
 
+class GatewayPreflightTests(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        infra = patch.object(p2_helper, "INFRA", self.root)
+        infra.start()
+        self.addCleanup(infra.stop)
+        self.run = p2_helper.Run(runner.TestConfig(kubeconfig=self.root / ".state/kubeconfig"),
+                                 self.root, "gateway-test")
+        self.nodes = [{"metadata": {"name": "aat-control"}, "status": {
+            "nodeInfo": {"osImage": "Ubuntu 24.04"},
+            "addresses": [{"type": "InternalIP", "address": "192.168.56.10"}]}}]
+
+    def test_vm_uses_reachable_control_node_instead_of_loopback(self):
+        self.run.configure_cluster(self.nodes)
+        self.assertEqual(self.run.config.url, "http://192.168.56.10:30088")
+        self.assertFalse(self.run.container_nodes)
+        self.assertEqual(self.run.report["gateway_url"], self.run.config.url)
+
+    def test_k3d_uses_published_host_port(self):
+        self.nodes[0]["status"]["nodeInfo"]["osImage"] = "K3s v1.33"
+        self.nodes[0]["status"]["addresses"][0]["address"] = "172.18.0.2"
+        self.run.configure_cluster(self.nodes)
+        self.assertEqual(self.run.config.url, "http://127.0.0.1:30088")
+        self.assertTrue(self.run.report["container_nodes_development_only"])
+
+    def test_task_up_mode_marker_is_used_only_for_local_kubeconfig(self):
+        (self.root / ".state").mkdir()
+        (self.root / ".state/mode").write_text("k3d\n")
+        self.run.configure_cluster(self.nodes)
+        self.assertTrue(self.run.container_nodes)
+        self.run.config.kubeconfig = self.root / "another-cluster.yaml"
+        self.run.config.url = None
+        self.run.configure_cluster(self.nodes)
+        self.assertFalse(self.run.container_nodes)
+        self.assertEqual(self.run.config.url, "http://192.168.56.10:30088")
+
+    def test_custom_gateway_is_preserved(self):
+        self.run.config.url = "https://gateway.example:8443"
+        self.run.configure_cluster(self.nodes)
+        self.assertEqual(self.run.config.url, "https://gateway.example:8443")
+
+    def test_native_control_plane_and_ipv6_address(self):
+        self.nodes[0]["metadata"] = {"name": "native-server", "labels": {"node-role.kubernetes.io/control-plane": "true"}}
+        self.nodes[0]["status"]["addresses"][0]["address"] = "fd00::10"
+        self.run.configure_cluster(self.nodes)
+        self.assertEqual(self.run.config.url, "http://[fd00::10]:30088")
+
+    def test_missing_vm_address_requests_explicit_gateway(self):
+        self.nodes[0]["status"]["addresses"] = []
+        with self.assertRaisesRegex(ValueError, "set CONFIG.url"):
+            self.run.configure_cluster(self.nodes)
+
+    def test_route_can_be_ready_before_any_events_are_ingested(self):
+        self.run.config.url = "http://192.168.56.10:30088"
+        self.run.request = lambda *args, **kwargs: {"items": [], "partial": False, "unavailable_units": []}
+        self.run.wait_for_route()
+
+    def test_route_timeout_reports_actual_failure_and_short_budget(self):
+        self.run.config.url = "http://127.0.0.1:30088"
+        def disconnected(*args, **kwargs):
+            raise p2_helper.urllib.error.URLError("Connection refused")
+        self.run.request = disconnected
+        def time_out(operation, timeout, description):
+            self.assertEqual(timeout, 30)
+            self.assertIn(self.run.config.url, description)
+            self.assertFalse(operation())
+            raise ValueError("timed out waiting for " + description)
+        self.run.wait = time_out
+        with self.assertRaisesRegex(ValueError, "last response: .*Connection refused.*CONFIG.url"):
+            self.run.wait_for_route()
+
+    def test_incomplete_route_response_is_not_treated_as_ready(self):
+        self.run.config.url = "http://192.168.56.10:30088"
+        def time_out(operation, **kwargs):
+            self.assertFalse(operation())
+            raise ValueError("timed out")
+        self.run.wait = time_out
+        for page in (None, [], {"items": []}, {"items": [], "partial": True, "unavailable_units": ["citus"]}):
+            with self.subTest(page=page):
+                self.run.request = lambda *args, **kwargs: page
+                with self.assertRaisesRegex(ValueError, "response is incomplete or invalid"):
+                    self.run.wait_for_route()
+
+    def test_k3d_does_not_run_vm_clock_or_suspend_actions(self):
+        skipped = []
+        run = SimpleNamespace(container_nodes=True, skip=lambda *args: skipped.append(args),
+                              stage=lambda *args: self.fail("must not change the shared container clock"))
+        runner.group2_clock_freeze.run_group(run)
+        self.assertEqual([name for name, _ in skipped], ["P2.4-clock-skew", "P2.5-freeze-resume"])
+
+
 class PollingEvidenceTests(unittest.TestCase):
     def test_joined_upstream_evidence(self):
         result = p2_helper.polling_evidence(records(), 0, 20, 3)
