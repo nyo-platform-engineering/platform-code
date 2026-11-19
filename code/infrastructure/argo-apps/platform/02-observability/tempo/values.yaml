@@ -9,11 +9,17 @@ replicas: 1
 tempo:
   tag: 2.9.0
   resources:
-    # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
-    requests: {cpu: 3m, memory: 37Mi}
+    # Reserve for block replay/compaction, not just the idle-process measurement.
+    requests: {cpu: 100m, memory: 512Mi}
     limits:
       memory: 1Gi
   memBallastSizeMbs: 0
+  extraEnv:
+    # Leave headroom for non-heap allocations below the 1 GiB container limit.
+    - name: GOMEMLIMIT
+      value: 768MiB
+    - name: GOGC
+      value: '50'
   retention: 72h
   # Traces Drilldown uses TraceQL metrics, served by local-blocks in Tempo 2.9.
   metricsGenerator:
@@ -44,6 +50,9 @@ tempo:
   storage:
     trace:
       backend: local
+      block:
+        # The 100 MB default creates compaction memory spikes in this small lab.
+        parquet_row_group_size_bytes: 5242880
       local:
         path: /var/tempo/blocks
       wal:
