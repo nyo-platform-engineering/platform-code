@@ -4,7 +4,10 @@ These are guided, interactive runs against the Kubernetes lab (VM cluster, or
 `task up -- --novm` for development). Run them from `code/infrastructure`; each one
 uses `.env.runtime` and `.state/kubeconfig`, keeps its settings in `CONFIG` at the
 top of its `test-problem-N.py`, waits for **Enter** between steps, and saves
-evidence to `docs/evidence/m2-p<N>-<timestamp>-<id>/` (`result.json`, `http.jsonl`).
+evidence. P1, P4 and P5 write to `tests/m2/p<N>/evidence/m2-p<N>-<timestamp>-<id>/`
+(`result.json`, `http.jsonl`, the full terminal session in `console.log`) and ask
+before each run whether to delete older folders (**Enter** keeps them). P2 still
+writes to `docs/evidence/m2-p2-<timestamp>-<id>/`.
 
 - [Problem 1: distributed storage and recovery](p1/README.md) — `task m2:p1`.
 - [Problem 2: Aggregator coordination, failover and scaling](p2/README.md) — configure the run, then `task m2:p2`.

@@ -4,12 +4,15 @@ P1 also reuses the paths, validation, timestamps, and console output here.
 The tests run against the Kubernetes lab (VM cluster, or `task up -- --novm` for
 development), read credentials from code/infrastructure/.env.runtime, reach the
 services through temporary `kubectl port-forward`s, and save evidence under
-docs/evidence/m2-p<n>-<timestamp>-<id>/.
+tests/m2/p<n>/evidence/m2-p<n>-<timestamp>-<id>/ (like P1), including a full
+console.log of the terminal session.
 """
-from contextlib import contextmanager
+import builtins
+from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
 import datetime as dt
 import json
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -189,11 +192,8 @@ class Forwards:
 class Run:
     """Shared run state: config, cluster access, HTTP with evidence, report."""
 
-    def __init__(self, problem, config, manual_evidence):
-        self.problem, self.config = problem, config
-        stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
-        self.folder = (config.output_dir or ROOT / "docs/evidence" / f"m2-p{problem}-{stamp}-{uuid.uuid4().hex[:8]}").resolve()
-        self.folder.mkdir(parents=True, exist_ok=False)
+    def __init__(self, problem, config, manual_evidence, folder):
+        self.problem, self.config, self.folder = problem, config, folder
         self.env = read_env(config.env_file)
         self.cluster = Cluster(config)
         self.forwards = Forwards(config, self.folder)
@@ -330,16 +330,83 @@ class Run:
         output("MANUAL", "Pending evidence", *self.report["manual_evidence_required"])
 
 
+class Tee:
+    """Writes to the terminal and to console.log."""
+
+    def __init__(self, terminal, log, lock):
+        self.terminal, self.log, self.lock = terminal, log, lock
+        self.original_input = builtins.input
+
+    def __getattr__(self, name):
+        return getattr(self.terminal, name)
+
+    def write(self, text):
+        with self.lock:
+            self.log.write(text)
+            self.log.flush()
+            return self.terminal.write(text)
+
+    def flush(self):
+        with self.lock:
+            self.log.flush()
+            self.terminal.flush()
+
+    def read_input(self, prompt=""):
+        # input() on a TTY bypasses sys.stdout, so write the prompt through the tee.
+        self.write(str(prompt))
+        self.flush()
+        try:
+            answer = self.original_input()
+        finally:
+            with self.lock:
+                self.log.write("\n")
+                self.log.flush()
+        return answer
+
+
+def evidence_folder(problem, config):
+    """Fresh tests/m2/p<n>/evidence/m2-p<n>-<stamp>-<id>/, offering to delete older runs first."""
+    root = Path(__file__).resolve().parent / f"p{problem}" / "evidence"
+    require(not root.is_symlink(), "evidence directory must not be a symlink")
+    older = sorted(f for f in root.glob(f"m2-p{problem}-*") if f.is_dir() and not f.is_symlink())
+    if older:
+        for f in older:
+            print(f"  {f.name}", flush=True)
+        answer = input(f"Delete {len(older)} older P{problem} evidence folders in {root}? [y/N]: ").strip().lower()
+        if answer in ("y", "yes"):
+            for f in older:
+                shutil.rmtree(f)
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
+    folder = (config.output_dir or root / f"m2-p{problem}-{stamp}-{uuid.uuid4().hex[:8]}").resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    return folder
+
+
 def main(problem, config, groups, required_keys, manual_evidence, validate=None):
     """Shared entry point: one Run, the groups in order, Enter between steps."""
-    import sys
     if len(sys.argv) > 1:
         print(f"This test has no command-line options. Edit CONFIG in test-problem-{problem}.py.", file=sys.stderr)
         return 2
-    run = Run(problem, config, manual_evidence)
+    if not sys.stdin.isatty():
+        print(f"run task m2:p{problem} in an interactive terminal", file=sys.stderr)
+        return 2
+    folder = evidence_folder(problem, config)
+    with ExitStack() as console:
+        # Everything shown in the terminal (prompts included) also goes to console.log.
+        log = console.enter_context((folder / "console.log").open("a", buffering=1))
+        lock = threading.RLock()
+        stdout = Tee(sys.stdout, log, lock)
+        console.enter_context(redirect_stdout(stdout))
+        console.enter_context(redirect_stderr(Tee(sys.stderr, log, lock)))
+        console.callback(setattr, builtins, "input", builtins.input)
+        builtins.input = stdout.read_input
+        return _run(problem, config, groups, required_keys, manual_evidence, validate, folder)
+
+
+def _run(problem, config, groups, required_keys, manual_evidence, validate, folder):
+    run = Run(problem, config, manual_evidence, folder)
     exit_code = 1
     try:
-        require(sys.stdin.isatty(), f"run task m2:p{problem} in an interactive terminal")
         if validate:
             validate(config)
         run.verify_environment(required_keys)

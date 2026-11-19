@@ -35,7 +35,7 @@ class TestConfig:
     # Per-request bound.
     request_timeout: float = 15
 
-    # None creates a fresh docs/evidence/m2-p4-<timestamp>-<id> directory per run.
+    # None creates a fresh evidence/m2-p4-<timestamp>-<id> folder beside this file.
     output_dir: Path | None = None
 
 

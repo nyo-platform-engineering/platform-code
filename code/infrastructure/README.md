@@ -121,7 +121,7 @@ Preflight saat ini membutuhkan minimal tiga node VM/native. Sediakan StorageClas
 
 Sama seperti P1: interaktif (Enter di antara langkah), memakai `.env.runtime` dan
 `.state/kubeconfig`, konfigurasi di `CONFIG` bagian atas skrip, bukti di
-`docs/evidence/m2-p4-*` / `m2-p5-*`. Detail: [tests/m2](../apps/aat/tests/m2/README.md).
+`code/apps/aat/tests/m2/p4/evidence/` / `p5/evidence/` (termasuk `console.log`). Detail: [tests/m2](../apps/aat/tests/m2/README.md).
 
 ```bash
 task m2:p4   # Feed Satelit: butuh SATELLITE_GROUP_TOKEN; menghapus semua pod Aggregator sekali
