@@ -1,6 +1,11 @@
 # Runtime AAT lokal; batas memori mengikuti Lampiran B M2.
 fullnameOverride: aggregator
 replicaCount: 3
+# Allow endpoint removal to reach Traefik before the server shuts down.
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 5"]
 containerPorts:
   - name: http
     containerPort: 8083
@@ -69,7 +74,8 @@ config:
   BMKG_URL: http://bmkg:8081
   PVMBG_URL: http://pvmbg:8082
   NATS_URL: nats://nats:4222
-  DB_MAX_CONNS: "8"
+  # Five replicas use at most 30 coordinator connections; leave room for Citus/Patroni.
+  DB_MAX_CONNS: "6"
   POLL_INTERVAL_SECONDS: "3"
   POLL_TIMEOUT_MS: "4000"
   PVMBG_SCHEMA_POLICY: strict

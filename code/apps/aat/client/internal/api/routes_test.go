@@ -13,6 +13,23 @@ import (
 
 type roundTrip func(*http.Request) (*http.Response, error)
 
+func TestReadOverloadRemainsRetryable(t *testing.T) {
+	for _, path := range []string{"/hazards", "/analytics"} {
+		t.Run(path, func(t *testing.T) {
+			h := handlerFor(t, func(r *http.Request) (*http.Response, error) {
+				if r.URL.Host == "auth" {
+					return response(200, `{"active":true,"client_id":"analyst"}`), nil
+				}
+				return response(429, `{"error":"busy"}`), nil
+			})
+			w := invoke(h, path, "Bearer user-token")
+			if w.Code != 429 || w.Header().Get("Retry-After") != "1" {
+				t.Fatalf("got %d %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func response(code int, body string) *http.Response {

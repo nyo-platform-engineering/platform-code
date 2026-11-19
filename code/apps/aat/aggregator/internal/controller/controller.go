@@ -11,8 +11,9 @@ import (
 )
 
 type Controller struct {
-	DB    *gorm.DB
-	Store storage.Reader
+	DB              *gorm.DB
+	Store           storage.Reader
+	ReadConcurrency int
 	// Set only when DB uses the owner's connection.
 	PollOwner     *model.PollOwner
 	AcceptPVMBGV2 bool

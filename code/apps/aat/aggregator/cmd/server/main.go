@@ -143,6 +143,8 @@ func main() {
 	if maxConns < need+1 {
 		panic(fmt.Sprintf("DB_MAX_CONNS must be at least %d: one per owned source session plus API connections", need+1))
 	}
+	// Reserve source sessions and one connection for health and background work.
+	ctrl.ReadConcurrency = maxConns - need
 
 	natsURL := httpkit.Env("NATS_URL", "nats://nats:4222")
 	var workers sync.WaitGroup

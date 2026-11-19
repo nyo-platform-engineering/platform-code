@@ -50,6 +50,10 @@ spec:
         - name: {{ include "deployment.name" . }}
           image: {{ include "deployment.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.command }}
           command:
             {{- toYaml . | nindent 12 }}

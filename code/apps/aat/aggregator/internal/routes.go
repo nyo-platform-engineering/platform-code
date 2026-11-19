@@ -5,6 +5,7 @@ import (
 
 	"aat/aggregator/internal/controller"
 	"aat/internal/httpkit"
+	"github.com/gin-gonic/gin"
 )
 
 func NewHandler(ctrl *controller.Controller, token string) http.Handler {
@@ -18,8 +19,9 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 	private := mux.Group("", httpkit.Auth("Authorization", "Bearer "+token))
 
 	mux.GET("/health", ctrl.Health)
-	private.GET("/internal/hazards", ctrl.Hazards)
-	private.GET("/internal/analytics", ctrl.Analytics)
+	reads := limitReads(ctrl.ReadConcurrency)
+	private.GET("/internal/hazards", reads, ctrl.Hazards)
+	private.GET("/internal/analytics", reads, ctrl.Analytics)
 	private.GET("/internal/source-status", ctrl.SourceStatus)
 	private.GET("/internal/satellite/stats", ctrl.SatelliteStatsHandler)
 	private.GET("/internal/sensor/status", ctrl.SensorStatusHandler)
@@ -38,4 +40,21 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 	audit.GET("/unprocessed", ctrl.AuditUnprocessed)
 
 	return mux
+}
+
+func limitReads(capacity int) gin.HandlerFunc {
+	if capacity <= 0 {
+		return func(c *gin.Context) { c.Next() }
+	}
+	slots := make(chan struct{}, capacity)
+	return func(c *gin.Context) {
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+			c.Next()
+		default:
+			c.Header("Retry-After", "1")
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "read capacity reached; retry later"})
+		}
+	}
 }

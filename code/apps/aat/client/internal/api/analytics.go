@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -52,6 +53,12 @@ func registerAnalytics(router *gin.Engine, u upstream) {
 		}
 		var result analytics.Result
 		if err := u.get(ctx, "GET", u.endpoint(u.config.AggregatorURL, "/internal/analytics")+"?"+q.Values().Encode(), u.config.AggregatorToken, correlation, nil, &result); err != nil || result.Validate() != nil || !result.From.Equal(q.From) || !result.To.Equal(q.To) || result.Interval != q.Interval || result.Source != q.Source {
+			var status upstreamStatusError
+			if errors.As(err, &status) && status.Status == http.StatusTooManyRequests {
+				c.Header("Retry-After", "1")
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": "read capacity reached; retry later"})
+				return
+			}
 			unavailable(c)
 			return
 		}

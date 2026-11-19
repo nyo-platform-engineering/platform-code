@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -90,6 +91,12 @@ func Handler(config Config) (http.Handler, error) {
 			UnavailableUnits []string `json:"unavailable_units"`
 		}
 		err = u.get(ctx, "GET", u.endpoint(config.AggregatorURL, "/internal/hazards")+"?"+q.Encode(), config.AggregatorToken, correlation, nil, &page)
+		var status upstreamStatusError
+		if errors.As(err, &status) && status.Status == http.StatusTooManyRequests {
+			c.Header("Retry-After", "1")
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "read capacity reached; retry later"})
+			return
+		}
 		if err != nil || page.Items == nil {
 			unavailable(c)
 			return
