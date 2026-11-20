@@ -122,8 +122,21 @@ func (a *admission) wrap(u upstream, next http.Handler) http.Handler {
 			shed(w, r, class, "capacity full")
 			return
 		}
-		next.ServeHTTP(w, r)
+		// The class decided here travels with the request, so the Aggregator can keep
+		// its reserved read slots for priority callers as well (see upstream.get).
+		next.ServeHTTP(w, r.WithContext(withReadClass(r.Context(), class)))
 	})
+}
+
+type readClassKey struct{}
+
+func withReadClass(ctx context.Context, class string) context.Context {
+	return context.WithValue(ctx, readClassKey{}, class)
+}
+
+func readClass(ctx context.Context) string {
+	class, _ := ctx.Value(readClassKey{}).(string)
+	return class
 }
 
 func shed(w http.ResponseWriter, r *http.Request, class, reason string) {

@@ -23,9 +23,14 @@ func Handler(config Config) (http.Handler, error) {
 	if config.HTTPClient != nil {
 		client = *config.HTTPClient
 	}
+	// The priority retry client opens a new connection each time, so kube-proxy can
+	// send the retry to another Aggregator pod.
+	retry := client
+	retry.Transport = telemetry.Transport{Base: freshConnections(client.Transport)}
 	client.Transport = telemetry.Transport{Base: client.Transport}
 	// Never forward internal credentials through redirects.
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	retry.CheckRedirect = client.CheckRedirect
 	if config.MediaSharePercent == 0 {
 		config.MediaSharePercent = 50
 	}
@@ -35,7 +40,7 @@ func Handler(config Config) (http.Handler, error) {
 	if config.MediaSharePercent < 1 || config.MediaSharePercent > 100 {
 		return nil, fmt.Errorf("invalid client API configuration")
 	}
-	u := upstream{config: config, http: &client, ids: &identityCache{ttl: config.IdentityCacheTTL, entries: map[[32]byte]cachedIdentity{}}}
+	u := upstream{config: config, http: &client, retry: &retry, ids: &identityCache{ttl: config.IdentityCacheTTL, entries: map[[32]byte]cachedIdentity{}}}
 	router := httpkit.Router()
 	registerDashboard(router)
 	registerAnalytics(router, u)

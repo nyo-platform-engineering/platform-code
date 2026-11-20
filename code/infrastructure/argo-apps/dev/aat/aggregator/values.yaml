@@ -74,8 +74,11 @@ config:
   BMKG_URL: http://bmkg:8081
   PVMBG_URL: http://pvmbg:8082
   NATS_URL: nats://nats:4222
-  # Five replicas use at most 30 coordinator connections; leave room for Citus/Patroni.
-  DB_MAX_CONNS: "6"
+  # 5 source/background sessions + 1 shared read slot + READ_PRIORITY_SLOTS. Five
+  # replicas use at most 35 of the 50 coordinator connections, leaving room for Citus/Patroni.
+  DB_MAX_CONNS: "7"
+  # Read slot per pod kept for Field Team/BNPB Internal reads (X-Read-Class: priority).
+  READ_PRIORITY_SLOTS: "1"
   # Shared hazards/analytics token bucket per pod, identical at every replica count.
   READ_RPS_LIMIT: "20"
   READ_RPS_BURST: "5"

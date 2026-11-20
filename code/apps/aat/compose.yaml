@@ -27,7 +27,8 @@ services:
       AUDIT_TOKEN: ${AUDIT_TOKEN:-}
       STORE_NODE_NAME: ${STORE_NODE_NAME:-}
       STORE_UNIT: ${STORE_UNIT:-postgres}
-      DB_MAX_CONNS: ${DB_MAX_CONNS:-8}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-9}
+      READ_PRIORITY_SLOTS: ${READ_PRIORITY_SLOTS:-1}
       BMKG_URL: http://bmkg:8081
       BMKG_API_KEY: ${BMKG_API_KEY:?required}
       PVMBG_URL: http://pvmbg:8082

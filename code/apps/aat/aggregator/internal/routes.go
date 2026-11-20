@@ -23,7 +23,7 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 	private := mux.Group("", httpkit.Auth("Authorization", "Bearer "+token))
 
 	mux.GET("/health", ctrl.Health)
-	reads := limitReads(ctrl.ReadConcurrency)
+	reads := limitClassedReads(ctrl.ReadConcurrency, ctrl.ReadPriorityConcurrency)
 	rate := limitReadRate(ctrl.ReadRPSLimit, ctrl.ReadRPSBurst)
 	private.GET("/internal/hazards", rate, limitReads(128), ctrl.CachedHazards, reads, ctrl.Hazards)
 	private.GET("/internal/analytics", rate, reads, ctrl.Analytics)
@@ -45,6 +45,47 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 	audit.GET("/unprocessed", ctrl.AuditUnprocessed)
 
 	return mux
+}
+
+// ReadClassHeader is set by the Client API, after it has identified the caller, on
+// reads for the Field Team and BNPB Internal. It is internal: the Client API never
+// forwards a caller's own headers, and this API needs the Aggregator token.
+const ReadClassHeader = "X-Read-Class"
+
+// limitClassedReads bounds database reads per pod. Every read may take a shared slot;
+// reads marked priority may also take one of the priority slots, which Media and
+// unmarked callers never get. A priority read tries its reserved slot first so the
+// shared slots stay available to everyone else. Nothing queues: a read with no free
+// slot is rejected at once with 429 and Retry-After.
+func limitClassedReads(shared, priority int) gin.HandlerFunc {
+	if shared <= 0 {
+		return func(c *gin.Context) { c.Next() }
+	}
+	sharedSlots := make(chan struct{}, shared)
+	var prioritySlots chan struct{}
+	if priority > 0 {
+		prioritySlots = make(chan struct{}, priority)
+	}
+	return func(c *gin.Context) {
+		if prioritySlots != nil && c.GetHeader(ReadClassHeader) == "priority" {
+			select {
+			case prioritySlots <- struct{}{}:
+				defer func() { <-prioritySlots }()
+				c.Next()
+				return
+			default:
+			}
+		}
+		select {
+		case sharedSlots <- struct{}{}:
+			defer func() { <-sharedSlots }()
+			c.Next()
+		default:
+			c.Header("Retry-After", "1")
+			c.Header("X-Read-Limit", fmt.Sprint(shared))
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "read capacity reached; retry later"})
+		}
+	}
 }
 
 func limitReads(capacity int) gin.HandlerFunc {

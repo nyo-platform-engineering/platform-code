@@ -44,7 +44,7 @@ func main() {
 	config.Tracer = dbtrace.New()
 	sqlDB := stdlib.OpenDB(*config)
 	defer sqlDB.Close()
-	maxConns := httpkit.Integer("DB_MAX_CONNS", 5)
+	maxConns := httpkit.Integer("DB_MAX_CONNS", 6)
 	if maxConns < 3 {
 		panic("DB_MAX_CONNS must be at least 3: two polling sessions plus API connections")
 	}
@@ -147,11 +147,22 @@ func main() {
 	if sensorToken != "" {
 		need++
 	}
-	if maxConns < need+1 {
-		panic(fmt.Sprintf("DB_MAX_CONNS must be at least %d: one per owned source session plus API connections", need+1))
+	// READ_PRIORITY_SLOTS read connections are kept for reads the Client API marks as
+	// priority (Field Team, BNPB Internal); Media and direct callers never use them.
+	// They come on top of the shared read slots, so raise DB_MAX_CONNS by the same
+	// number to keep the shared read capacity unchanged.
+	priority := httpkit.Integer("READ_PRIORITY_SLOTS", 1)
+	if priority < 0 {
+		panic("READ_PRIORITY_SLOTS must not be negative")
+	}
+	if maxConns < need+priority+1 {
+		panic(fmt.Sprintf("DB_MAX_CONNS must be at least %d: one per owned source session, %d priority read slot(s) and one shared read slot",
+			need+priority+1, priority))
 	}
 	// Reserve source sessions and one connection for health and background work.
-	ctrl.ReadConcurrency = maxConns - need
+	ctrl.ReadConcurrency = maxConns - need - priority
+	ctrl.ReadPriorityConcurrency = priority
+	slog.Info("read slots configured", "shared", ctrl.ReadConcurrency, "priority", priority, "db_max_conns", maxConns)
 
 	natsURL := httpkit.Env("NATS_URL", "nats://nats:4222")
 	var workers sync.WaitGroup

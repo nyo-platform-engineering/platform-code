@@ -93,7 +93,9 @@ data:
             shared_buffers: 64MB
             work_mem: 2MB
             maintenance_work_mem: 32MB
-            max_connections: 40
+            # Aggregator: 5 replicas x DB_MAX_CONNS 7 = 35, plus Patroni/Citus internals.
+            # Applied at bootstrap; an existing cluster needs patronictl edit-config.
+            max_connections: 50
             max_prepared_transactions: 80
             max_wal_senders: 12
             max_replication_slots: 12

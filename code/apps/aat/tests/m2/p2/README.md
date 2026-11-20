@@ -144,11 +144,16 @@ cannot stay reachable at 10,000 VUs, first debug Group 3 with `groups=(3,)`,
 `load_vus=100`, `load_seconds=20`, and `scaling_seconds=60`. That is development troubleshooting only;
 it does not satisfy the PDF load minimum or replace a full-capacity run.
 
-The deployment's coordinator connection budget matters during scaling. Five
-Aggregators with `DB_MAX_CONNS=8` can consume all 40 PostgreSQL coordinator slots,
-before Patroni/internal connections. The Kubernetes default is 6 per replica
-(at most 30 for five replicas). This leaves headroom; it does not by itself
-prove the error-rate or throughput criteria. Retain database error evidence when
+The deployment's coordinator connection budget matters during scaling. The
+Kubernetes default is `DB_MAX_CONNS=7` per replica: 5 source/background sessions,
+1 shared read slot and 1 read slot reserved for priority reads (`READ_PRIORITY_SLOTS=1`,
+Field Team/BNPB Internal via the Client API). Five replicas use at most 35 of the
+50 PostgreSQL coordinator slots, before Patroni/internal connections. The k6 load
+calls the Aggregator directly without `X-Read-Class`, so it only ever uses the shared
+slot (the same per-pod capacity as before the priority slot was added) and the page
+cache in front of it; the reserved slot neither adds to nor takes from the measured
+throughput. This leaves headroom; it does not by itself prove the error-rate or
+throughput criteria. Retain database error evidence when
 debugging `too many clients` rather than weakening the load thresholds.
 
 Audit checks protect identities from previous exports and reject repeated identical

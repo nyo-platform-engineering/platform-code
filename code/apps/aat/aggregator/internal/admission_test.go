@@ -157,3 +157,86 @@ func TestReadAdmissionReservesCapacityAndReleasesSlot(t *testing.T) {
 		}
 	}
 }
+
+// Media (and unmarked direct callers) can fill the shared read slots, but a read the
+// Client API marks priority still gets its reserved slot; Media never takes that slot.
+func TestClassedReadsKeepPrioritySlotFromMedia(t *testing.T) {
+	router := httpkit.Router()
+	gate := limitClassedReads(1, 1)
+	release := make(chan struct{})
+	entered := make(chan string, 4)
+	router.GET("/hold", gate, func(c *gin.Context) {
+		entered <- c.GetHeader(ReadClassHeader)
+		<-release
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/read", gate, func(c *gin.Context) { c.Status(http.StatusOK) })
+	request := func(path, class string) int {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		if class != "" {
+			r.Header.Set(ReadClassHeader, class)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		return w.Code
+	}
+	hold := func(class string) chan struct{} {
+		done := make(chan struct{})
+		go func() { request("/hold", class); close(done) }()
+		select {
+		case <-entered:
+		case <-time.After(time.Second):
+			t.Fatal("held read did not start")
+		}
+		return done
+	}
+
+	// Media holds the only shared slot.
+	media := hold("")
+	if code := request("/read", ""); code != 429 {
+		t.Fatalf("second unmarked read must be shed when the shared slot is busy: %d", code)
+	}
+	if code := request("/read", "media"); code != 429 {
+		t.Fatalf("a Media read must not use the priority slot: %d", code)
+	}
+	if code := request("/read", "priority"); code != 200 {
+		t.Fatalf("a priority read must get its reserved slot while Media fills the shared one: %d", code)
+	}
+	// Priority slot busy too: the next priority read finds no slot.
+	field := hold("priority")
+	if code := request("/read", "priority"); code != 429 {
+		t.Fatalf("with every slot busy a priority read is shed too: %d", code)
+	}
+	close(release)
+	<-media
+	<-field
+	// Slots are released: a priority read prefers its own slot, leaving shared free.
+	release = make(chan struct{})
+	field = hold("priority")
+	if code := request("/read", ""); code != 200 {
+		t.Fatalf("a priority read must not take the shared slot while its own is free: %d", code)
+	}
+	close(release)
+	<-field
+}
+
+func TestClassedReadsWithoutPrioritySlotsActLikeBefore(t *testing.T) {
+	router := httpkit.Router()
+	gate := limitClassedReads(1, 0)
+	release, entered := make(chan struct{}), make(chan struct{})
+	router.GET("/hold", gate, func(c *gin.Context) { close(entered); <-release; c.Status(204) })
+	router.GET("/read", gate, func(c *gin.Context) { c.Status(200) })
+	go func() {
+		r := httptest.NewRequest(http.MethodGet, "/hold", nil)
+		router.ServeHTTP(httptest.NewRecorder(), r)
+	}()
+	<-entered
+	r := httptest.NewRequest(http.MethodGet, "/read", nil)
+	r.Header.Set(ReadClassHeader, "priority")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	if w.Code != 429 || w.Header().Get("Retry-After") != "1" {
+		t.Fatalf("with no priority slots a busy read is shed as before: %d %v", w.Code, w.Header())
+	}
+	close(release)
+}
