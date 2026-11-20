@@ -4,6 +4,8 @@ import hashlib
 import importlib.util
 import json
 import os
+import pty
+import termios
 from pathlib import Path
 import sys
 import shutil
@@ -433,7 +435,7 @@ console.log(JSON.stringify(observations));
         self.assertEqual(totals["p2_successes"], 1)
         self.assertEqual(totals["p2_controlled_rejections"], 1)
         self.assertEqual(totals["p2_failures"], 4)
-        self.assertEqual(totals["retry_sleeps"], 1)
+        self.assertEqual(totals["retry_sleeps"], 5)
         self.assertEqual(len(result["p2_error_rate_excluding_controlled"]), 5)
         self.assertTrue(all(item["value"] == 2 for item in result["p2_active_vus"]))
         status_counts = {}
@@ -533,6 +535,43 @@ class AutomaticClockTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "restore failed"):
             self.exercise(run, ValueError("restore failed"))
         self.assertEqual(len(run.cleanup), 1)
+
+    def test_vm_ssh_cannot_change_the_callers_terminal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fake = root / "vagrant"
+            fake.write_text(f'''#!{sys.executable}
+import os,termios,json
+if os.isatty(0):
+    state=termios.tcgetattr(0)
+    state[1] &= ~termios.OPOST
+    termios.tcsetattr(0,termios.TCSANOW,state)
+print(json.dumps({{"ok":True}}))
+''')
+            fake.chmod(0o755)
+            script = f'''import sys
+from contextlib import nullcontext
+from types import SimpleNamespace
+from unittest.mock import patch
+from pathlib import Path
+sys.path.insert(0,{str(P2)!r})
+import group2_clock_freeze as group
+run=SimpleNamespace(container_nodes=False,
+    config=SimpleNamespace(worker="aat-worker-1",kubeconfig=group.INFRA/".state/kubeconfig"),
+    phase=lambda *a,**kw:nullcontext())
+with patch.object(Path,"is_file",return_value=True):
+    assert group.vm_python(run,"pass")["ok"]
+'''
+            master, slave = pty.openpty()
+            try:
+                before=termios.tcgetattr(slave)
+                subprocess.run([sys.executable,"-c",script],stdin=slave,stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE,env=dict(os.environ,PATH=folder+os.pathsep+os.environ["PATH"]),
+                               check=True,timeout=15)
+                self.assertEqual(before,termios.tcgetattr(slave))
+            finally:
+                os.close(master)
+                os.close(slave)
 
     def test_shift_uses_relative_correction_not_a_stale_absolute_timestamp(self):
         group = runner.group2_clock_freeze
@@ -635,6 +674,12 @@ class AuditAndCleanupTests(unittest.TestCase):
             config = runner.TestConfig(rolling_seconds=120)
             with self.assertRaisesRegex(ValueError, "every VU"):
                 runner.validate_config(config)
+
+    def test_pacing_must_exercise_all_vus_during_each_measurement(self):
+        with patch.object(sys.stdin, "isatty", return_value=True):
+            runner.validate_config(runner.TestConfig())
+            with self.assertRaisesRegex(ValueError, "every VU"):
+                runner.validate_config(runner.TestConfig(load_rps=20))
 
     def test_clock_examples_are_configurable_and_invalid_offsets_fail(self):
         with patch.object(sys.stdin, "isatty", return_value=True):

@@ -31,7 +31,8 @@ ingressRoute:
 accessLog:
   enabled: true
 resources:
-  # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
-  requests: {cpu: 1m, memory: 45Mi}
+  # The 10,000-VU P2 run exceeded the old 256Mi limit and was OOMKilled.
+  # Request scheduling headroom; the runner also bounds offered traffic.
+  requests: {cpu: 50m, memory: 128Mi}
   limits:
-    memory: 256Mi
+    memory: 512Mi

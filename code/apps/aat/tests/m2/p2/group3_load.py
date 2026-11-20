@@ -40,7 +40,7 @@ def print_load_result(name, summary, vus, seconds):
            f"    VUs with a measured request: {metric(summary, 'p2_vus_exercised'):,.0f}")
 
 
-def validate_summary(summary, vus, seconds, strict=False):
+def validate_summary(summary, vus, seconds, strict=False, paced=False):
     total = metric(summary, "p2_requests")
     good = metric(summary, "p2_successes")
     rejected = metric(summary, "p2_controlled_rejections")
@@ -49,7 +49,8 @@ def validate_summary(summary, vus, seconds, strict=False):
     require(total > rejected and errors / (total - rejected) < 0.01, "unexpected error rate is >=1%")
     if strict:
         require(errors == 0 and rejected == 0, "rolling update had a failed or rejected request")
-        require(metric(summary, "p2_vus_exercised") >= vus, "rolling load did not exercise every VU")
+    if strict or paced:
+        require(metric(summary, "p2_vus_exercised") >= vus, "paced load did not exercise every VU")
     for window in range((seconds + 4) // 5):
         require(metric(summary, f"p2_requests{{window:{window}}}") > 0, "load did not span every measurement window")
         require(metric(summary, f"p2_successes{{window:{window}}}") > 0, "no successful traffic in a measurement window")
@@ -65,9 +66,10 @@ def validate_summary(summary, vus, seconds, strict=False):
             "latency": summary.get("metrics", {}).get("p2_latency_ms", {}).get("values", {})}
 
 
-def load(run, name, action=None, strict=False, seconds=None, target_rps=0):
+def load(run, name, action=None, strict=False, seconds=None, target_rps=None):
     config = run.config
     seconds = config.load_seconds if seconds is None else seconds
+    target_rps = config.load_rps if target_rps is None else target_rps
     summary_path = run.folder / (name + "-k6.json")
     env = dict(os.environ, P2_VUS=str(config.load_vus), P2_SECONDS=str(seconds),
                P2_WARMUP=str(config.warmup_seconds), P2_TARGET_RPS=str(target_rps), P2_LIMIT=str(config.load_limit), P2_URL=config.url.rstrip("/"),
@@ -110,7 +112,7 @@ def load(run, name, action=None, strict=False, seconds=None, target_rps=0):
                 print_load_result(name, summary, config.load_vus, seconds)
             require(code == 0, failure_message(summary, code))
             require(summary_path.is_file(), "k6 summary missing")
-            result = validate_summary(summary, config.load_vus, seconds, strict)
+            result = validate_summary(summary, config.load_vus, seconds, strict, paced=target_rps > 0)
             result["actions"] = actions
             result["target_offered_rps"] = target_rps or None
             result["vus_exercised"] = metric(summary, "p2_vus_exercised")
@@ -237,10 +239,13 @@ def run_group(run):
     run.report["load_configuration"] = {
         "vus": config.load_vus, "scaling_seconds": scaling_seconds,
         "throughput_seconds_each": config.load_seconds, "warmup_seconds_each": config.warmup_seconds,
+        "scaling_and_throughput_offered_rps": config.load_rps,
         "rolling_seconds": config.rolling_seconds, "rolling_target_offered_rps": config.rolling_rps,
         "pdf_sustained_load_minimum_met": config.load_vus >= 10_000 and scaling_seconds >= 120,
     }
-    message = f"Group 3: {config.load_vus} VUs; scaling {scaling_seconds}s; throughput 2 x {config.load_seconds}s; warmup {config.warmup_seconds}s per run."
+    message = (f"Group 3: {config.load_vus} VUs; {config.load_rps} aggregate offered RPS; "
+               f"scaling {scaling_seconds}s; throughput 2 x {config.load_seconds}s; "
+               f"warmup {config.warmup_seconds}s per run. Every VU must send a measured request.")
     message += (f" Mandatory image rollout: {config.rolling_seconds}s at {config.rolling_rps} offered RPS, "
                 "same VU count; all VUs must send a measured request.")
     if not run.report["load_configuration"]["pdf_sustained_load_minimum_met"]:

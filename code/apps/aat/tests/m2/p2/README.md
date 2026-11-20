@@ -30,6 +30,7 @@ Edit `CONFIG` at the top of `test-problem-2.py`:
 | `clock_offsets` | `(45, -30)` seconds: configurable example cases, not mandatory specification values |
 | `event_intervals` | BMKG/PVMBG 10 seconds; must match running mock configuration |
 | `load_vus`, `load_seconds` | Full `TestConfig()` defaults: **10,000 VUs, 120 seconds per measured run** |
+| `load_rps` | 100 aggregate offered RPS, identical for scaling and both throughput samples |
 | `scaling_seconds` | `None` uses `load_seconds`; set a longer scaling window while keeping throughput samples short |
 | `warmup_seconds` | Warmup before each run; full default 10 seconds |
 | `rolling_image` | `None`: select a different published GitOps pin from local Git history; or specify an immutable `repository@sha256:...` |
@@ -37,7 +38,11 @@ Edit `CONFIG` at the top of `test-problem-2.py`:
 
 The checked-in `CONFIG = TestConfig()` runs **all three groups and all eight
 criteria**. Scaling uses **10,000 VUs for 120 measured seconds**, followed by two
-120-second throughput samples at one and three replicas. The mandatory version
+120-second throughput samples at one and three replicas. All three use the same
+100 aggregate offered RPS; every VU must send a measured request. The generator
+closes connections between iterations, so sleeping VUs do not retain 10,000 idle
+gateway connections. Unexpected failures remain failures and also receive a
+one-second retry delay, including during warmup, to prevent fast retry storms. The mandatory version
 rollout uses the same 10,000 VUs for 360 measured seconds, paced at 30 aggregate
 RPS so the zero-failed-request criterion can be tested below the unchanged
 admission limit. Every VU must send a measured request; sleeping unused VUs do not
@@ -80,7 +85,9 @@ remain log-based evidence; retain storage fencing/official fault evidence too.
 In `finally`, it corrects the worker clock, restarts the previously active time
 services and verifies restoration. Chrony restoration also steps/waits for sync.
 Cleanup retries if restoration failed. No manual clock commands are needed, and
-only the selected local Vagrant worker clock is changed. Keep the source mocks
+only the selected local Vagrant worker clock is changed. SSH subprocesses use
+`stdin=DEVNULL`, so they cannot switch the operator's terminal into raw output
+mode and cause progress lines to drift to the right. Keep the source mocks
 and database coordinator off that worker.
 
 Before each clock/freeze check, the runner prepares the actual source owner on the safe worker
@@ -105,6 +112,11 @@ official procedure rather than pretending Docker pause is an equivalent demo.
 | 1: coordination | P2.1–3 | Three Ready replicas on distinct nodes, ready EndpointSlices, actual routed responses from three pod UIDs, upstream/caller correlation joins, single-owner epochs, overlapping upstream requests, polling request-rate bound, logical event uniqueness, instance deletion and takeover within 60 seconds |
 | 2: clock/freeze | P2.4–5 | Measured +45/-30 offsets, continued polling/audit reconciliation, worker freeze longer than owner timeout, successor epoch, no old-epoch successful poll observed after resume |
 | 3: load | P2.6–8 | k6 5-second traffic/VU windows, 3→5→2 replicas observed Ready during load, <1% unexpected errors excluding validated 429 responses, successful throughput ratio ≥2.0, different actual image IDs after rolling update with zero failed/rejected requests |
+
+The earlier unpaced 10,000-VU run overloaded Traefik's 256 MiB memory limit and
+then spun on failed connections. The new workload explicitly measures the
+configured offered rate; it does not claim an unbounded saturation benchmark.
+The >=2.0 ratio and <1% unexpected-error requirements remain unchanged.
 
 The workload retries controlled 429 responses after `Retry-After` (capped at five
 seconds per iteration). Rejections remain recorded separately; successful RPS
