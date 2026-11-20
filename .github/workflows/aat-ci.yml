@@ -8,6 +8,12 @@ on:
       - '.github/workflows/aat-ci.yml'
       - '.github/scripts/aat/**'
   workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to rebuild (all, or a known AAT service such as aggregator)'
+        required: false
+        default: all
+        type: string
 
 # Build only after code reaches main (or a manual run on main), not again on PRs.
 # Main builds may overlap; the digest updater handles newer commits safely.

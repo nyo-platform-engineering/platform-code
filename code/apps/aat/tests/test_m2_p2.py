@@ -81,16 +81,24 @@ class HelperCompatibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different read rate limits"):
             run.deployment_state()
 
-    def test_previous_version_excludes_current_runtime_digest(self):
-        current, old = "a" * 64, "b" * 64
-        responses = [SimpleNamespace(returncode=0, stdout="latest\nprevious\n"),
-                     SimpleNamespace(stdout=f"  repository: example/aggregator\n  digest: sha256:{current}\n"),
-                     SimpleNamespace(stdout=f"  repository: example/aggregator\n  digest: sha256:{old}\n")]
-        with patch.object(p2_helper.subprocess, "run", side_effect=responses):
-            self.assertEqual(p2_helper.previous_rolling_image("local:current", {"sha256:" + current}),
-                             "example/aggregator@sha256:" + old)
-        with patch.object(p2_helper.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="")):
-            with self.assertRaisesRegex(ValueError, "no different published image"):
+    def test_previous_version_excludes_current_runtime_digest_and_unsafe_releases(self):
+        current, old, safe = "a" * 64, "b" * 64, "c" * 64
+        def pin(digest, source):
+            return SimpleNamespace(stdout=f"  repository: example/aggregator\n  tag: sha-{source}\n  digest: sha256:{digest}\n")
+        policy=SimpleNamespace(stdout='const CacheFillPolicy = "coalesced-until-deadline-v2"')
+        responses=[SimpleNamespace(returncode=0,stdout="current\nunsafe\nsafe\n"),
+                   pin(current,"1"*40),policy,pin(old,"2"*40),SimpleNamespace(stdout="old fixed-attempt loop"),
+                   pin(safe,"3"*40),policy]
+        with patch.object(p2_helper.subprocess,"run",side_effect=responses):
+            self.assertEqual(p2_helper.previous_rolling_image("local:current",{"sha256:"+current}),
+                             "example/aggregator@sha256:"+safe)
+        responses=[SimpleNamespace(returncode=0,stdout="current\nunsafe\n"),
+                   pin(current,"1"*40),policy,pin(old,"2"*40),SimpleNamespace(stdout="old cache")]
+        with patch.object(p2_helper.subprocess,"run",side_effect=responses):
+            with self.assertRaisesRegex(ValueError,"publish a second Aggregator build"):
+                p2_helper.previous_rolling_image("local:current",{"sha256:"+current})
+        with patch.object(p2_helper.subprocess,"run",return_value=SimpleNamespace(returncode=0,stdout="")):
+            with self.assertRaisesRegex(ValueError,"running Aggregator image predates"):
                 p2_helper.previous_rolling_image("local:current")
 
     def test_image_preload_cleans_up_after_failed_pull(self):
@@ -492,6 +500,24 @@ console.log(JSON.stringify(observations));
         data["metrics"]["p2_controlled_rejections"]["values"]["count"] = 1000
         with self.assertRaisesRegex(ValueError, ">=1%"):
             group3_load.validate_summary(data, 2, 15)
+
+
+class ManualBuildPlanTests(unittest.TestCase):
+    def test_manual_build_can_target_aggregator_without_rebuilding_other_services(self):
+        script=p2_helper.ROOT.parents[2]/".github/scripts/aat/detect_changed_services.py"
+        for service,valid in (("aggregator",True),("all",True),("unknown-service",False)):
+            with self.subTest(service=service), tempfile.TemporaryDirectory() as folder:
+                event,output=Path(folder)/"event.json",Path(folder)/"output"
+                event.write_text(json.dumps({"inputs":{"service":service}}))
+                result=subprocess.run([sys.executable,"-B",str(script)],env=dict(os.environ,
+                    GITHUB_EVENT_NAME="workflow_dispatch",GITHUB_EVENT_PATH=str(event),GITHUB_OUTPUT=str(output)),
+                    capture_output=True,text=True)
+                self.assertEqual(result.returncode==0,valid,result.stderr)
+                if not valid: continue
+                line=next(line for line in output.read_text().splitlines() if line.startswith("matrix="))
+                services=[v["service"] for v in json.loads(line.partition("=")[2])["include"]]
+                self.assertEqual(services,["aggregator"] if service=="aggregator" else sorted(services))
+                if service=="all": self.assertGreater(len(services),1)
 
 
 class AutomaticClockTests(unittest.TestCase):

@@ -13,6 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CacheFillPolicy identifies releases safe for repeated write invalidations.
+const CacheFillPolicy = "coalesced-until-deadline-v2"
+
 func (ctrl *Controller) Hazards(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	q, ok := hazardQuery(c)
@@ -27,6 +30,7 @@ func (ctrl *Controller) Hazards(c *gin.Context) {
 // Cache hits need a small revision lookup, not a distributed-query admission
 // slot. The outer HTTP cap and sql.DB pool still bound their concurrency.
 func (ctrl *Controller) CachedHazards(c *gin.Context) {
+	c.Header("X-Hazard-Cache-Policy", CacheFillPolicy)
 	q, ok := hazardQuery(c)
 	if !ok {
 		c.Abort()
@@ -40,7 +44,10 @@ func (ctrl *Controller) CachedHazards(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	c.Request = c.Request.WithContext(ctx)
-	for attempt := 0; attempt < 2; attempt++ {
+	// Writes can invalidate consecutive fills. Keep followers coalesced until
+	// a current page is available or the existing request deadline expires;
+	// falling through after a fixed retry count stampedes the read-slot gate.
+	for {
 		revision, err := ctrl.PageCache.readRevision(ctx, versions)
 		if err != nil {
 			break

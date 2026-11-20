@@ -18,7 +18,10 @@ def main():
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     event_name = os.environ["GITHUB_EVENT_NAME"]
     if event_name == "workflow_dispatch":
-        selected = sorted(SERVICE_SOURCE_FOLDERS)
+        service = event.get("inputs", {}).get("service", "all")
+        if service != "all" and service not in SERVICE_SOURCE_FOLDERS:
+            raise ValueError("Unknown service requested for manual build")
+        selected = sorted(SERVICE_SOURCE_FOLDERS) if service == "all" else [service]
     else:
         base = event["before"]
         if not base or set(base) == {"0"}:
