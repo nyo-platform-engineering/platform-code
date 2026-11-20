@@ -5,6 +5,9 @@ deployment:
     platform.local/owner: platform-team
     role: other
   replicas: 1
+# Keep the singleton entry point outside deliberate worker freeze/loss tests.
+nodeSelector:
+  kubernetes.io/hostname: aat-control
 providers:
   kubernetesGateway:
     enabled: true

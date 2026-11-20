@@ -9,7 +9,7 @@ task m2:p2
 ```
 
 Requires Python 3.9+, kubectl, a Ready three-node AAT cluster, Traefik's Gateway,
-Argo CD Applications `platform`, `dev-apps`, `aat-aggregator-dev`, and k6 for
+Argo CD Applications `platform`, `dev-apps`, `aat-aggregator-dev`, `traefik`, and k6 for
 Group 3. Tokens come from `.env.runtime` or environment overrides. The separate
 `AGGREGATOR_TOKEN` and `AUDIT_TOKEN` are never placed in subprocess arguments or
 evidence. No new fixture dataset is needed: this suite reconciles live mock IDs.
@@ -144,10 +144,13 @@ evidence separately. A port-forward to one pod/service is not a valid substitute
 for this routing test. The selected mode and gateway URL appear before the first
 prompt and are saved in `result.json`. For a custom gateway/network, set `url` to
 its reachable Traefik origin; the existing `http://client.localhost` listener is a
-different hostname. Route readiness has a maximum 30-second budget, accepts a
+different hostname. Preflight waits for the Traefik rollout to settle before using its route.
+Traefik reconciliation is paused during the run, alongside Aggregator, so a
+concurrent merge cannot replace the gateway underneath the measurements.
+Route readiness has a maximum 30-second budget, accepts a
 complete empty dataset, and reports the last connection/HTTP error on failure.
 
-The runner first disables automated sync on the root, dev parent, and Aggregator
+The runner first disables automated sync on the root, dev parent, Aggregator and Traefik
 Application, drains active/queued sync operations, then sets `skip-reconcile`.
 It restores the original image/replica count before restoring each original
 auto-sync policy and annotation, then removes its route. The throughput comparison
@@ -174,6 +177,7 @@ Evidence is written to `tests/m2/p2/evidence/m2-p2-<timestamp>-<id>/` (ignored b
   HTTP status counters distinguish transport errors (status 0) from HTTP errors.
 - `scale-transitions.json`: requested and Ready times for each replica transition, including failed runs.
 - `kubectl-errors.jsonl`: bounded/redacted stderr when a Kubernetes command fails.
+- `audit-transport-retries.json`: snapshot page numbers and sanitized network/gateway errors recovered by retry.
 - `progress.jsonl`: timestamped phases, wait durations, budgets and last observed state.
 
 Each k6 run prints an indented `[RESULT]` block with measured successful/total
@@ -207,6 +211,18 @@ throughput. This leaves headroom; it does not by itself prove the error-rate or
 throughput criteria. Retain database error evidence when
 debugging `too many clients` rather than weakening the load thresholds.
 
+Audit exports retry only transient network interruptions and gateway 502/503/504
+responses, at the same cursor, with a 30-second per-page retry budget (bounded
+requests use the existing request timeout). Authentication failures, invalid data
+and identity errors still fail. These retries apply only to Audit snapshots;
+load and fault-probe errors remain counted normally. Network failures now name
+the API path and underlying reason instead of reporting only `URLError`.
+A crashed/replaced gateway can also leave stale NodePort conntrack mappings to
+a deleted pod. The lab's old mappings were removed once, scoped to that deleted
+Traefik IP and port 30088; the runner never globally flushes connection state.
+The singleton Traefik gateway is pinned to the control node, outside deliberate
+worker clock/freeze tests.
+
 Audit checks protect identities from previous exports and reject repeated identical
 event versions. Legitimate updates encountered twice across READ COMMITTED pages
 may have a newer `ingested_at`, while keeping the same hazard identity. Gap checks
@@ -236,7 +252,7 @@ restores the worker clock/time services and deployment/GitOps settings, and remo
 its route. SIGKILL,
 power loss, or a second interruption can prevent cleanup: inspect `result.json`,
 restore the original image/replicas, resume the selected worker, restore clock
-sync, remove the recorded route, and restore the three original Argo annotations
+sync, remove the recorded route, and restore the four original Argo annotations
 before starting another run. `clock-recovery.json` records the worker, originally
 active time services and whether restoration completed; after an abrupt exit use
 `task clock:sync` to restore the lab's clock configuration and verify with

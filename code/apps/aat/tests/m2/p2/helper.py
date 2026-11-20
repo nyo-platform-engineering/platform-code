@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 from contextlib import contextmanager, nullcontext
 import datetime as dt
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -22,6 +23,12 @@ from run_progress import Progress
 ROOT = Path(__file__).resolve().parents[3]
 INFRA = ROOT.parents[1] / "infrastructure"
 NAMESPACE = "sistem-informasi-kebencanaan-bnpb"
+
+
+class RequestError(ValueError):
+    def __init__(self, message, retryable=False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -406,7 +413,12 @@ class Run:
             with opener.open(request, timeout=self.config.request_timeout) as response:
                 return json.loads(response.read(8 << 20))
         except urllib.error.HTTPError as error:
-            raise ValueError(f"{path}: HTTP {error.code}") from None
+            raise RequestError(f"{path}: HTTP {error.code}",
+                               retryable=error.code in (502, 503, 504)) from None
+        except (OSError, http.client.HTTPException) as error:
+            reason = getattr(error, "reason", error)
+            detail = safe_error(str(reason), self.credentials)
+            raise RequestError(f"{path}: network error: {detail}", retryable=True) from None
 
     def wait(self, operation, timeout=None, description="required state"):
         timeout = timeout or self.config.recovery_seconds
@@ -490,6 +502,16 @@ class Run:
         nodes = self.kube("get", "nodes", "-o", "json")["items"]
         require(len(nodes) >= 3 and all(ready(n) for n in nodes), "need >=3 Ready nodes")
         self.configure_cluster(nodes)
+        def gateway_ready():
+            deployment = self.kube("get", "deployment", "traefik", "-n", "traefik", "-o", "json")
+            count = deployment["spec"].get("replicas", 1)
+            status = deployment.get("status", {})
+            pods = self.kube("get", "pods", "-n", "traefik", "-l",
+                             "app.kubernetes.io/name=traefik", "-o", "json")["items"]
+            pods = [p for p in pods if not p["metadata"].get("deletionTimestamp")]
+            return (count > 0 and status.get("observedGeneration", 0) >= deployment["metadata"]["generation"]
+                    and all(status.get(k, 0) == count for k in ("updatedReplicas", "readyReplicas", "availableReplicas"))
+                    and len(pods) == count and all(ready(p) for p in pods))
         hpas = self.kube("get", "hpa", "-n", NAMESPACE, "-o", "json")["items"]
         require(not any(h["spec"]["scaleTargetRef"].get("name") == "aggregator" for h in hpas),
                 "disable the Aggregator HPA before manual scale measurements")
@@ -541,7 +563,7 @@ class Run:
         self.prompt("P2 applies faults for the selected groups: deletes owner pods, changes/restores a worker clock, suspends/resumes a worker, scales replicas and rolls the image. Enter enables the isolated test run.")
         self.report["argo_annotations_before"] = {}
         self.report["argo_automated_before"] = {}
-        for name in ("platform", "dev-apps", "aat-aggregator-dev"):
+        for name in ("platform", "dev-apps", "aat-aggregator-dev", "traefik"):
             app = self.kube("get", "application", name, "-n", "argocd", "-o", "json")
             previous = app["metadata"].get("annotations", {}).get("argocd.argoproj.io/skip-reconcile")
             automated = app.get("spec", {}).get("syncPolicy", {}).get("automated")
@@ -568,6 +590,7 @@ class Run:
         self.replicas(3)
         if 3 in self.config.groups:
             self.preload_rolling_image(sorted(n["metadata"]["name"] for n in nodes if ready(n)), deployment)
+        self.wait(gateway_ready, description="Traefik gateway rollout settled")
         route = {"apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
                  "metadata": {"name": self.run_id, "namespace": NAMESPACE},
                  "spec": {"parentRefs": [{"name": "local", "namespace": "traefik", "sectionName": "web"}],
@@ -658,7 +681,21 @@ class Run:
             params = {"limit": 1000}
             if cursor:
                 params["cursor"] = cursor
-            page = self.request("/internal/audit/events", "AUDIT_TOKEN", params)
+            # Retry only read-only exports, at the same cursor. Load/fault
+            # probes keep their original failures and never use this retry.
+            deadline = time.monotonic() + min(30, self.config.recovery_seconds)
+            while True:
+                try:
+                    page = self.request("/internal/audit/events", "AUDIT_TOKEN", params)
+                    break
+                except RequestError as error:
+                    if not error.retryable or time.monotonic() >= deadline:
+                        raise
+                    retries = self.report.setdefault("audit_transport_retries", [])
+                    retries.append({"at": utc(), "page": _ + 1, "error": str(error)})
+                    self.save("audit-transport-retries.json", retries)
+                    self.status(f"page={_ + 1}; retrying same Audit cursor: {error}")
+                    self.pause(1, f"retrying Audit page {_ + 1}: {error}")
             self.status(f"page={_ + 1}; events read={len(items) + len(page.get('items', []))}")
             require(page.get("partial") is False and page.get("unavailable_units") == [], "Audit export is incomplete")
             for event in page["items"]:
