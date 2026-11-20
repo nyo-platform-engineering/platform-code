@@ -55,6 +55,28 @@ def summary():
 
 
 class HelperCompatibilityTests(unittest.TestCase):
+    def test_deployment_records_read_limits_and_rejects_mixed_pods(self):
+        run = object.__new__(p2_helper.Run)
+        pods = [{"metadata": {"name": name, "labels": {"role": "aggregator"}},
+                 "spec": {"nodeName": name},
+                 "status": {"conditions": [{"type": "Ready", "status": "True"}],
+                            "containerStatuses": [{"name": "aggregator", "imageID": "sha256:abc"}]}}
+                for name in ("a", "b", "c")]
+        run.pods = lambda: pods
+        settings = {name: "80\n20\n" for name in ("a", "b", "c")}
+        def kube(*args, **kwargs):
+            if args[0] == "exec":
+                self.assertIn("${READ_RPS_LIMIT:-0}", args[-1])
+                self.assertNotIn("TOKEN", args[-1])
+                return settings[args[1]]
+            return {"spec": {"template": {"spec": {"containers": [{"name": "aggregator", "image": "same"}]}}}}
+        run.kube = kube
+        state = run.deployment_state()
+        self.assertEqual(state["read_admission"], {"rps_per_replica": 80, "burst_per_replica": 20})
+        settings["c"] = "40\n20\n"
+        with self.assertRaisesRegex(ValueError, "different read rate limits"):
+            run.deployment_state()
+
     def test_wait_timeout_keeps_the_condition_name(self):
         run = object.__new__(p2_helper.Run)
         run.config = SimpleNamespace(recovery_seconds=5)
@@ -249,23 +271,53 @@ class PollingEvidenceTests(unittest.TestCase):
 
 class LoadSummaryTests(unittest.TestCase):
     def test_slow_scale_up_still_gets_five_seconds_before_scale_down(self):
-        clock, transitions = [0.0], {}
-        run = SimpleNamespace(config=SimpleNamespace(load_seconds=120))
-        def replicas(count):
-            if count == 5:
-                clock[0] += 50
-        run.replicas = replicas
-        run.observe = lambda: {}
-        run.save = lambda name, value: transitions.update({name: copy.deepcopy(value)})
-        def fake_load(run, name, action):
-            return {"actions": action(0, SimpleNamespace(poll=lambda: None))}
-        with patch.object(group3_load, "load", side_effect=fake_load), \
-                patch.object(group3_load.time, "monotonic", side_effect=lambda: clock[0]), \
-                patch.object(group3_load.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
-            group3_load.scaling(run)
-        phases = transitions["scale-transitions.json"]
-        self.assertGreaterEqual(phases[2]["requested_seconds"], phases[1]["ready_seconds"] + 5)
-        self.assertLess(phases[2]["ready_seconds"], 115)
+        for sample_seconds, scaling_seconds, startup_seconds in ((120, None, 50), (20, 60, 12)):
+            with self.subTest(sample_seconds=sample_seconds):
+                clock, transitions, budgets = [0.0], {}, []
+                window = scaling_seconds or sample_seconds
+                run = SimpleNamespace(config=SimpleNamespace(load_seconds=sample_seconds, scaling_seconds=scaling_seconds))
+                def replicas(count, timeout=None):
+                    if timeout is not None:
+                        budgets.append(timeout)
+                    if count == 5:
+                        clock[0] += startup_seconds
+                run.replicas = replicas
+                run.observe = lambda: {}
+                run.save = lambda name, value: transitions.update({name: copy.deepcopy(value)})
+                def fake_load(run, name, action, seconds):
+                    self.assertEqual(seconds, window)
+                    return {"actions": action(0, SimpleNamespace(poll=lambda: None))}
+                with patch.object(group3_load, "load", side_effect=fake_load), \
+                        patch.object(group3_load.time, "monotonic", side_effect=lambda: clock[0]), \
+                        patch.object(group3_load.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+                    group3_load.scaling(run)
+                phases = transitions["scale-transitions.json"]
+                self.assertGreaterEqual(phases[2]["requested_seconds"], phases[1]["ready_seconds"] + 5)
+                self.assertLess(phases[2]["ready_seconds"], window - 5)
+                self.assertEqual(len(budgets), 2)
+                self.assertTrue(all(0 < budget < window for budget in budgets))
+
+    def test_quick_throughput_keeps_two_times_requirement_and_saves_comparison(self):
+        saved, counts = {}, []
+        run = SimpleNamespace(config=runner.TestConfig(load_seconds=20, scaling_seconds=60),
+                              replicas=counts.append, save=lambda name, value: saved.update({name: value}),
+                              deployment_state=lambda: {"image": "same-image", "nodes": ["a"] if counts[-1] == 1 else ["a", "b", "c"]})
+        def measured(run, name):
+            self.assertEqual(run.config.load_seconds, 20)
+            return {"successes_per_second": 33.19 if name == "throughput-1" else 20.12}
+        with patch.object(group3_load, "load", side_effect=measured):
+            with self.assertRaisesRegex(ValueError, "0.61x.*below 2.0x"):
+                group3_load.throughput(run)
+        self.assertEqual(counts, [1, 3])
+        self.assertLess(saved["throughput-comparison.json"]["ratio"], 2)
+
+    def test_reverted_image_invalidates_throughput_instead_of_reporting_ratio(self):
+        states = iter([{"image": "new"}, {"image": "old"}])
+        run = SimpleNamespace(replicas=lambda count: None, save=lambda *args: None,
+                              deployment_state=lambda: next(states))
+        with patch.object(group3_load, "load", return_value={"successes_per_second": 100}):
+            with self.assertRaisesRegex(ValueError, "changed during throughput measurement; comparison is invalid"):
+                group3_load.throughput(run)
 
     @unittest.skipUnless(shutil.which("node"), "Node is needed for the offline workload contract test")
     def test_workload_classifies_real_response_shapes_without_network(self):
@@ -409,14 +461,17 @@ class AuditAndCleanupTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "without credentials"):
                 runner.validate_config(config)
 
-    def test_short_scaling_window_is_rejected_before_cluster_mutation(self):
+    def test_short_throughput_can_use_a_separate_scaling_window(self):
         with patch.object(sys.stdin, "isatty", return_value=True):
-            config = runner.TestConfig(groups=(3,), load_vus=100, load_seconds=30)
+            config = runner.TestConfig(groups=(3,), load_vus=100, load_seconds=20)
             with self.assertRaisesRegex(ValueError, "replica transitions"):
                 runner.validate_config(config)
-            config.load_seconds = 120
+            config.scaling_seconds = 60
             runner.validate_config(config)
-
+            config.scaling_seconds = 15
+            with self.assertRaisesRegex(ValueError, "replica transitions"):
+                runner.validate_config(config)
+            runner.validate_config(runner.TestConfig())
 
 if __name__ == "__main__":
     unittest.main()

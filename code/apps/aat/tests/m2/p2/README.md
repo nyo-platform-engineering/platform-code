@@ -28,15 +28,25 @@ Edit `CONFIG` at the top of `test-problem-2.py`:
 | `takeover_seconds` | 60-second maximum from fault request to observed successful successor poll |
 | `freeze_seconds` | 30 seconds; must exceed the 20-second DB session idle timeout |
 | `event_intervals` | BMKG/PVMBG 10 seconds; must match running mock configuration |
-| `load_vus`, `load_seconds` | **10,000 VUs for 120 seconds per measured run**, plus 10-second warmup |
+| `load_vus`, `load_seconds` | Full `TestConfig()` defaults: **10,000 VUs, 120 seconds per measured run** |
+| `scaling_seconds` | `None` uses `load_seconds`; set a longer window for scaling and rolling while keeping throughput samples short |
+| `warmup_seconds` | Warmup before each run; full default 10 seconds |
 | `rolling_image` | Set a different immutable `repository@sha256:...` image, available on all target nodes |
 
-Group 3 runs scaling, a one-replica baseline, a three-replica comparison, and an
-optional rolling-update run. Expect at least 6.5 minutes of measured/warmup traffic
-before the optional fourth run, plus setup/recovery. Smaller development settings
-are allowed by reducing VUs, but evidence then explicitly says
-`pdf_load_minimum_met: false`. Group 3 keeps at least 120 seconds even for local
-debugging so pod readiness and both scale transitions fit inside the load window.
+The checked-in `CONFIG` is a short development run: **100 VUs, 60 seconds for
+scaling, two 20-second throughput samples, and 3 seconds of warmup per run**.
+That is about **109 seconds of generator traffic**, plus readiness waits, Audit
+exports, and polling observations. An optional rolling update adds 60 seconds
+plus warmup. Scale transitions must still finish while traffic is running, with
+five seconds of traffic after each transition. If pods start too slowly, increase
+`scaling_seconds`; its waits are bounded by the remaining measurement window.
+
+Use `CONFIG = TestConfig()` for the full run: three 120-second measurements plus
+10-second warmup each (6.5 minutes), before an optional fourth run. The PDF's
+sustained scaling test requires **at least 10,000 VUs for 120 seconds**. Short or
+small runs explicitly record `pdf_load_minimum_met: false`; shortening a run does
+not lower the error-rate or **2.0x throughput** requirements. `load_configuration`
+in `result.json` records the selected durations and sustained-load minimum flag.
 10,000 VUs can consume substantial CPU/memory on the generator; active-VU/window
 checks do not by themselves prove the generator is free from CPU/network limits.
 Run the generator outside application pods and retain host resource evidence.
@@ -70,6 +80,19 @@ official procedure rather than pretending Docker pause is an equivalent demo.
 The workload retries controlled 429 responses after `Retry-After` (capped at five
 seconds per iteration). Rejections remain recorded separately; successful RPS
 counts only complete 200 responses. VUs stay allocated during the retry delay.
+The Aggregator Deployment configures a shared hazards/analytics token bucket of
+20 reads/second with a burst of 5 **per replica**, before the cache. The same
+settings apply at 1, 3 and 5 replicas. Throughput evidence reads these two public
+environment values from every Ready pod before/after each sample and rejects
+configuration differences. A capped ratio measures configured admission capacity,
+not maximum uncapped throughput; retain this distinction in the report. Controlled
+rejections are allowed by P2.6, but this does not guarantee that a cap-derived
+ratio will be accepted as P2.7 capacity evidence. P2.8 still requires zero 429s;
+run its workload below the available admission capacity, without changing the cap
+between replica counts to manufacture a ratio.
+Both comparison runs advertise `Accept-Encoding: gzip` and validate the decoded
+JSON; response bodies are not discarded. Keep the same compression negotiation
+when comparing results so network bandwidth does not change between samples.
 
 A temporary authenticated HTTPRoute forwards a run-specific hostname to the
 Aggregator Service through Traefik. Requests use the Aggregator token and the
@@ -83,10 +106,12 @@ its reachable Traefik origin; the existing `http://client.localhost` listener is
 different hostname. Route readiness has a maximum 30-second budget, accepts a
 complete empty dataset, and reports the last connection/HTTP error on failure.
 
-The runner temporarily sets Argo's `skip-reconcile` annotation on the root,
-dev parent, and Aggregator Application, waiting for active syncs to finish. This
-prevents self-heal from undoing replica/image mutations. It restores the original
-image/replica count before restoring those annotations, then removes its route.
+The runner first disables automated sync on the root, dev parent, and Aggregator
+Application, drains active/queued sync operations, then sets `skip-reconcile`.
+It restores the original image/replica count before restoring each original
+auto-sync policy and annotation, then removes its route. The throughput comparison
+records actual running image IDs and a pod-template hash before/after each sample;
+an image/configuration change invalidates the comparison instead of reporting a ratio.
 Other cluster changes should not be made concurrently. HPA must be disabled for
 these manual-replica tests. Local image pull policy `Never` requires pre-importing
 the candidate rolling image into **all nodes**; a missing/unavailable image must
@@ -97,6 +122,7 @@ Evidence is written to `tests/m2/p2/evidence/m2-p2-<timestamp>-<id>/` (ignored b
 
 - `result.json`: individual pass/fail/skip, measurements, cleanup errors, limits.
 - `deployment-baseline.json`: original image, resources, strategy and node kernels.
+- `throughput-*-deployment.json`: image IDs and pod-template fingerprints around each sample.
 - `polling.jsonl`: filtered source/upstream logs with pod UID and runner observation time.
 - `*-audit.json`: logical identity preservation and deterministic mock-gap checks.
 - `*-k6.json`, `*-k6.log`: per-window load results and generator output, without tokens.
@@ -115,7 +141,7 @@ advanced or passed. Existing timeouts and pass/fail thresholds are unchanged.
 Each generator log is capped at 2 MiB; repeated connection errors are counted in
 the k6 summary instead of filling the disk with warning lines. If the local stack
 cannot stay reachable at 10,000 VUs, first debug Group 3 with `groups=(3,)`,
-`load_vus=100`, and `load_seconds=120`. That is development troubleshooting only;
+`load_vus=100`, `load_seconds=20`, and `scaling_seconds=60`. That is development troubleshooting only;
 it does not satisfy the PDF load minimum or replace a full-capacity run.
 
 The deployment's coordinator connection budget matters during scaling. Five

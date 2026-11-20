@@ -94,6 +94,29 @@ func TestCitusDistributionAndTransactions(t *testing.T) {
 	if len(seen) != 121 {
 		t.Fatalf("global pagination: %d", len(seen))
 	}
+	// The keys-first recent query must also work with real distributed shards,
+	// including timestamp ties and payloads decoded through the raw SQL path.
+	recent := HazardQuery{Order: "recent", Limit: 7, Source: "BMKG"}
+	recentSeen := map[string]bool{}
+	for {
+		page, err := store.Page(ctx, recent)
+		if err != nil || page.Partial {
+			t.Fatalf("distributed recent page: %+v %v", page, err)
+		}
+		for _, event := range page.Items {
+			if recentSeen[event.ID] || event.Attributes == nil {
+				t.Fatalf("duplicate or missing payload: %+v", event)
+			}
+			recentSeen[event.ID] = true
+		}
+		if page.NextCursor == nil {
+			break
+		}
+		recent.Cursor = *page.NextCursor
+	}
+	if len(recentSeen) != 121 {
+		t.Fatalf("distributed recent pagination lost events: %d", len(recentSeen))
+	}
 	// Canonical and local outbox writes must roll back together.
 	rollback := fmt.Errorf("rollback")
 	h := event

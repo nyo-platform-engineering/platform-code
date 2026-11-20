@@ -35,6 +35,9 @@ class TestConfig:
     event_intervals: dict = field(default_factory=lambda: {"BMKG": 10, "PVMBG": 10})
     load_vus: int = 10_000
     load_seconds: int = 120
+    # Scaling/rolling may need a longer window than the two throughput samples.
+    # None uses load_seconds for every run.
+    scaling_seconds: int | None = None
     warmup_seconds: int = 10
     load_limit: int = 50
     k6: str = "k6"
@@ -43,11 +46,13 @@ class TestConfig:
     output_dir: Path | None = None
 
 
-# CONFIG = TestConfig()
+# Use CONFIG = TestConfig() for the full run.
 CONFIG = TestConfig(
     groups=(3,),
     load_vus=100,
-    load_seconds=120,
+    load_seconds=20,
+    scaling_seconds=60,
+    warmup_seconds=3,
 )
 
 def validate_config(config):
@@ -68,9 +73,12 @@ def validate_config(config):
     require(config.freeze_seconds > 20, "freeze must exceed the 20-second owner session idle timeout")
     require(type(config.load_vus) is int and config.load_vus > 0, "load_vus must be positive")
     require(type(config.load_seconds) is int and config.load_seconds >= 15, "load_seconds must be >=15")
+    if config.scaling_seconds is not None:
+        require(type(config.scaling_seconds) is int and config.scaling_seconds >= 30,
+                "scaling_seconds must be >=30 seconds for replica transitions")
     if 3 in config.groups:
-        require(config.load_seconds >= 120,
-                "Group 3 requires >=120 seconds for real replica transitions; reduce load_vus for local debugging")
+        require((config.scaling_seconds or config.load_seconds) >= 30,
+                "set scaling_seconds >=30 for replica transitions when load_seconds is shorter")
     require(type(config.warmup_seconds) is int and config.warmup_seconds >= 1, "warmup_seconds must be positive")
     require(1 <= config.load_limit <= 1000, "load_limit must be 1..1000")
     require(all(type(v) is int and v > 0 for v in config.event_intervals.values()), "invalid event intervals")
