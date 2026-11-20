@@ -30,9 +30,12 @@ holds it, the run stops with `429 too_many_connections`.
 
 | Group | Steps | Criteria |
 | --- | --- | --- |
-| [group1_feed.py](p4/group1_feed.py) | offset advances while watched; lag falls to `CONFIG.max_lag_events`; 0 rejected events | 7, 4, payload format |
+| [group1_feed.py](p4/group1_feed.py) | offset advances while watched; lag falls to `CONFIG.max_lag_events`; 0 rejected events; consumer statistics from the Aggregator logs ([consumer_stats.py](p4/consumer_stats.py): capacity from catch-up batches, commit cost, live rate and peak, p95 ingest latency; every batch saved to `consumer-batches.jsonl`) | 7, 4, payload format |
 | [group2_fires.py](p4/group2_fires.py) | every WILDFIRE: ≥ 2 detections, valid keys, satellites, no low confidence, severity rules, `occurred_at` = earliest detection, each detection in one fire, unique `source_ref_id`; NORMAL events carry `dissolved`/`merged`; excluded detections counted; Audit API checksum vs store | 1, 2, 3, 6 (partial) |
 | [group3_recovery.py](p4/group3_recovery.py) | delete every Aggregator pod; the offset resumes past the pre-crash point, no fire lost or duplicated | 5, 8 |
+| [group4_burst.py](p4/group4_burst.py) | runs last: simulates a `CONFIG.burst_factor`× (60) burst of the live peak, and a 2× spike of that as the worst case, for 60–600 s with the measured capacity; fails if the `CONFIG.verdict_burst_seconds` (120) case is not current within 60 s; table in `burst-simulation.json` | 4 (forecast only) |
+
+The capacity is only measured when the logs hold a catch-up (at least `CONFIG.min_catch_up_batches` full batches back to back), so run P4 soon after a fresh `task up`, before anything restarts the Aggregators. Otherwise it is estimated from commit times (optimistic), or the forecast is skipped. The forecast is a model: the real burst runs only in the exam session and is shown on the Grafana panels.
 
 ## Problem 5 — `task m2:p5`
 

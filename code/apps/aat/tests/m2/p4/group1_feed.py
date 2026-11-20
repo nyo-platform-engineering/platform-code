@@ -1,8 +1,11 @@
 """Group 1 — the live feed: criteria 7 (live processing) and 4 (keeping up),
-plus format compatibility (no event rejected)."""
+plus format compatibility (no event rejected). It also records the consumer's
+statistics from the Aggregator logs (group 4's burst forecast uses them; group 3
+deletes the pods and their logs)."""
 import time
 
 from common import output, require
+import consumer_stats
 
 
 def stats(run):
@@ -33,6 +36,7 @@ def live_feed(run):
     second = stats(run)
     before, after = first["feed"]["offset"], second["feed"]["offset"]
     require(after > before, f"feed offset did not advance in {run.config.observe_seconds:.0f}s ({before} -> {after})")
+    run.live_events_per_second = (after - before) / run.config.observe_seconds
     return {"offset_before": before, "offset_after": after, "seconds": run.config.observe_seconds,
             "events_per_second": round((after - before) / run.config.observe_seconds, 1)}
 
@@ -56,3 +60,12 @@ def run_group(run):
     result = run.stage("caught-up-no-rejects", caught_up, run)
     output("RESULT", "Feed", f"Offset {result['offset']} of {result['latest_offset']} (lag {result['lag_events']})",
            "Rejected events: 0")
+    input("Enter → record the consumer's statistics (capacity, live rate, ingest latency) from the Aggregator logs: ")
+    stats = run.stage("consumer-stats", consumer_stats.measure, run)
+    if not stats.get("skipped"):
+        capacity = stats["capacity_events_per_second"] or stats["capacity_from_commit_times"]
+        output("RESULT", "Consumer",
+               (f"Capacity {capacity} ev/s ({stats['capacity_source']})" if capacity else "Capacity not measurable from these logs")
+               + f"; live {stats['live_average_events_per_second']} ev/s",
+               f"p95 ingest latency live {stats['live_p95_ingest_latency_ms']} ms, "
+               f"behind {stats['backlog_p95_ingest_latency_ms']} ms; every batch is in consumer-batches.jsonl")
