@@ -338,7 +338,7 @@ class Run:
                 require(time.monotonic() < deadline, "timed out waiting for " + description)
                 time.sleep(1)
 
-    def replicas(self, count):
+    def replicas(self, count, timeout=None):
         self.kube("scale", "deployment/aggregator", "-n", NAMESPACE, f"--replicas={count}", json_output=False)
         def settled():
             deployment = self.kube("get", "deployment", "aggregator", "-n", NAMESPACE, "-o", "json")
@@ -352,7 +352,7 @@ class Run:
             return (status.get("observedGeneration", 0) >= deployment["metadata"]["generation"]
                     and status.get("updatedReplicas", 0) == count and len(pods) == count
                     and all(ready(p) for p in pods))
-        self.wait(settled, description=f"Aggregator rollout to {count} Ready replicas")
+        self.wait(settled, timeout=timeout, description=f"Aggregator rollout to {count} Ready replicas")
 
     def configure_cluster(self, nodes):
         # task up -- --novm records its mode; API metadata also covers copied kubeconfigs.
@@ -424,28 +424,39 @@ class Run:
         require(float(actual.strip()) == self.config.poll_interval, "CONFIG.poll_interval disagrees with live Aggregator")
         deployment = self.kube("get", "deployment", "aggregator", "-n", NAMESPACE, "-o", "json")
         self.original_replicas = deployment["spec"].get("replicas", 1)
+        self.original_template = deployment["spec"]["template"]
         container = next(c for c in deployment["spec"]["template"]["spec"]["containers"] if c["name"] == "aggregator")
         self.original_image = container["image"]
         self.save("deployment-baseline.json", {"image": self.original_image, "replicas": self.original_replicas,
                    "resources": container.get("resources"), "strategy": deployment["spec"].get("strategy"),
+                   "topology_spread": deployment["spec"]["template"]["spec"].get("topologySpreadConstraints", []),
                    "nodes": [{"name": n["metadata"]["name"], "kernel": n["status"]["nodeInfo"]["kernelVersion"]} for n in nodes]})
         self.prompt("P2 will delete one Aggregator pod, scale replicas, and optionally roll its image. Enter enables the isolated test run.")
         self.report["argo_annotations_before"] = {}
+        self.report["argo_automated_before"] = {}
         for name in ("platform", "dev-apps", "aat-aggregator-dev"):
             app = self.kube("get", "application", name, "-n", "argocd", "-o", "json")
             previous = app["metadata"].get("annotations", {}).get("argocd.argoproj.io/skip-reconcile")
+            automated = app.get("spec", {}).get("syncPolicy", {}).get("automated")
             self.report["argo_annotations_before"][name] = previous
+            self.report["argo_automated_before"][name] = automated
             self.save("result.json", self.report)
-            def restore(name=name, previous=previous):
+            def restore(name=name, previous=previous, automated=automated):
                 self.kube("patch", "application", name, "-n", "argocd", "--type=merge", "-p",
-                          json.dumps({"metadata": {"annotations": {"argocd.argoproj.io/skip-reconcile": previous}}}), json_output=False)
+                          json.dumps({"metadata": {"annotations": {"argocd.argoproj.io/skip-reconcile": previous}},
+                                      "spec": {"syncPolicy": {"automated": automated}}}), json_output=False)
             self.cleanup.append(restore)
-            self.kube("annotate", "application", name, "-n", "argocd", "argocd.argoproj.io/skip-reconcile=true", "--overwrite", json_output=False)
+            # Disable self-heal before waiting. Skip-reconcile alone freezes
+            # status and does not reliably drain an already queued sync.
+            self.kube("patch", "application", name, "-n", "argocd", "--type=merge", "-p",
+                      json.dumps({"spec": {"syncPolicy": {"automated": None}}}), json_output=False)
             def sync_stopped(name=name):
-                phase = self.kube("get", "application", name, "-n", "argocd", "-o", "json").get("status", {}).get("operationState", {}).get("phase")
+                current = self.kube("get", "application", name, "-n", "argocd", "-o", "json")
+                phase = current.get("status", {}).get("operationState", {}).get("phase")
                 self.status(f"Application={name}; sync={phase or 'idle'}")
-                return phase != "Running"
+                return phase not in ("Running", "Terminating") and not current.get("operation")
             self.wait(sync_stopped, description=f"Argo Application {name}: active sync finished")
+            self.kube("annotate", "application", name, "-n", "argocd", "argocd.argoproj.io/skip-reconcile=true", "--overwrite", json_output=False)
         self.cleanup.append(self.restore_deployment)
         self.replicas(3)
         route = {"apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
@@ -460,11 +471,37 @@ class Run:
         time.sleep(3)
         return {"replicas": 3, "load_balancer": "Traefik -> Aggregator Service", "host": self.host,
                 "gateway_url": self.config.url, "cluster_mode": self.report["cluster_mode"],
-                "gitops": "temporarily skip reconciliation; restore in finally"}
+                "gitops": "disable auto-sync, drain operations, then skip reconciliation; restore in finally"}
+
+    def deployment_state(self):
+        deployment = self.kube("get", "deployment", "aggregator", "-n", NAMESPACE, "-o", "json")
+        template = deployment["spec"]["template"]
+        pods = [pod for pod in self.pods()
+                            if pod["metadata"].get("labels", {}).get("role") == "aggregator"
+                            and not pod["metadata"].get("deletionTimestamp") and ready(pod)]
+        image_ids = sorted({container["imageID"] for pod in pods
+                            for container in pod.get("status", {}).get("containerStatuses", [])
+                            if container["name"] == "aggregator"})
+        require(image_ids, "no Ready Aggregator image IDs for throughput comparison")
+        container = next(c for c in template["spec"]["containers"] if c["name"] == "aggregator")
+        read_limits = set()
+        for pod in pods:
+            # Only these public settings are exported; never dump the pod environment.
+            values = self.kube("exec", pod["metadata"]["name"], "-n", NAMESPACE, "-c", "aggregator", "--",
+                               "sh", "-c", 'printf "%s\\n%s\\n" "${READ_RPS_LIMIT:-0}" "${READ_RPS_BURST:-5}"',
+                               json_output=False).splitlines()
+            require(len(values) == 2, "could not read Aggregator admission settings")
+            read_limits.add(tuple(map(int, values)))
+        require(len(read_limits) == 1, "Ready Aggregators have different read rate limits")
+        rps, burst = next(iter(read_limits))
+        return {"image": container["image"], "image_ids": image_ids,
+                "nodes": sorted({pod["spec"]["nodeName"] for pod in pods}),
+                "read_admission": {"rps_per_replica": rps, "burst_per_replica": burst},
+                "template_sha256": hashlib.sha256(json.dumps(template, sort_keys=True).encode()).hexdigest()}
 
     def restore_deployment(self):
-        self.kube("set", "image", "deployment/aggregator", "-n", NAMESPACE,
-                  "aggregator=" + self.original_image, json_output=False)
+        self.kube("patch", "deployment", "aggregator", "-n", NAMESPACE, "--type=json", "-p",
+                  json.dumps([{"op": "replace", "path": "/spec/template", "value": self.original_template}]), json_output=False)
         self.replicas(self.original_replicas)
 
     def audit(self):

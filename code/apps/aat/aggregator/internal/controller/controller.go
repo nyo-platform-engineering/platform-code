@@ -14,6 +14,9 @@ type Controller struct {
 	DB              *gorm.DB
 	Store           storage.Reader
 	ReadConcurrency int
+	ReadRPSLimit    int
+	ReadRPSBurst    int
+	PageCache       *HazardPageCache
 	// Set only when DB uses the owner's connection.
 	PollOwner     *model.PollOwner
 	AcceptPVMBGV2 bool

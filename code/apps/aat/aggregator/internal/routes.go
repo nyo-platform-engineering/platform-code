@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"net/http"
 
 	"aat/aggregator/internal/controller"
@@ -15,13 +16,17 @@ func NewHandler(ctrl *controller.Controller, token string) http.Handler {
 // NewHandlerWithAudit registers a separate audit group. Additional audit handlers
 // (such as unprocessed) must use the same authentication and JSON error contract.
 func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) http.Handler {
+	if ctrl.PageCache == nil {
+		ctrl.PageCache = &controller.HazardPageCache{}
+	}
 	mux := httpkit.Router()
 	private := mux.Group("", httpkit.Auth("Authorization", "Bearer "+token))
 
 	mux.GET("/health", ctrl.Health)
 	reads := limitReads(ctrl.ReadConcurrency)
-	private.GET("/internal/hazards", reads, ctrl.Hazards)
-	private.GET("/internal/analytics", reads, ctrl.Analytics)
+	rate := limitReadRate(ctrl.ReadRPSLimit, ctrl.ReadRPSBurst)
+	private.GET("/internal/hazards", rate, limitReads(128), ctrl.CachedHazards, reads, ctrl.Hazards)
+	private.GET("/internal/analytics", rate, reads, ctrl.Analytics)
 	private.GET("/internal/source-status", ctrl.SourceStatus)
 	private.GET("/internal/satellite/stats", ctrl.SatelliteStatsHandler)
 	private.GET("/internal/sensor/status", ctrl.SensorStatusHandler)
@@ -54,6 +59,7 @@ func limitReads(capacity int) gin.HandlerFunc {
 			c.Next()
 		default:
 			c.Header("Retry-After", "1")
+			c.Header("X-Read-Limit", fmt.Sprint(capacity))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "read capacity reached; retry later"})
 		}
 	}

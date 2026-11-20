@@ -18,9 +18,13 @@ const errorRate = new Rate('p2_error_rate_excluding_controlled');
 const latency = new Trend('p2_latency_ms', true);
 const active = new Trend('p2_active_vus');
 const statuses = new Counter('p2_http_status');
+const cacheResults = new Counter('p2_cache_results');
 const thresholds = { p2_error_rate_excluding_controlled: ['rate<0.01'], p2_successes: ['count>0'] };
 for (const status of [0, 200, 429, 500, 502, 503, 504]) {
   thresholds[`p2_http_status{status:${status}}`] = ['count>=0'];
+}
+for (const result of ['hit', 'miss', 'uncached', 'limited']) {
+  thresholds[`p2_cache_results{result:${result}}`] = ['count>=0'];
 }
 for (let i = 0; i < Math.ceil(seconds / 5); i++) {
   thresholds[`p2_requests{window:${i}}`] = ['count>0'];
@@ -45,6 +49,7 @@ export default function () {
   const activeAtStart = exec.instance.vusActive;
   const response = http.get(`${__ENV.P2_URL}/internal/hazards?order=recent&limit=${__ENV.P2_LIMIT}`, {
     headers: { Authorization: `Bearer ${__ENV.P2_TOKEN}`, Host: __ENV.P2_HOST,
+      'Accept-Encoding': 'gzip',
       'X-Correlation-ID': `${__ENV.P2_RUN_ID}-${__VU}-${__ITER}` },
     timeout: '8s', tags: { name: 'aggregator-hazards' },
   });
@@ -64,6 +69,7 @@ export default function () {
   const tags = { window: String(window) };
   requests.add(1, tags);
   statuses.add(1, {status: String(response.status)});
+  cacheResults.add(1, {result: controlled ? 'limited' : (response.headers['X-Hazard-Cache'] || 'uncached')});
   successes.add(valid ? 1 : 0, tags);
   failures.add(!valid && !controlled ? 1 : 0);
   rejected.add(controlled ? 1 : 0);

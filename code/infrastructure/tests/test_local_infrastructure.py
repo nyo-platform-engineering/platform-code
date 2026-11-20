@@ -159,6 +159,7 @@ class WorkloadTests(unittest.TestCase):
         self.assertEqual(spread["topologyKey"], "kubernetes.io/hostname")
         self.assertEqual(spread["whenUnsatisfiable"], "DoNotSchedule")
         self.assertEqual(spread["nodeTaintsPolicy"], "Honor")
+        self.assertEqual(spread["matchLabelKeys"], ["pod-template-hash"])
         self.assertEqual(deployment["spec"]["strategy"]["rollingUpdate"]["maxUnavailable"], 0)
         auth = next(d for d in self.services["auth"] if d["kind"] == "Deployment")
         self.assertEqual(auth["spec"]["replicas"], 1)

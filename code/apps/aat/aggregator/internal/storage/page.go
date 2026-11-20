@@ -25,6 +25,10 @@ type Pager interface {
 	Page(context.Context, HazardQuery) (HazardPage, error)
 }
 
+type RevisionReader interface {
+	Revision(context.Context) (int64, error)
+}
+
 // Cursors describe the global sort position, independent of shard placement.
 type globalCursor struct {
 	Version int       `json:"v"`
