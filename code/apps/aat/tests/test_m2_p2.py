@@ -333,6 +333,28 @@ class PollingEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "matching Aggregator"):
             p2_helper.polling_evidence(records()[1:], 0, 20, 3)
 
+    def test_upstream_response_can_outlive_cancelled_caller(self):
+        data = records()
+        data[4]["log"]["status"] = 0
+        result = p2_helper.polling_evidence(data, 0, 20, 3)
+        self.assertEqual(result["upstream_requests"]["PVMBG/volcanic-reports"], 1)
+        self.assertEqual(result["unconfirmed_responses"], [{
+            "source": "PVMBG", "path": "/volcanic-reports",
+            "correlation_id": "PVMBG/volcanic-reports", "pod_uid": "owner-a", "epoch": 1}])
+
+    def test_cancelled_caller_still_checks_competing_owner(self):
+        data = records()
+        data[2]["log"].update(status=0, poll_owner="b" * 32)
+        with self.assertRaisesRegex(ValueError, "multiple owners"):
+            p2_helper.polling_evidence(data, 0, 20, 3)
+
+    def test_cancelled_caller_does_not_prove_successful_poll(self):
+        data = records()
+        data[4]["log"]["status"] = 0
+        data.pop()
+        with self.assertRaisesRegex(ValueError, "no successful PVMBG"):
+            p2_helper.polling_evidence(data, 0, 20, 3)
+
     def test_two_owners_in_one_epoch_fail(self):
         data = records()
         data[2]["log"]["poll_owner"] = "b" * 32

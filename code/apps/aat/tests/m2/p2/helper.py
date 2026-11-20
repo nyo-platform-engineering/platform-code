@@ -120,7 +120,11 @@ def polling_evidence(records, start, end, poll_interval):
         log = item["log"]
         if log.get("msg") == "outbound_request" and log.get("source") in ("BMKG", "PVMBG"):
             key = (log["source"], log.get("path"), log.get("correlation_id"))
-            if log.get("status") == 200:
+            # status 0 means Do returned without a response (for example,
+            # cancellation during scale-down). The upstream can still have
+            # received and answered this exact request. This proves the caller,
+            # not a successful fetch or commit; those are checked separately.
+            if log.get("status") in (0, 200):
                 callers[key] = item
         if not item.get("initial") and start + 2 <= item["observed"] <= end - 2:
             if log.get("msg") == "poll succeeded":
@@ -136,6 +140,7 @@ def polling_evidence(records, start, end, poll_interval):
                     "/seismic-events", "/tsunami-warnings", "/volcanic-reports"):
                 upstream.append(item)
     counts, seen, epochs, intervals = Counter(), set(), {}, defaultdict(list)
+    unconfirmed_responses = []
     for item in upstream:
         log = item["log"]
         source = item["role"].upper()
@@ -148,6 +153,10 @@ def polling_evidence(records, start, end, poll_interval):
         request = caller["log"]
         owner, epoch = request.get("poll_owner"), request.get("poll_epoch")
         require(owner and str(epoch).isdigit(), "deploy images with X-Poll-Owner/epoch request logging")
+        if request.get("status") == 0:
+            unconfirmed_responses.append({"source": source, "path": log["path"],
+                                          "correlation_id": log.get("correlation_id"),
+                                          "pod_uid": caller["pod_uid"], "epoch": int(epoch)})
         identity = (source, int(epoch))
         authority = (owner, caller["pod_uid"])
         require(identity not in epochs or epochs[identity] == authority, "one polling epoch has multiple owners")
@@ -173,7 +182,8 @@ def polling_evidence(records, start, end, poll_interval):
             "epochs": [{"source": s, "epoch": e, "owner": o, "pod_uid": p} for (s, e), (o, p) in sorted(epochs.items())],
             "successful_poll_owners": [{"source": s, "epoch": e, "pod_uid": p}
                                        for (s, e), p in sorted(successful_owners.items())],
-            "poll_successes": dict(successes), "scope": "observed request/commit logs; not a linearizability proof"}
+            "poll_successes": dict(successes), "unconfirmed_responses": unconfirmed_responses,
+            "scope": "observed request/commit logs; not a linearizability proof"}
 
 
 class Logs:

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 import datetime as dt
 import math
 from pathlib import Path
+import shutil
 import sys
 import uuid
 import urllib.parse
@@ -99,14 +100,34 @@ def validate_config(config):
             "observation_seconds must cover at least three mock event intervals")
 
 
+def create_evidence_folder(config, name):
+    require(sys.stdin.isatty(), "run task m2:p2 in an interactive terminal")
+    evidence_root = Path(__file__).resolve().parent / "evidence"
+    require(not evidence_root.is_symlink(), "evidence directory must not be a symlink")
+    older_runs = sorted(folder for folder in evidence_root.glob("m2-p2-*")
+                        if folder.is_dir() and not folder.is_symlink())
+    for folder in older_runs:
+        print(f"  {folder.name}", flush=True)
+    answer = input(
+        f"Delete {len(older_runs)} older P2 evidence folders in {evidence_root}? [y/N]: "
+    ).strip().lower()
+    if answer in ("y", "yes"):
+        for folder in older_runs:
+            shutil.rmtree(folder)
+
+    # Keep previous evidence by default; create this run after the decision.
+    folder = Path(config.output_dir or evidence_root / name).resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    return folder
+
+
 def main():
     if len(sys.argv) > 1:
         print("No command-line options. Edit CONFIG in test-problem-2.py.", file=sys.stderr)
         return 2
     config = replace(CONFIG)
     name = "m2-p2-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S").lower() + "-" + uuid.uuid4().hex[:8]
-    folder = Path(config.output_dir or Path(__file__).resolve().parent / "evidence" / name).resolve()
-    folder.mkdir(parents=True, exist_ok=False)
+    folder = create_evidence_folder(config, name)
     run = Run(config, folder, name)
     code = 1
     try:
