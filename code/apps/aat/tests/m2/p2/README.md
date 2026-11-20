@@ -86,7 +86,15 @@ and database coordinator off that worker.
 Before each clock/freeze check, the runner prepares the actual source owner on the safe worker
 by restarting owner pods until an observed successor there has a newer epoch.
 Preparation is bounded and recorded separately from the measured freeze. Enter
-suspends the known local Vagrant/libvirt worker and resumes it in `finally`.
+suspends the known local libvirt domain and resumes it in `finally`, directly
+through `virsh`. Resume is idempotent and does not rerun Vagrant provisioners.
+Expected log disconnects for that owner are tracked during the deliberate freeze.
+Before continuing, the collector must recover the original stream or replay its
+pre-freeze log anchor and observe fresh records; missing continuity still fails.
+Reconnect replays the retained container log file from that anchor, rather than
+assuming the last 1,000 lines contain it. Recovery evidence is saved in
+`freeze-log-recovery.json`. The worker clock and its active time services are
+also restored explicitly after resume, since guest time may lag after suspension.
 There is no disk erasure. Non-Vagrant/native environments need the external
 official procedure rather than pretending Docker pause is an equivalent demo.
 

@@ -72,6 +72,34 @@ worker_power() {
   fi
 }
 
+worker_freeze() {
+  local operation="$1" node="$2" identity_file domain_uuid domain_name domain_state
+  identity_file="$root/local/.vagrant/machines/$node/libvirt/id"
+  [[ -s "$identity_file" ]] || { echo "Missing local libvirt identity: $node" >&2; return 1; }
+  domain_uuid="$(cat "$identity_file")"
+  [[ "$domain_uuid" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || return 1
+  domain_name="$(virsh -c qemu:///system domname "$domain_uuid")"
+  [[ "$domain_name" == "aat-m2$node" ]] || { echo "Unexpected domain for $node: $domain_name" >&2; return 1; }
+  domain_state="$(LC_ALL=C virsh -c qemu:///system domstate "$domain_uuid")"
+  if [[ "$operation" == suspend-worker ]]; then
+    case "$domain_state" in
+      running) virsh -c qemu:///system suspend "$domain_uuid" ;;
+      paused) echo "$node is already suspended" ;;
+      *) echo "Cannot suspend $node in state: $domain_state" >&2; return 1 ;;
+    esac
+    [[ "$(LC_ALL=C virsh -c qemu:///system domstate "$domain_uuid")" == paused ]]
+  else
+    # Resume the existing guest only: Vagrant resume also reruns 'always'
+    # provisioners, which can hang on clock sync and leave an action locked.
+    case "$domain_state" in
+      paused) virsh -c qemu:///system resume "$domain_uuid" ;;
+      running) echo "$node is already running" ;;
+      *) echo "Cannot resume $node in state: $domain_state" >&2; return 1 ;;
+    esac
+    [[ "$(LC_ALL=C virsh -c qemu:///system domstate "$domain_uuid")" == running ]]
+  fi
+}
+
 case "${1:-help}" in
   manager)
     if ! command -v virt-manager >/dev/null; then
@@ -109,8 +137,7 @@ case "${1:-help}" in
     fi
 
     case "$1" in
-      suspend-worker) vm suspend "$node" ;;
-      resume-worker) vm resume "$node" ;;
+      suspend-worker|resume-worker) worker_freeze "$1" "$node" ;;
       stop-worker|start-worker) worker_power "$1" "$node" ;;
     esac
     ;;

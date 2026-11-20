@@ -4,6 +4,15 @@ abort "Invalid AAT_NETWORK_PREFIX" unless prefix.match?(/\A\d{1,3}\.\d{1,3}\.\d{
 token = File.expand_path("../.state/cluster-token", __dir__)
 abort "Run task up first (cluster token missing)" unless File.file?(token)
 
+# vagrant-libvirt 0.12.2 still passes this legacy option, which fog-libvirt
+# 0.16 no longer declares. Accept the unused field for this project rather than
+# hiding Fog warnings globally or modifying the user's installed gems.
+if Vagrant.has_plugin?("vagrant-libvirt")
+  require "fog/libvirt"
+  require "fog/libvirt/compute"
+  Fog::Libvirt::Compute.recognizes :libvirt_ip_command
+end
+
 Vagrant.configure("2") do |config|
   config.vm.box = ENV.fetch("AAT_VM_BOX", "bento/ubuntu-24.04")
   config.vm.box_version = ENV["AAT_VM_BOX_VERSION"] if ENV["AAT_VM_BOX_VERSION"]

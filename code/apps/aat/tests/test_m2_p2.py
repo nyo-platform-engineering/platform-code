@@ -1,5 +1,6 @@
 """Offline P2 validator tests; never mutate the cluster or generate real load."""
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -140,6 +141,40 @@ class HelperCompatibilityTests(unittest.TestCase):
             logs = p2_helper.Logs(SimpleNamespace(credentials={}, pods=lambda: current))
             self.assertFalse(logs.attachable(pod, SimpleNamespace(returncode=0)))
             self.assertEqual(logs.errors, [])
+
+    def test_freeze_reconnect_requires_anchor_replay_and_fresh_records(self):
+        uid = "owner"
+        pod = {"metadata": {"uid": uid, "name": "owner", "labels": {}},
+               "spec": {"nodeName": "aat-worker-1"},
+               "status": {"conditions": [{"type": "Ready", "status": "True"}]}}
+        before = json.dumps({"msg": "poll succeeded", "source": "BMKG", "epoch": 1}) + "\n"
+        fresh = json.dumps({"msg": "poll succeeded", "source": "BMKG", "epoch": 2}) + "\n"
+        anchor = (uid, hashlib.sha256(before.encode()).hexdigest())
+        old = SimpleNamespace(poll=lambda: 1, returncode=1)
+        new = SimpleNamespace(poll=lambda: None, stdout=[fresh])
+        with tempfile.TemporaryDirectory() as folder:
+            logs = p2_helper.Logs(SimpleNamespace(credentials={}, run_id="test", folder=Path(folder),
+                          pods=lambda: [pod], save=lambda *args: None))
+            logs.streams[uid] = old
+            logs.last_fingerprints[uid] = anchor
+            logs.seen.add(anchor)
+            logs.begin_freeze(uid)
+            self.assertFalse(logs.attachable(pod, old))
+            logs.resume_freeze(uid)
+            self.assertTrue(logs.attachable(pod, old))
+            self.assertEqual(logs.errors, [])
+            logs.streams[uid] = new
+            logs.read(new, pod, "aggregator")
+            self.assertFalse(logs.freeze_recovered(uid), "fresh records alone cannot prove continuity")
+            new.stdout = [before, fresh]
+            logs.read(new, pod, "aggregator")
+            self.assertTrue(logs.freeze_recovered(uid))
+            evidence = logs.finish_freeze(uid)
+            self.assertTrue(evidence["pre_freeze_anchor_replayed"])
+            self.assertFalse(evidence["same_stream"])
+            self.assertNotIn(uid, logs.freeze_streams)
+            self.assertTrue(logs.attachable(pod, old))
+            self.assertTrue(logs.errors, "unexpected later disconnects remain fatal")
 
     def test_live_pod_stream_failure_remains_fatal_and_is_saved(self):
         pod = {"metadata": {"uid": "live", "name": "aggregator-live"}}

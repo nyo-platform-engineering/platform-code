@@ -3,12 +3,23 @@ extraLabels:
 fullnameOverride: grafana
 image:
   tag: 12.3.2
+# Latest releases require Grafana 13; these signed releases support 12.3.2.
+plugins:
+  - grafana-llm-app@1.0.8
+  - consensys-asko11y-app@0.2.36
+grafana.ini:
+  feature_toggles:
+    enable: externalServiceAccounts
+  auth.managed_service_accounts:
+    enabled: true
+# Provider credentials and app/tool settings are stored in Grafana secure UI
+# settings on its PVC, so restarts do not overwrite operator configuration.
 adminUser: admin
 resources:
-  # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
+  # Requests retain the measured baseline; limit includes headroom for AI plugins.
   requests: {cpu: 4m, memory: 234Mi}
   limits:
-    memory: 256Mi
+    memory: 512Mi
 dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1

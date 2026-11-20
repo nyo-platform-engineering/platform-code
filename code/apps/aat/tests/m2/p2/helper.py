@@ -165,6 +165,39 @@ class Logs:
         self.traffic = Counter()
         self.seen = set()
         self.pod_states = {}
+        self.freeze_streams, self.last_fingerprints, self.last_seen = {}, {}, {}
+        self.expected_interruptions = []
+
+    def begin_freeze(self, uid):
+        with self.lock:
+            require(uid in self.last_fingerprints and uid in self.streams,
+                    "need a captured log anchor before freezing owner")
+            self.freeze_streams[uid] = {"anchor": self.last_fingerprints[uid],
+                "process": self.streams[uid], "resumed_at": None, "replayed": False}
+
+    def resume_freeze(self, uid):
+        with self.lock:
+            state = self.freeze_streams[uid]
+            if state["resumed_at"] is None:
+                state["resumed_at"] = time.monotonic()
+            return state["resumed_at"]
+
+    def freeze_recovered(self, uid):
+        with self.lock:
+            state, process = self.freeze_streams[uid], self.streams.get(uid)
+            continuous = process is state["process"] or state["replayed"]
+            return (state["resumed_at"] is not None and continuous and process is not None
+                    and process.poll() is None and self.last_seen.get(uid, 0) >= state["resumed_at"])
+
+    def finish_freeze(self, uid):
+        require(self.freeze_recovered(uid), "owner log continuity was not recovered after freeze")
+        with self.lock:
+            state = self.freeze_streams.pop(uid)
+            evidence = {"pod_uid": uid, "pre_freeze_anchor_replayed": state["replayed"],
+                        "same_stream": self.streams[uid] is state["process"],
+                        "interruptions": list(self.expected_interruptions)}
+        self.run.save("freeze-log-recovery.json", evidence)
+        return evidence
 
     def start(self):
         self.watch = threading.Thread(target=self.discover, daemon=True)
@@ -177,6 +210,10 @@ class Logs:
             self.run.save("log-errors.json", list(self.errors))
 
     def attachable(self, pod, previous):
+        uid = pod["metadata"]["uid"]
+        recovery = self.freeze_streams.get(uid)
+        if recovery is not None and (recovery["resumed_at"] is None or not ready(pod)):
+            return False
         if pod["metadata"].get("deletionTimestamp"):
             return False
         if previous is None and not ready(pod):
@@ -187,7 +224,10 @@ class Logs:
                             if p["metadata"]["uid"] == pod["metadata"]["uid"]), None)
             if current is None or current["metadata"].get("deletionTimestamp"):
                 return False
-            self.record_error(f"log stream interrupted for {pod['metadata']['name']} (exit {previous.returncode})")
+            if recovery is None:
+                self.record_error(f"log stream interrupted for {pod['metadata']['name']} (exit {previous.returncode})")
+            else:
+                self.expected_interruptions.append({"pod_uid": uid, "at": utc(), "exit": previous.returncode})
         return True
 
     def discover(self):
@@ -209,7 +249,11 @@ class Logs:
                                                   if k in ("exitCode", "reason", "startedAt", "finishedAt")}}
                             for s in pod.get("status", {}).get("containerStatuses", [])]}
                         self.run.save("log-pods.json", self.pod_states)
-                        process = subprocess.Popen(self.run.command("logs", "-f", name, "-n", NAMESPACE, "--tail=1000", "--request-timeout=0"),
+                        # A busy poller can emit >1000 DB trace lines around a
+                        # freeze. Replay the retained file and discard records
+                        # before our exact anchor instead of losing continuity.
+                        tail = -1 if uid in self.freeze_streams else 1000
+                        process = subprocess.Popen(self.run.command("logs", "-f", name, "-n", NAMESPACE, f"--tail={tail}", "--request-timeout=0"),
                                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
                         self.streams[uid] = process
                         thread = threading.Thread(target=self.read, args=(process, pod, role), daemon=True)
@@ -242,9 +286,17 @@ class Logs:
                     "pod": pod["metadata"]["name"], "pod_uid": pod["metadata"]["uid"],
                     "node": pod["spec"].get("nodeName"), "role": role, "log": log}
             with self.lock:
+                uid = pod["metadata"]["uid"]
+                recovery = self.freeze_streams.get(uid)
+                if recovery is not None and fingerprint == recovery["anchor"]:
+                    recovery["replayed"] = True
+                if recovery is not None and process is not recovery["process"] and not recovery["replayed"]:
+                    continue
                 if fingerprint in self.seen:
                     continue
                 self.seen.add(fingerprint)
+                self.last_fingerprints[uid] = fingerprint
+                self.last_seen[uid] = item["observed"]
                 self.records.append(item)
                 with (self.run.folder / "polling.jsonl").open("a") as stream:
                     stream.write(json.dumps(item) + "\n")
