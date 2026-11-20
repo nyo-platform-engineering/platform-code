@@ -13,6 +13,7 @@ import datetime as dt
 import json
 from pathlib import Path
 import shutil
+import tempfile
 import socket
 import subprocess
 import sys
@@ -267,6 +268,10 @@ class Run:
         # once: the lab Aggregator has a single read slot per pod, so a probe can collide
         # with another reader (e.g. the dashboard updater). Calls that expect 429 (the
         # overload test) are never retried. Both attempts are kept in http.jsonl.
+        # A GET through a kubectl port-forward whose pod went away (the tunnel binds one
+        # pod) reopens the tunnel through the Service and is sent once more, as in P1.
+        # Writes are never resent. The reconnect is kept in http.jsonl and result.json.
+        reconnected = False
         for attempt in (1, 2):
             request = urllib.request.Request(self.url(service) + path, data=data, headers=headers)
             started = time.perf_counter()
@@ -277,12 +282,25 @@ class Run:
             except urllib.error.HTTPError as error:
                 status, raw, retry_after = error.code, error.read(), error.headers.get("Retry-After")
             except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
-                raise RuntimeError(f"{service} {path}: network failure ({type(error).__name__})") from None
+                failure = f"{service} {path}: network failure ({type(error).__name__})"
+                tunnelled = service in self.forwards.processes
+                if attempt == 1 and data is None and tunnelled and not reconnected:
+                    reconnected = True
+                    with self.lock:
+                        self.report.setdefault("tunnel_reconnects", []).append(
+                            {"at": utc(), "service": service, "path": path, "error": type(error).__name__})
+                        if record:
+                            with (self.folder / "http.jsonl").open("a") as stream:
+                                stream.write(json.dumps({"at": utc(), "service": service, "path": path, "status": 0,
+                                                         "error": type(error).__name__, "tunnel_reopened": True}) + "\n")
+                    self.forwards.open(service)
+                    continue
+                raise RuntimeError(failure) from None
             elapsed = (time.perf_counter() - started) * 1000
             if record:
                 entry = {"at": utc(), "service": service, "path": path, "status": status, "ms": round(elapsed, 2)}
                 if attempt == 2:
-                    entry["retry_after_429"] = True
+                    entry["retry_after_tunnel_reopen" if reconnected else "retry_after_429"] = True
                 with self.lock, (self.folder / "http.jsonl").open("a") as stream:
                     stream.write(json.dumps(entry) + "\n")
             if attempt == 1 and status == 429 and 429 not in expected and data is None:
@@ -358,7 +376,10 @@ class Run:
                                             for name, check in self.report["automated_checks"].items()))
         if exit_code == 0:
             output("PASS", f"All automated P{self.problem} checks passed")
-        output("INFO", "Evidence", str(self.folder))
+        if getattr(self, "save_evidence", True):
+            output("INFO", "Evidence", str(self.folder))
+        else:
+            output("INFO", "Evidence not saved", "this run's files are deleted when the test exits")
         output("MANUAL", "Pending evidence", *self.report["manual_evidence_required"])
 
 
@@ -396,8 +417,21 @@ class Tee:
         return answer
 
 
-def evidence_folder(problem, config):
-    """Fresh tests/m2/p<n>/evidence/m2-p<n>-<stamp>-<id>/, offering to delete older runs first."""
+def ask_save_evidence(problem, config):
+    """Asks whether to keep this run's evidence; Enter keeps it. A fixed
+    CONFIG.output_dir is always kept."""
+    if config.output_dir:
+        return True
+    answer = input(f"Save evidence for this P{problem} run? [Y/n]: ").strip().lower()
+    return answer not in ("n", "no")
+
+
+def evidence_folder(problem, config, save=True):
+    """Fresh tests/m2/p<n>/evidence/m2-p<n>-<stamp>-<id>/, offering to delete older runs first.
+    When the evidence is not kept, the run writes to a temporary folder instead, which
+    main() removes at the end."""
+    if not save:
+        return Path(tempfile.mkdtemp(prefix=f"m2-p{problem}-unsaved-")).resolve()
     root = Path(__file__).resolve().parent / f"p{problem}" / "evidence"
     require(not root.is_symlink(), "evidence directory must not be a symlink")
     older = sorted(f for f in root.glob(f"m2-p{problem}-*") if f.is_dir() and not f.is_symlink())
@@ -422,21 +456,33 @@ def main(problem, config, groups, required_keys, manual_evidence, validate=None)
     if not sys.stdin.isatty():
         print(f"run task m2:p{problem} in an interactive terminal", file=sys.stderr)
         return 2
-    folder = evidence_folder(problem, config)
-    with ExitStack() as console:
-        # Everything shown in the terminal (prompts included) also goes to console.log.
-        log = console.enter_context((folder / "console.log").open("a", buffering=1))
-        lock = threading.RLock()
-        stdout = Tee(sys.stdout, log, lock)
-        console.enter_context(redirect_stdout(stdout))
-        console.enter_context(redirect_stderr(Tee(sys.stderr, log, lock)))
-        console.callback(setattr, builtins, "input", builtins.input)
-        builtins.input = stdout.read_input
-        return _run(problem, config, groups, required_keys, manual_evidence, validate, folder)
+    save = ask_save_evidence(problem, config)
+    folder = evidence_folder(problem, config, save)
+    try:
+        with ExitStack() as console:
+            return _console_run(problem, config, groups, required_keys, manual_evidence, validate, folder, save,
+                                console)
+    finally:
+        if not save:
+            shutil.rmtree(folder, ignore_errors=True)
+            print(f"Evidence not saved (temporary folder {folder} removed).", flush=True)
 
 
-def _run(problem, config, groups, required_keys, manual_evidence, validate, folder):
+def _console_run(problem, config, groups, required_keys, manual_evidence, validate, folder, save, console):
+    # Everything shown in the terminal (prompts included) also goes to console.log.
+    log = console.enter_context((folder / "console.log").open("a", buffering=1))
+    lock = threading.RLock()
+    stdout = Tee(sys.stdout, log, lock)
+    console.enter_context(redirect_stdout(stdout))
+    console.enter_context(redirect_stderr(Tee(sys.stderr, log, lock)))
+    console.callback(setattr, builtins, "input", builtins.input)
+    builtins.input = stdout.read_input
+    return _run(problem, config, groups, required_keys, manual_evidence, validate, folder, save)
+
+
+def _run(problem, config, groups, required_keys, manual_evidence, validate, folder, save=True):
     run = Run(problem, config, manual_evidence, folder)
+    run.save_evidence = save
     exit_code = 1
     try:
         if validate:

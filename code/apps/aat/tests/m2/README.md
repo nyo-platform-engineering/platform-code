@@ -7,7 +7,9 @@ top of its `test-problem-N.py`, waits for **Enter** between steps, and saves
 evidence to `tests/m2/p<N>/evidence/m2-p<N>-<timestamp>-<id>/`
 (`result.json`, `http.jsonl`). P1, P4 and P5 also save the full terminal session
 in `console.log` and ask before each run whether to delete older folders
-(**Enter** keeps them). P2/P3 print wait progress every five seconds and save
+(**Enter** keeps them). P4 and P5 first ask **"Save evidence for this run? [Y/n]"**:
+**Enter** saves it, `n` runs in a temporary folder that is deleted at the end
+(useful for practice runs). P2/P3 print wait progress every five seconds and save
 `progress.jsonl`.
 
 - [Problem 1: distributed storage and recovery](p1/README.md) — `task m2:p1`.

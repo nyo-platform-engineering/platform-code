@@ -7,12 +7,33 @@ def offset(run):
     return run.aggregator("/internal/satellite/stats")["feed"]["offset"]
 
 
+def aggregator_pods(run):
+    return run.cluster.kubectl("get", "pods", "-l", "app.kubernetes.io/instance=aggregator", "-o", "json",
+                               json_output=True)["items"]
+
+
+def replacements_ready(run, old):
+    pods = aggregator_pods(run)
+    if any(p["metadata"]["uid"] in old for p in pods):
+        return None
+    ready = [p for p in pods if not p["metadata"].get("deletionTimestamp") and any(
+        c["type"] == "Ready" and c["status"] == "True" for c in p.get("status", {}).get("conditions", []))]
+    want = run.cluster.kubectl("get", "deployment", "aggregator", "-o", "json", json_output=True)["spec"]["replicas"]
+    return len(ready) if len(ready) >= want else None
+
+
 def restart(run):
     before = offset(run)
+    old = {p["metadata"]["uid"] for p in aggregator_pods(run)}
     refs_before = getattr(run, "fire_refs", None) or {h["source_ref_id"] for h in run.hazards("SATELIT")}
     run.cluster.kubectl("delete", "pod", "-l", "app.kubernetes.io/instance=aggregator", "--wait=false")
     output("INFO", f"Deleted every Aggregator pod at feed offset {before}")
     run.forwards.close("aggregator")  # its pod is gone; reopen through the Service
+    # Deleted pods keep serving while they terminate, and a port-forward binds one pod:
+    # reopen it only when every old pod is gone and the replacements are Ready.
+    replaced = run.wait("the old Aggregator pods to be gone and the new ones Ready",
+                        lambda: replacements_ready(run, old), run.config.resume_timeout)
+    output("INFO", f"{replaced} new Aggregator pods Ready; old pods gone")
 
     def resumed():
         run.forwards.open("aggregator")
