@@ -372,6 +372,8 @@ class Run(CommonRun):
         self.acknowledged_writes = set()
         self.surge_refs = set()
         self.storage_plans = {}
+        self.active_monitors = 0
+        self.mock_polling_frozen = False
 
         # A successful automated run still needs the manual demo evidence.
         self.report = {

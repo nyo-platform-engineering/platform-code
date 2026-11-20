@@ -59,6 +59,13 @@ tasks:
     interactive: true
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p5/test-problem-5.py"'
+  polling:freeze:
+    desc: Temporarily disconnect BMKG/PVMBG upstreams; Enter or Ctrl+C restores them
+    interactive: true
+    cmds: [python3 scripts/tester/freeze-polling.py freeze]
+  polling:resume:
+    desc: Restore mock polling URLs and Argo settings from a saved freeze journal
+    cmds: [python3 scripts/tester/freeze-polling.py resume]
   tester:install:
     desc: Install the exact official Tester Agent manifest from the PDF
     cmds: [bash scripts/tester/main.sh install]
