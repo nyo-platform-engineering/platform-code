@@ -37,6 +37,8 @@ class TestConfig:
     event_intervals: dict = field(default_factory=lambda: {"BMKG": 10, "PVMBG": 10})
     load_vus: int = 10_000
     load_seconds: int = 120
+    # Aggregate offered traffic, identical for scaling and both throughput samples.
+    load_rps: int = 100
     # Scaling may need a longer window than the two throughput samples.
     # None uses load_seconds for scaling.
     scaling_seconds: int | None = None
@@ -74,6 +76,10 @@ def validate_config(config):
             "clock_offsets must contain finite skew cases greater than 5s and at most 120s")
     require(type(config.load_vus) is int and config.load_vus > 0, "load_vus must be positive")
     require(type(config.load_seconds) is int and config.load_seconds >= 15, "load_seconds must be >=15")
+    require(type(config.load_rps) is int and config.load_rps > 0, "load_rps must be positive")
+    if 3 in config.groups:
+        require(config.load_seconds >= math.ceil(config.load_vus / config.load_rps) + 10,
+                "load window must allow every VU a paced measured request plus 10s margin")
     if config.scaling_seconds is not None:
         require(type(config.scaling_seconds) is int and config.scaling_seconds >= 30,
                 "scaling_seconds must be >=30 seconds for replica transitions")

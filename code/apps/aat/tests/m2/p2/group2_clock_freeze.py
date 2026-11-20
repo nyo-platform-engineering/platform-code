@@ -18,7 +18,8 @@ def vm_python(run, source):
     with run.phase("VM clock command: " + run.config.worker, 60):
         result = subprocess.run(["vagrant", "ssh", run.config.worker, "--no-tty", "-c",
                                  "sudo -n python3 -c " + shlex.quote(source)],
-                                cwd=INFRA / "local", capture_output=True, text=True, timeout=60)
+                                cwd=INFRA / "local", stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True, timeout=60)
     require(result.returncode == 0, "VM clock command failed; inspect worker SSH, sudo and time services")
     return json.loads(result.stdout)
 
@@ -161,7 +162,8 @@ def freeze(run):
     started, wall = time.monotonic(), time.time()
     def action(command):
         with run.phase(command + ": " + run.config.worker, 90):
-            subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker], cwd=INFRA, check=True, timeout=90)
+            subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker],
+                           cwd=INFRA, stdin=subprocess.DEVNULL, check=True, timeout=90)
     run.logs.begin_freeze(old["pod_uid"])
     def resume():
         run.logs.resume_freeze(old["pod_uid"])

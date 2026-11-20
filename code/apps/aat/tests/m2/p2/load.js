@@ -39,6 +39,8 @@ for (let i = 0; i < Math.ceil(seconds / 5); i++) {
 }
 export const options = {
   scenarios: { sustained: { executor: 'constant-vus', vus, duration: `${seconds + warmup}s`, gracefulStop: '10s' } },
+  // Paced VUs must not each retain an idle gateway connection between slots.
+  noConnectionReuse: true,
   maxRedirects: 0,
   summaryTrendStats: ['avg', 'min', 'max', 'p(50)', 'p(95)', 'p(99)'],
   thresholds,
@@ -89,6 +91,7 @@ export default function () {
   const controlled = response.status === 429 && Number.isFinite(retryAfter) && retryAfter >= 1;
   if (!measuring) {
     if (controlled) sleep(Math.min(retryAfter, 5));
+    else if (response.status !== 200) sleep(1);
     else if (targetRPS > 0) sleep(0.1);
     return;
   }
@@ -111,6 +114,7 @@ export default function () {
   latency.add(response.timings.duration);
   active.add(activeAtStart, tags);
   if (controlled) sleep(Math.min(retryAfter, 5));
+  else if (!valid) sleep(1); // Record failures, but never spin on fast refusals.
 }
 export function handleSummary(data) {
   return { [__ENV.P2_SUMMARY]: JSON.stringify(data, null, 2) };
