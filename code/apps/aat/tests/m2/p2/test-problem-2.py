@@ -29,6 +29,8 @@ class TestConfig:
     takeover_seconds: float = 60
     recovery_seconds: float = 180
     freeze_seconds: float = 30
+    # Examples from the specification; configure other nonzero skew cases here.
+    clock_offsets: tuple = (45, -30)
     request_timeout: float = 8
     poll_interval: float = 3
     # Our deterministic development mocks, not an external feed contract.
@@ -67,6 +69,9 @@ def validate_config(config):
     require(config.observation_seconds >= 15, "observe for at least 15 seconds")
     require(config.takeover_seconds <= 60, "takeover bound cannot exceed 60 seconds")
     require(config.freeze_seconds > 20, "freeze must exceed the 20-second owner session idle timeout")
+    require(config.clock_offsets and all(type(v) in (int, float) and math.isfinite(v)
+            and 5 < abs(v) <= 120 for v in config.clock_offsets),
+            "clock_offsets must contain finite skew cases greater than 5s and at most 120s")
     require(type(config.load_vus) is int and config.load_vus > 0, "load_vus must be positive")
     require(type(config.load_seconds) is int and config.load_seconds >= 15, "load_seconds must be >=15")
     if config.scaling_seconds is not None:

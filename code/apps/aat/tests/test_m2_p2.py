@@ -267,6 +267,12 @@ class GatewayPreflightTests(unittest.TestCase):
 
 
 class PollingEvidenceTests(unittest.TestCase):
+    def test_two_successful_instances_in_same_epoch_fail(self):
+        evidence = records()
+        evidence.append(dict(evidence[-1], pod_uid="competing-owner"))
+        with self.assertRaisesRegex(ValueError, "multiple instances successfully"):
+            p2_helper.polling_evidence(evidence, 0, 20, 3)
+
     def test_joined_upstream_evidence(self):
         result = p2_helper.polling_evidence(records(), 0, 20, 3)
         self.assertEqual(sum(result["upstream_requests"].values()), 3)
@@ -451,6 +457,64 @@ console.log(JSON.stringify(observations));
             group3_load.validate_summary(data, 2, 15)
 
 
+class AutomaticClockTests(unittest.TestCase):
+    def make_run(self):
+        return SimpleNamespace(config=runner.TestConfig(worker="aat-worker-1"),
+            cleanup=[], pods=lambda: [], prompt=lambda text: None,
+            save=lambda name, value: None, observe=lambda: {"single_owner": True})
+
+    def exercise(self, run, restore_error=None):
+        group = runner.group2_clock_freeze
+        with patch.object(group, "prepare_owner", return_value=({"pod": "owner"}, [])), \
+             patch.object(group, "worker_pod", return_value="owner"), \
+             patch.object(group, "clock_offset", side_effect=[{"offset_seconds": x} for x in (0, 45, -30)]), \
+             patch.object(group, "vm_python", side_effect=[["chrony.service"], {}]) as vm, \
+             patch.object(group, "shift_clock") as shift, \
+             patch.object(group, "restore_clock", side_effect=restore_error, return_value={"offset_seconds": 0}) as restore:
+            try:
+                return group.clock(run)
+            finally:
+                restore.assert_called_once_with(run, ["chrony.service"])
+                self.assertIn("systemctl','stop", vm.call_args_list[1].args[1])
+                self.assertEqual(shift.call_args_list[0].args, (run, 45))
+
+    def test_automatic_offsets_and_successful_restoration(self):
+        run = self.make_run()
+        result = self.exercise(run)
+        self.assertEqual([r["requested_offset"] for r in result["offsets"]], [45, -30])
+        self.assertEqual(run.cleanup, [])
+
+    def test_observation_failure_and_interrupt_restore_without_prompt(self):
+        for failure in (ValueError("polling failed"), KeyboardInterrupt()):
+            with self.subTest(failure=type(failure).__name__):
+                run = self.make_run()
+                run.observe = lambda: (_ for _ in ()).throw(failure)
+                with self.assertRaises(type(failure)):
+                    self.exercise(run)
+                self.assertEqual(run.cleanup, [])
+
+    def test_failed_restore_keeps_outer_cleanup_retry(self):
+        run = self.make_run()
+        with self.assertRaisesRegex(ValueError, "restore failed"):
+            self.exercise(run, ValueError("restore failed"))
+        self.assertEqual(len(run.cleanup), 1)
+
+    def test_shift_uses_relative_correction_not_a_stale_absolute_timestamp(self):
+        group = runner.group2_clock_freeze
+        with patch.object(group.time, "time", side_effect=[100, 102]), \
+             patch.object(group, "vm_python", side_effect=[146, {}]) as vm:
+            group.shift_clock(self.make_run(), -30)
+        self.assertIn("time.time() + -75.0", vm.call_args.args[1])
+
+    def test_shared_kernel_clock_injection_is_rejected_before_ssh(self):
+        run = self.make_run()
+        run.container_nodes = True
+        with patch.object(runner.group2_clock_freeze.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "separate-kernel VM"):
+                runner.group2_clock_freeze.vm_python(run, "pass")
+            command.assert_not_called()
+
+
 class WorkerOwnerPreparationTests(unittest.TestCase):
     def test_restart_waits_for_real_new_epoch_on_target_worker(self):
         current = {"pod": "old", "pod_uid": "uid-old", "node": "control", "log": {"poll_epoch": "2"}}
@@ -536,6 +600,14 @@ class AuditAndCleanupTests(unittest.TestCase):
             config = runner.TestConfig(rolling_seconds=120)
             with self.assertRaisesRegex(ValueError, "every VU"):
                 runner.validate_config(config)
+
+    def test_clock_examples_are_configurable_and_invalid_offsets_fail(self):
+        with patch.object(sys.stdin, "isatty", return_value=True):
+            runner.validate_config(runner.TestConfig(clock_offsets=(20, -15)))
+            for offsets in ((), (0,), (float("nan"),), (float("inf"),), ("45",)):
+                with self.subTest(offsets=offsets):
+                    with self.assertRaisesRegex(ValueError, "clock_offsets"):
+                        runner.validate_config(runner.TestConfig(clock_offsets=offsets))
 
     def test_short_throughput_can_use_a_separate_scaling_window(self):
         with patch.object(sys.stdin, "isatty", return_value=True):

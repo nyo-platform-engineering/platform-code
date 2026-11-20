@@ -1,8 +1,59 @@
 """Criteria 4–5: measured clock offsets and real worker freeze/resume."""
+import json
+import shlex
 import subprocess
 import time
 
-from helper import INFRA, NAMESPACE, ready, require
+from helper import INFRA, NAMESPACE, output, ready, require
+
+
+def vm_python(run, source):
+    """Run only on the selected local VM, never the generator/shared host clock."""
+    require(not run.container_nodes, "clock injection requires a separate-kernel VM")
+    require(run.config.worker in ("aat-worker-1", "aat-worker-2"), "invalid clock worker")
+    require(run.config.kubeconfig.resolve() == (INFRA / ".state/kubeconfig").resolve(),
+            "automatic clock injection only supports the local Vagrant lab")
+    identity = INFRA / "local/.vagrant/machines" / run.config.worker / "libvirt/id"
+    require(identity.is_file(), "local Vagrant identity missing for clock injection")
+    with run.phase("VM clock command: " + run.config.worker, 60):
+        result = subprocess.run(["vagrant", "ssh", run.config.worker, "--no-tty", "-c",
+                                 "sudo -n python3 -c " + shlex.quote(source)],
+                                cwd=INFRA / "local", capture_output=True, text=True, timeout=60)
+    require(result.returncode == 0, "VM clock command failed; inspect worker SSH, sudo and time services")
+    return json.loads(result.stdout)
+
+
+def shift_clock(run, target_offset):
+    # Measure through SSH so cleanup also works if the Aggregator pod disappears.
+    before = time.time()
+    remote = vm_python(run, "import json,time; print(json.dumps(time.time()))")
+    after = time.time()
+    require(after - before <= 5, "VM clock measurement RTT exceeds 5 seconds")
+    correction = target_offset - (remote - (before + after) / 2)
+    vm_python(run, "import json,time; "
+              f"time.clock_settime(time.CLOCK_REALTIME, time.time() + {correction!r}); "
+              "print(json.dumps({'clock_set': True}))")
+
+
+def restore_clock(run, services):
+    shift_clock(run, 0)
+    vm_python(run, "import json,subprocess; "
+              f"services={services!r}; "
+              "[subprocess.run(['systemctl','start',s],check=True) for s in services]; "
+              "subprocess.run(['chronyc','makestep'],check=True,stdout=subprocess.DEVNULL) "
+              "if 'chrony.service' in services else None; "
+              "subprocess.run(['chronyc','waitsync','30','0.1','0','1'],check=True,stdout=subprocess.DEVNULL) "
+              "if 'chrony.service' in services else None; "
+              "assert all(subprocess.run(['systemctl','is-active','--quiet',s]).returncode==0 for s in services); "
+              "print(json.dumps({'services_restored':services}))")
+    before = time.time()
+    remote = vm_python(run, "import json,time; print(json.dumps(time.time()))")
+    after = time.time()
+    require(after - before <= 5 and abs(remote - (before + after) / 2) <= 5,
+            "worker clock was not restored")
+    run.save("clock-recovery.json", {"worker": run.config.worker, "services": services, "restored": True})
+    output("RESULT", f"P2.4 — clock restored on {run.config.worker}; time services running")
+    return {"offset_seconds": remote - (before + after) / 2, "services_restored": services}
 
 
 def worker_pod(run):
@@ -31,18 +82,36 @@ def clock(run):
                     and p["spec"].get("nodeName") == run.config.worker for p in run.pods()),
             "choose a worker without BMKG/PVMBG/coordinator for this clock-isolation scenario")
     baseline = clock_offset(run, pod)
+    require(abs(baseline["offset_seconds"]) <= 5, "synchronize worker/generator clocks before testing")
+    services = vm_python(run, "import json,subprocess; "
+        "services=['chrony.service','systemd-timesyncd.service','ntp.service','ntpsec.service']; "
+        "print(json.dumps([s for s in services if subprocess.run("
+        "['systemctl','is-active','--quiet',s]).returncode==0]))")
+    require(services, "no active worker time service; run task clock:sync before testing")
+    run.prompt(f"P2.4: automatically stop time sync on {run.config.worker}, apply clock offsets {run.config.clock_offsets}, check polling, then restore time sync.")
     results = []
+    restore = lambda: restore_clock(run, services)
+    run.save("clock-recovery.json", {"worker": run.config.worker, "services": services, "restored": False})
+    run.cleanup.append(restore)
     try:
-        for offset in (45, -30):
-            run.prompt(f"P2.4: externally stop time synchronization on {run.config.worker} and set its clock to baseline {offset:+d}s. Save operator/Tester Agent commands, then continue.")
+        vm_python(run, "import json,subprocess; "
+                  f"services={services!r}; "
+                  "[subprocess.run(['systemctl','stop',s],check=True) for s in services]; "
+                  "print(json.dumps({'services_stopped':services}))")
+        for offset in run.config.clock_offsets:
+            shift_clock(run, baseline["offset_seconds"] + offset)
             measured = clock_offset(run, pod)
             delta = measured["offset_seconds"] - baseline["offset_seconds"]
-            require(abs(delta - offset) <= 5, f"measured clock change {delta:.1f}s does not match {offset:+d}s")
-            results.append({"requested_offset": offset, "measurement": measured, "polling": run.observe()})
+            require(abs(delta - offset) <= 5, f"clock injection failed: measured {delta:+.1f}s, requested {offset:+g}s")
+            output("RESULT", f"P2.4 — {run.config.worker}\n"
+                   f"    Requested skew: {offset:+g}s; measured change: {delta:+.1f}s; time sync stopped")
+            polling = run.observe()
+            results.append({"requested_offset": offset, "measurement": measured, "polling": polling})
+            run.save("clock-skew-observations.json", results)
+            output("RESULT", "P2.4 — no competing successful polling owners observed; Audit reconciliation passed")
     finally:
-        run.prompt(f"Restore clock synchronization and correct time on {run.config.worker}, including after a failed check. Continue only after restoration.")
-        restored = clock_offset(run, pod)
-        require(abs(restored["offset_seconds"] - baseline["offset_seconds"]) <= 5, "worker clock was not restored")
+        restored = restore()
+        run.cleanup.remove(restore)
     return {"owner_preparation": moves, "owner_pod": pod,
             "baseline": baseline, "offsets": results, "clock_restored": restored,
             "stale_write_fencing": "log observations only; retain official fault/storage evidence"}
