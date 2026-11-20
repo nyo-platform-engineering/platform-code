@@ -1,5 +1,5 @@
 """Group 1 — readings: criterion 2 (contract mapping; unprocessable data kept for
-BNPB Internal Ops only). The critical lane (criterion 1) is Group 4, run last."""
+BNPB Internal Ops only). The critical lane (criterion 1) is checked first by Group 4."""
 from common import output, require
 
 

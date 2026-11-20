@@ -12,6 +12,7 @@ import group1_alerts  # noqa: E402
 import group2_outage  # noqa: E402
 import group3_overload  # noqa: E402
 import group4_critical  # noqa: E402
+import helper  # noqa: E402
 
 
 @dataclass
@@ -21,9 +22,8 @@ class TestConfig:
     env_file: Path = INFRA / ".env.runtime"
     kubeconfig: Path = INFRA / ".state/kubeconfig"
 
-    # Criterion 1 (Group 4, run last): after restarting the sensor, wait this long for
-    # its scenario's critical readings (about 30/90/150 s in at speed 60). Readings the
-    # store already has are deduplicated and do not alert twice; then it is skipped.
+    # Criterion 1 runs first after resetting only SENSOR_PANTAI test data.
+    # All three practice critical readings arrive around 30/90/150 s at speed 60.
     wait_critical_seconds: float = 300
     alert_p95_ms: float = 5000
 
@@ -63,9 +63,20 @@ def validate_config(config):
         value = getattr(config, name)
         require(math.isfinite(value) and value > 0, f"CONFIG.{name} must be finite and positive")
     require(config.media_workers >= 2 and config.field_requests >= 1, "CONFIG.media_workers/field_requests too small")
+    require(config.wait_critical_seconds >= 180, "wait_critical_seconds must cover all 150s of the practice scenario plus recovery margin")
+
+
+def run_group(run):
+    input("Enter → reset SENSOR_PANTAI events, inbox/outbox and cursor for this practice run "
+          "(briefly stops Aggregator; other sources and notification history are preserved): ")
+    with helper.practice_run(run) as replicas:
+        run.stage("sensor-practice-reset", helper.reset_sensor, run, replicas)
+        # Prove the complete scenario before the outage deliberately restarts it.
+        for group in (group4_critical, group1_alerts, group2_outage, group3_overload):
+            group.run_group(run)
 
 
 if __name__ == "__main__":
-    sys.exit(main(5, replace(CONFIG), [group1_alerts, group2_outage, group3_overload, group4_critical],
+    sys.exit(main(5, replace(CONFIG), [sys.modules[__name__]],
                   ("AGGREGATOR_TOKEN", "PANTAI_AUTH_TOKEN", "PUBLIC_CLIENT_SECRET",
                    "RESPONDER_CLIENT_SECRET", "ANALYST_CLIENT_SECRET"), MANUAL_EVIDENCE, validate_config))

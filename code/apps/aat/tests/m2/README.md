@@ -40,24 +40,31 @@ The capacity is only measured when the logs hold a catch-up (at least `CONFIG.mi
 ## Problem 5 — `task m2:p5`
 
 Needs `PANTAI_AUTH_TOKEN` (created by `task up`) and the client secrets.
+This guided run resets Sensor Pantai's practice data on the existing cluster.
+It requires profile `practice`, seed `42`, speed `60`; it refuses the exam profile.
 
 | Group | Steps | Criteria |
 | --- | --- | --- |
+| [helper.py](p5/helper.py) | pause Argo reconciliation, stop the sensor and Aggregator, clear only SENSOR_PANTAI events/inbox/outbox/cursor, restart processing and then the sensor; restore replicas and Argo settings on exit | setup |
+| [group4_critical.py](p5/group4_critical.py) | runs first: wait for all three new critical readings and their durable Field Team receipts; 0 lost and p95 ≤ 5 s | 1 |
 | [group1_alerts.py](p5/group1_alerts.py) | poller live with stations; COASTAL mapping (critical → AWAS, suspect never SIAGA, no duplicates); parked data visible to analyst only | 2 |
 | [group2_outage.py](p5/group2_outage.py) | scale the sensor to 0: breaker opens, requests stay ≤ 0.5/s, client answers (sensor and all sources) p95 < 1 s with the sensor marked stale; scale back to 1 and wait for recovery with no other action | 3, 4, 6 |
 | [group3_overload.py](p5/group3_overload.py) | `CONFIG.media_workers` Media clients flood the Client API; Media gets 429, every Field Team request is served | 5 |
-| [group4_critical.py](p5/group4_critical.py) | runs last: database check, then (if needed) restart the sensor; every new critical reading is alerted, p95 ≤ 5 s | 1 |
 
-The practice scenario sends its critical readings in the first ~150 s after the
-sensor container starts (speed 60). A restart starts the scenario over, but the
-poller resumes from its stored cursor, so readings it already has are not fetched
-again (re-sent ones would be deduplicated and alert only once). Group 4 therefore
-first checks the
-database: criticals ingested while the current notifier was logging are measured at
-once (a fresh lab). Otherwise it restarts the sensor and waits up to
-`CONFIG.wait_critical_seconds` (300) for new ones. If the restart replays only stored
-readings, the check is **skipped**, not passed, with evidence that no duplicate events
-or alerts were created; proving the p95 then needs a store that has not seen the
-scenario (a fresh lab, or the first run on the VM cluster).
+The practice scenario emits three critical readings around 30, 90 and 150 seconds.
+Each run starts that scenario over after deleting its old events and resetting its
+polling cursor and captured batches. The Aggregator briefly stops during setup so
+in-flight processing cannot recreate deleted state. Other sources' data remains.
+
+Notification history and NATS deduplication are preserved: the new ingestion time
+creates a new delivery ID. The critical check matches each new delivery to its
+durable `critical_field_alert` effect in `FIELD_NOTIFIER_CRITICAL_EFFECTS`.
+Latency uses the original NATS persistence time minus event ingestion time, not
+the time the test reads the receipt. These are the simulated Field Team receiver's
+durable records, rather than an external messaging provider's delivery receipt.
+Pod log retention and when the test is started no longer determine the result.
+Missing readings or receipts fail after `CONFIG.wait_critical_seconds` (300),
+instead of skipping criterion 1. The setup reset happens before fault testing;
+the outage recovery window still allows no intervention.
 Contract violations cannot be injected into the assistants' image; they are covered
 by the Go tests (`aggregator/internal/mapper`, `aggregator/cmd/server`).
