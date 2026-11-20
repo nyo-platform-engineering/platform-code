@@ -4,6 +4,7 @@
 # 3. Sediakan permintaan yang membaca data lintas seluruh lokasi penyimpanan (contoh: "50 event terbaru dari seluruh jenis bahaya", dengan pagination) dan menghasilkan urutan yang benar.
 from collections import Counter
 
+from helper.cluster import frozen_mock_checkpoint
 from helper.monitor import Monitor
 from helper.data import (
     capture_snapshot, checksum, distribution, export, preserve, read_catalog,
@@ -143,7 +144,8 @@ def uneven_load(run):
 # 3. Sediakan permintaan yang membaca data lintas seluruh lokasi penyimpanan (contoh: "50 event terbaru dari seluruh jenis bahaya", dengan pagination) dan menghasilkan urutan yang benar.
 def global_reads(run):
     # Check all recent-event pages against the surrounding Audit API exports.
-    view = read_live_view(run)
+    with frozen_mock_checkpoint(run, "global-reads"):
+        view = read_live_view(run)
 
     # Carry the verified data forward to the worker-loss tests.
     run.previous_events = view["events"]

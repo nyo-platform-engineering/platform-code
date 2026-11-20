@@ -13,6 +13,26 @@ tersimpan di `console.log` pada folder evidence. Progress terminal dibatasi tiap
 30 detik. Set `CONFIG.verbose_output=True` untuk detail penuh di terminal.
 Mode otomatis mematikan worker dan menghapus data store lokal sebelum membangunnya kembali.
 
+## Freeze otomatis untuk checkpoint
+
+Jalankan langsung `task m2:p1`; **tidak perlu `task polling:freeze` lebih dulu**.
+P1 menjeda fetch BMKG/PVMBG otomatis pada tahap **global-reads** dan
+**dashboard-analytics**, lalu mengaktifkannya kembali sebelum melanjutkan.
+Tidak ada prompt freeze tambahan. Utility yang sama menunggu pod Aggregator lama
+berhenti, menguras inbox mock, serta mengembalikan URL dan pengaturan Argo.
+Tunnel pengujian disambungkan ulang setelah rollout.
+
+Import, lonjakan regional, worker loss, rejoin, serta verifikasi recovery tetap
+memakai polling dan probe aktif. Runner menolak freeze di dalam monitor tersebut.
+Satelit, Pantai, dan request ingest langsung tetap aktif. Checkpoint yang dijeda
+mewajibkan count/checksum identitas BMKG/PVMBG tetap sama; direct write bersamaan
+akan menggagalkan checkpoint, bukan diklaim sebagai snapshot yang tenang.
+
+Freeze dipulihkan jika checkpoint gagal atau diinterupsi. Jika proses mati atau
+pemulihan gagal, jalankan `task polling:resume` dari infrastructure sebelum tes
+berikutnya. Riwayat jeda tersimpan di `polling-freezes.json` dan `result.json`.
+Error polling/source-status saat jeda adalah efek maintenance yang disengaja.
+
 ## Kriteria penyelesaian
 
 | No. | Yang dibuktikan | Test case |

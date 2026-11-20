@@ -4,6 +4,7 @@
 #    - jumlah kejadian per tingkat severity;
 #    - jumlah kejadian per wilayah (area_name) dalam bentuk chart atau tabel.
 # 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
+from helper.cluster import frozen_mock_checkpoint
 from helper.data import read_live_view
 from common import output
 
@@ -12,7 +13,8 @@ from common import output
 # 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
 def dashboard(run):
     # Recompute the displayed aggregates from Audit API data.
-    view = read_live_view(run)
+    with frozen_mock_checkpoint(run, "dashboard-analytics"):
+        view = read_live_view(run)
 
     # The API comparison is automated; charts and the partial banner need a browser.
     run.save("dashboard-analytics.json", dict(view, browser_evidence_pending=True))

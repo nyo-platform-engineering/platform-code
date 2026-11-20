@@ -556,6 +556,10 @@ def read_live_view(run):
         live_updates = verify_preservation(run, after, expected_writes)
         reference = verify_reference(run, after)
         source_checks = verify_sources(sums_before, sums_after, before, after)
+        if getattr(run, "mock_polling_frozen", False):
+            require(all(source_checks[source]["independent_checksum_verified"]
+                        for source in ("BMKG", "PVMBG")),
+                    "mock source changed during a frozen checkpoint; check for concurrent direct writes")
         global_reads = verify_global_reads(before, after, recent, latest)
         try:
             comparison = reconcile_stable_window(before, after, summary, query)
