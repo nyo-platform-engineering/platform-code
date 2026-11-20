@@ -84,6 +84,38 @@ func TestSensorFreshnessFlagsFrozenAndOldData(t *testing.T) {
 	}
 }
 
+func TestSensorRestartWithEarlierClockIsNotFrozen(t *testing.T) {
+	p := &sensorPoller{staleAfter: 15 * time.Minute, frozenAfter: -1} // any wait counts as frozen
+	at := func(h, m int) time.Time { return time.Date(2026, 11, 12, h, m, 0, 0, time.UTC) }
+	items := func(ts ...time.Time) func(func(time.Time) bool) {
+		return func(yield func(time.Time) bool) {
+			for _, t := range ts {
+				if !yield(t) {
+					return
+				}
+			}
+		}
+	}
+	// The sensor ran for 32 sensor-hours, then restarted and replays from 00:00.
+	p.observeFreshness(at(32, 0), false, items(at(31, 59), at(32, 0)))
+	p.observeFreshness(at(0, 5), false, items(at(0, 4), at(0, 5)))
+	if p.stale {
+		t.Fatalf("a restarted sensor whose clock went back is live, not frozen: %q", p.staleReason)
+	}
+	if !p.lastGenerated.Equal(at(0, 5)) || !p.newestObserved.Equal(at(0, 5)) {
+		t.Fatalf("freshness restarts from the new clock: generated %s, newest %s", p.lastGenerated, p.newestObserved)
+	}
+	// Staleness is still detected after the restart, against the new clock.
+	p.observeFreshness(at(0, 5), false, items())
+	if !p.stale || !strings.Contains(p.staleReason, "frozen") {
+		t.Fatalf("a restarted sensor whose clock then stops is stale: %q", p.staleReason)
+	}
+	p.observeFreshness(at(0, 40), false, items())
+	if !p.stale || !strings.Contains(p.staleReason, "behind") {
+		t.Fatalf("no reading for 35 sensor-minutes after a restart is stale: %q", p.staleReason)
+	}
+}
+
 // fakeSensor serves the Lampiran C contract. Observations are served one page at a
 // time; failing makes every call answer 503.
 type fakeSensor struct {

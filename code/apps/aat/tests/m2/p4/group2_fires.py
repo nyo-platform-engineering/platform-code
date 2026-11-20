@@ -6,7 +6,11 @@ import re
 
 from common import output, parse_time, require
 
-KEY = re.compile(r"^[^|]+\|\d{4}-\d{2}-\d{2}\|\d{1,4}\|-?\d+(\.\d+)?\|-?\d+(\.\d+)?$")
+# Coordinates are kept exactly as the feed wrote them (updates and retractions name a
+# detection by that text), and the feed uses JSON numbers, so near the equator a
+# latitude can be in exponent form, e.g. "N20|2026-11-30|1016|-9.0e-5|111.20328".
+NUM = r"-?\d+(\.\d+)?([eE][+-]?\d+)?"
+KEY = re.compile(rf"^[^|]+\|\d{{4}}-\d{{2}}-\d{{2}}\|\d{{1,4}}\|{NUM}\|{NUM}$")
 
 
 def expected_severity(count, frp):

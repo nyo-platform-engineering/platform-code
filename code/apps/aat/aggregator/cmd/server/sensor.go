@@ -348,6 +348,15 @@ func (p *sensorPoller) poll(ctx context.Context, ctrl *controller.Controller, co
 // judged in the sensor's own clock so the check works at any simulation speed.
 func (p *sensorPoller) observeFreshness(generated time.Time, catchingUp bool, observed func(func(time.Time) bool)) {
 	now := time.Now()
+	// A sensor clock that goes back is a restarted sensor replaying its scenario from
+	// the start, not a frozen clock: judge freshness from the new clock and its own
+	// readings. Otherwise a restart stays "frozen" until the new clock passes the old one.
+	if !p.lastGenerated.IsZero() && generated.Before(p.lastGenerated) {
+		slog.Info("sensor clock went back; treating it as a sensor restart",
+			"previous_generated_at", p.lastGenerated.UTC().Format(time.RFC3339),
+			"generated_at", generated.UTC().Format(time.RFC3339))
+		p.lastGenerated, p.lastGeneratedSeen, p.newestObserved = time.Time{}, time.Time{}, time.Time{}
+	}
 	for t := range observed {
 		if t.After(p.newestObserved) {
 			p.newestObserved = t

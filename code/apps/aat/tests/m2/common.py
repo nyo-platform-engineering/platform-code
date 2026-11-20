@@ -229,6 +229,13 @@ class Run:
         output("RUN", name)
         try:
             result = operation(*args, **kwargs)
+            if isinstance(result, dict) and result.get("skipped"):
+                # A check that could not be proven is recorded as skipped, never as a pass.
+                self.report["automated_checks"][name] = {"status": "skipped", "reason": result.get("reason", ""),
+                                                         "result": result}
+                output("SKIP", name, *(f"{k}: {v}" for k, v in result.items()
+                                       if k != "skipped" and not isinstance(v, (dict, list))))
+                return result
             self.report["automated_checks"][name] = {"status": "pass", "result": result}
             output("PASS", name, *(f"{k}: {v}" for k, v in (result or {}).items() if not isinstance(v, (dict, list))))
             return result
@@ -256,20 +263,38 @@ class Run:
         data = None if body is None else json.dumps(body).encode()
         if data is not None:
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.url(service) + path, data=data, headers=headers)
-        started = time.perf_counter()
-        try:
-            with urllib.request.urlopen(request, timeout=timeout or self.config.request_timeout) as response:
-                status, raw = response.status, response.read()
-        except urllib.error.HTTPError as error:
-            status, raw = error.code, error.read()
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
-            raise RuntimeError(f"{service} {path}: network failure ({type(error).__name__})") from None
-        elapsed = (time.perf_counter() - started) * 1000
-        if record:
-            with self.lock, (self.folder / "http.jsonl").open("a") as stream:
-                stream.write(json.dumps({"at": utc(), "service": service, "path": path, "status": status,
-                                         "ms": round(elapsed, 2)}) + "\n")
+        # A GET that is shed with an unexpected 429 waits for Retry-After and is retried
+        # once: the lab Aggregator has a single read slot per pod, so a probe can collide
+        # with another reader (e.g. the dashboard updater). Calls that expect 429 (the
+        # overload test) are never retried. Both attempts are kept in http.jsonl.
+        for attempt in (1, 2):
+            request = urllib.request.Request(self.url(service) + path, data=data, headers=headers)
+            started = time.perf_counter()
+            retry_after = None
+            try:
+                with urllib.request.urlopen(request, timeout=timeout or self.config.request_timeout) as response:
+                    status, raw = response.status, response.read()
+            except urllib.error.HTTPError as error:
+                status, raw, retry_after = error.code, error.read(), error.headers.get("Retry-After")
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+                raise RuntimeError(f"{service} {path}: network failure ({type(error).__name__})") from None
+            elapsed = (time.perf_counter() - started) * 1000
+            if record:
+                entry = {"at": utc(), "service": service, "path": path, "status": status, "ms": round(elapsed, 2)}
+                if attempt == 2:
+                    entry["retry_after_429"] = True
+                with self.lock, (self.folder / "http.jsonl").open("a") as stream:
+                    stream.write(json.dumps(entry) + "\n")
+            if attempt == 1 and status == 429 and 429 not in expected and data is None:
+                with self.lock:
+                    self.report["retried_429"] = self.report.get("retried_429", 0) + 1
+                try:
+                    wait = min(5.0, max(0.0, float(retry_after or 1)))
+                except ValueError:
+                    wait = 1.0
+                time.sleep(wait)
+                continue
+            break
         require(status in expected, f"{service} {path}: HTTP {status}, expected {expected}")
         try:
             payload = json.loads(raw) if raw else None

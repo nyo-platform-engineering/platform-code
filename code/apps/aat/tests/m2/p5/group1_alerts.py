@@ -1,9 +1,6 @@
-"""Group 1 — readings and alerts: criterion 1 (every critical reading reaches the
-Field Team notifier, p95 <= 5 s) and 2 (contract mapping; unprocessable data kept
-for BNPB Internal Ops only)."""
-from common import json_logs, output, p95, parse_time, require
-
-ALERT_MESSAGES = ("critical field alert recorded", "critical field alert sent")
+"""Group 1 — readings: criterion 2 (contract mapping; unprocessable data kept for
+BNPB Internal Ops only). The critical lane (criterion 1) is Group 4, run last."""
+from common import output, require
 
 
 def sensor(run):
@@ -38,34 +35,6 @@ def mapping(run):
     return {"events": len(events), "critical": critical, "suspect": suspect}
 
 
-def critical_alerts(run):
-    logs = run.cluster.logs("field-notifier")
-    first = next(json_logs(logs), None)
-    require(first and first.get("time"), "field-notifier has no structured logs")
-    since = parse_time(first["time"])
-
-    # Alerts from earlier pods left with their logs, so compare only readings that
-    # arrived while the current notifier was logging.
-    def window():
-        found = {h["hazard_id"] for h in run.hazards("SENSOR_PANTAI")
-                 if h["attributes"].get("critical") and parse_time(h["ingested_at"]) >= since}
-        return found or None
-    try:
-        criticals = run.wait("a critical reading during this notifier run", window, run.config.wait_critical_seconds)
-    except ValueError:
-        return {"skipped": True, "reason": f"no new critical reading within {run.config.wait_critical_seconds:.0f}s"}
-
-    def alerted():
-        records = list(json_logs(run.cluster.logs("field-notifier"), *ALERT_MESSAGES))
-        return records if criticals <= {r["hazard_id"] for r in records} else None
-    records = run.wait("an alert for every critical reading", alerted, 60)
-    latencies = [r["alert_latency_ms"] for r in records if r["hazard_id"] in criticals]
-    worst = p95(latencies)
-    require(worst <= run.config.alert_p95_ms, f"critical alert p95 {worst} ms exceeds {run.config.alert_p95_ms:.0f} ms")
-    return {"window_start": first["time"], "critical_readings": len(criticals), "alerted": len(criticals),
-            "lost": 0, "p95_ms": worst, "max_ms": max(latencies)}
-
-
 def ops_only(run):
     analyst, media = run.login("analyst"), run.login("public")
     _, page, _ = run.call("client", "/ops/unprocessed?source=SENSOR_PANTAI", token=analyst)
@@ -79,12 +48,4 @@ def run_group(run):
     run.stage("sensor-poller-live", poller_live, run)
     result = run.stage("coastal-mapping", mapping, run)
     output("RESULT", "Readings", f"Events: {result['events']}; critical: {result['critical']}; suspect: {result['suspect']}")
-    input("Enter → verify every critical reading reached the Field Team critical lane: ")
-    alerts = run.stage("critical-alerts-delivered", critical_alerts, run)
-    if alerts.get("skipped"):
-        run.skip("critical-alerts-delivered", alerts["reason"] + "; raise CONFIG.wait_critical_seconds")
-        run.save("result.json", run.report)
-    else:
-        output("RESULT", "Critical lane", f"{alerts['alerted']}/{alerts['critical_readings']} alerted, 0 lost",
-               f"p95 {alerts['p95_ms']} ms (target {run.config.alert_p95_ms:.0f} ms)")
     run.stage("parked-data-visible-to-ops-only", ops_only, run)

@@ -11,6 +11,7 @@ from common import INFRA, main, require  # noqa: E402
 import group1_alerts  # noqa: E402
 import group2_outage  # noqa: E402
 import group3_overload  # noqa: E402
+import group4_critical  # noqa: E402
 
 
 @dataclass
@@ -20,8 +21,9 @@ class TestConfig:
     env_file: Path = INFRA / ".env.runtime"
     kubeconfig: Path = INFRA / ".state/kubeconfig"
 
-    # Criterion 1: wait this long for a new critical reading during this notifier
-    # run (re-sent readings are deduplicated and do not alert twice).
+    # Criterion 1 (Group 4, run last): after restarting the sensor, wait this long for
+    # its scenario's critical readings (about 30/90/150 s in at speed 60). Readings the
+    # store already has are deduplicated and do not alert twice; then it is skipped.
     wait_critical_seconds: float = 300
     alert_p95_ms: float = 5000
 
@@ -64,6 +66,6 @@ def validate_config(config):
 
 
 if __name__ == "__main__":
-    sys.exit(main(5, replace(CONFIG), [group1_alerts, group2_outage, group3_overload],
+    sys.exit(main(5, replace(CONFIG), [group1_alerts, group2_outage, group3_overload, group4_critical],
                   ("AGGREGATOR_TOKEN", "PANTAI_AUTH_TOKEN", "PUBLIC_CLIENT_SECRET",
                    "RESPONDER_CLIENT_SECRET", "ANALYST_CLIENT_SECRET"), MANUAL_EVIDENCE, validate_config))

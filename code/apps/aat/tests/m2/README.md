@@ -38,12 +38,19 @@ Needs `PANTAI_AUTH_TOKEN` (created by `task up`) and the client secrets.
 
 | Group | Steps | Criteria |
 | --- | --- | --- |
-| [group1_alerts.py](p5/group1_alerts.py) | poller live with stations; COASTAL mapping (critical → AWAS, suspect never SIAGA, no duplicates); every critical reading since the notifier started is alerted, p95 ≤ 5 s; parked data visible to analyst only | 1, 2 |
+| [group1_alerts.py](p5/group1_alerts.py) | poller live with stations; COASTAL mapping (critical → AWAS, suspect never SIAGA, no duplicates); parked data visible to analyst only | 2 |
 | [group2_outage.py](p5/group2_outage.py) | scale the sensor to 0: breaker opens, requests stay ≤ 0.5/s, client answers (sensor and all sources) p95 < 1 s with the sensor marked stale; scale back to 1 and wait for recovery with no other action | 3, 4, 6 |
 | [group3_overload.py](p5/group3_overload.py) | `CONFIG.media_workers` Media clients flood the Client API; Media gets 429, every Field Team request is served | 5 |
+| [group4_critical.py](p5/group4_critical.py) | runs last: database check, then (if needed) restart the sensor; every new critical reading is alerted, p95 ≤ 5 s | 1 |
 
-Re-sent readings are deduplicated and alerts from earlier pods left with their logs,
-so the alert check only covers critical readings that arrived while the current
-notifier was running; it is skipped if none arrived within `CONFIG.wait_critical_seconds`.
+The practice scenario sends its critical readings in the first ~150 s after the
+sensor container starts (speed 60), and every restart replays the same readings,
+which are deduplicated and alert only once. Group 4 therefore first checks the
+database: criticals ingested while the current notifier was logging are measured at
+once (a fresh lab). Otherwise it restarts the sensor and waits up to
+`CONFIG.wait_critical_seconds` (300) for new ones. If the restart replays only stored
+readings, the check is **skipped**, not passed, with evidence that no duplicate events
+or alerts were created; proving the p95 then needs a store that has not seen the
+scenario (a fresh lab, or the first run on the VM cluster).
 Contract violations cannot be injected into the assistants' image; they are covered
 by the Go tests (`aggregator/internal/mapper`, `aggregator/cmd/server`).
