@@ -52,8 +52,15 @@ def restore_clock(run, services):
     require(after - before <= 5 and abs(remote - (before + after) / 2) <= 5,
             "worker clock was not restored")
     run.save("clock-recovery.json", {"worker": run.config.worker, "services": services, "restored": True})
-    output("RESULT", f"P2.4 — clock restored on {run.config.worker}; time services running")
+    output("RESULT", f"Worker clock restored on {run.config.worker}; time services running")
     return {"offset_seconds": remote - (before + after) / 2, "services_restored": services}
+
+
+def time_services(run):
+    return vm_python(run, "import json,subprocess; "
+        "services=['chrony.service','systemd-timesyncd.service','ntp.service','ntpsec.service']; "
+        "print(json.dumps([s for s in services if subprocess.run("
+        "['systemctl','is-active','--quiet',s]).returncode==0]))")
 
 
 def worker_pod(run):
@@ -83,10 +90,7 @@ def clock(run):
             "choose a worker without BMKG/PVMBG/coordinator for this clock-isolation scenario")
     baseline = clock_offset(run, pod)
     require(abs(baseline["offset_seconds"]) <= 5, "synchronize worker/generator clocks before testing")
-    services = vm_python(run, "import json,subprocess; "
-        "services=['chrony.service','systemd-timesyncd.service','ntp.service','ntpsec.service']; "
-        "print(json.dumps([s for s in services if subprocess.run("
-        "['systemctl','is-active','--quiet',s]).returncode==0]))")
+    services = time_services(run)
     require(services, "no active worker time service; run task clock:sync before testing")
     run.prompt(f"P2.4: automatically stop time sync on {run.config.worker}, apply clock offsets {run.config.clock_offsets}, check polling, then restore time sync.")
     results = []
@@ -152,11 +156,24 @@ def freeze(run):
     old, moves = prepare_owner(run)
     epoch = int(old["log"]["poll_epoch"])
     run.prompt(f"P2.5: suspend {run.config.worker} for {run.config.freeze_seconds}s, then resume it. This freezes every workload on that worker.")
+    services = time_services(run)
+    require(services, "worker time synchronization must be active before freeze")
     started, wall = time.monotonic(), time.time()
     def action(command):
         with run.phase(command + ": " + run.config.worker, 90):
             subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker], cwd=INFRA, check=True, timeout=90)
-    run.cleanup.append(lambda: action("resume-worker"))
+    run.logs.begin_freeze(old["pod_uid"])
+    def resume():
+        run.logs.resume_freeze(old["pod_uid"])
+        action("resume-worker")
+        # Suspending the guest can leave CLOCK_REALTIME behind. Restore it
+        # explicitly without invoking Vagrant's always-run provisioner.
+        vm_python(run, "import json,subprocess; "
+                  f"services={services!r}; "
+                  "[subprocess.run(['systemctl','stop',s],check=True) for s in services]; "
+                  "print(json.dumps({'services_stopped':services}))")
+        restore_clock(run, services)
+    run.cleanup.append(resume)
     try:
         action("suspend-worker")
         run.pause(run.config.freeze_seconds, "holding worker frozen")
@@ -166,18 +183,21 @@ def freeze(run):
                            and int(r["log"].get("epoch", 0)) > epoch), False), timeout=run.config.takeover_seconds,
                        description="successful takeover while worker is frozen")
     finally:
-        action("resume-worker")
+        resume()
         run.cleanup.pop()
-    resumed = time.monotonic()
+    resumed = run.logs.resume_freeze(old["pod_uid"])
     run.wait(lambda: any(p["metadata"]["name"] == old["pod"] and ready(p) for p in run.pods()),
              description="original pod Ready after worker resume")
+    run.wait(lambda: run.logs.freeze_recovered(old["pod_uid"]),
+             description="owner log continuity and fresh records after resume")
+    log_recovery = run.logs.finish_freeze(old["pod_uid"])
     run.checkpoint("freeze-recovered")
     result = run.observe()
     stale = [r for r in run.logs.snapshot() if r["observed"] >= resumed and r["pod_uid"] == old["pod_uid"]
              and r["log"].get("msg") == "poll succeeded" and r["log"].get("source") == run.config.source
              and int(r["log"].get("epoch", 0)) <= epoch]
     require(not stale, "resumed instance logged a successful poll using the old epoch")
-    result.update(owner_preparation=moves, old_epoch=epoch, takeover_epoch=new["log"]["epoch"], audit=run.checkpoint("freeze", wall, time.time()),
+    result.update(log_recovery=log_recovery, owner_preparation=moves, old_epoch=epoch, takeover_epoch=new["log"]["epoch"], audit=run.checkpoint("freeze", wall, time.time()),
                   limitation="No stale successful poll observed; this does not inject a pause exactly inside a storage commit.")
     return result
 
