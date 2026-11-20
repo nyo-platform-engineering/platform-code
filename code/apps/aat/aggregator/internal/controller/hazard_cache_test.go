@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,5 +129,104 @@ func TestHazardCacheMemoryIsBounded(t *testing.T) {
 		if len(cache.pages) > 32 || cache.bytes > 4<<20 {
 			t.Fatal("cache grew beyond its memory budget")
 		}
+	}
+}
+
+// Model two completed fills invalidated by concurrent writes, followed by a
+// third fill still using the sole database read slot.
+type repeatedlyInvalidatedPage struct {
+	storage.Reader
+	cache *HazardPageCache
+	query storage.HazardQuery
+	calls atomic.Int64
+	third chan struct{}
+}
+
+func (reader *repeatedlyInvalidatedPage) Revision(context.Context) (int64, error) {
+	call := reader.calls.Add(1)
+	if call <= 3 {
+		done := make(chan struct{})
+		if call < 3 {
+			close(done)
+		}
+		reader.cache.mu.Lock()
+		if reader.cache.fills == nil {
+			reader.cache.fills = make(map[storage.HazardQuery]chan struct{})
+		}
+		reader.cache.fills[reader.query] = done
+		reader.cache.mu.Unlock()
+		if call == 3 {
+			close(reader.third)
+		}
+	}
+	return min(call, 3), nil
+}
+
+func TestCacheFollowerKeepsCoalescingAfterRepeatedInvalidation(t *testing.T) {
+	cache := &HazardPageCache{}
+	query := storage.HazardQuery{Order: "recent", Limit: 50}
+	reader := &repeatedlyInvalidatedPage{cache: cache, query: query, third: make(chan struct{})}
+	ctrl := &Controller{Store: reader, PageCache: cache}
+	router := gin.New()
+	router.GET("/internal/hazards", ctrl.CachedHazards, func(c *gin.Context) {
+		c.JSON(429, gin.H{"error": "shared database read slot occupied by current fill"})
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	request := httptest.NewRequest("GET", "/internal/hazards?order=recent&limit=50", nil).WithContext(ctx)
+	response := make(chan *httptest.ResponseRecorder, 1)
+	go func() { w := httptest.NewRecorder(); router.ServeHTTP(w, request); response <- w }()
+	select {
+	case <-reader.third:
+	case w := <-response:
+		t.Fatalf("reader abandoned coalescing before the third fill: %d %s", w.Code, w.Body)
+	case <-ctx.Done():
+		t.Fatal("reader never joined the next fill")
+	}
+	cache.put(query, 3, []byte(`{"items":[],"partial":false,"unavailable_units":[]}`))
+	cache.endFill(query)
+	select {
+	case w := <-response:
+		if w.Code != 200 || w.Header().Get("X-Hazard-Cache") != "hit" {
+			t.Fatalf("reader did not use the latest complete fill: %d %s", w.Code, w.Body)
+		}
+	case <-ctx.Done():
+		t.Fatal("reader did not finish after fill completed")
+	}
+}
+
+func TestCacheFollowerCancellationAfterRepeatedInvalidation(t *testing.T) {
+	cache := &HazardPageCache{}
+	query := storage.HazardQuery{Order: "recent", Limit: 50}
+	reader := &repeatedlyInvalidatedPage{cache: cache, query: query, third: make(chan struct{})}
+	ctrl := &Controller{Store: reader, PageCache: cache}
+	router := gin.New()
+	router.GET("/internal/hazards", ctrl.CachedHazards, func(c *gin.Context) {
+		if c.Request.Context().Err() == nil {
+			c.JSON(429, gin.H{"error": "unexpected fallback while fill active"})
+			return
+		}
+		c.JSON(503, gin.H{"error": "request canceled"})
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := httptest.NewRequest("GET", "/internal/hazards?order=recent&limit=50", nil).WithContext(ctx)
+	response := make(chan *httptest.ResponseRecorder, 1)
+	go func() { w := httptest.NewRecorder(); router.ServeHTTP(w, request); response <- w }()
+	select {
+	case <-reader.third:
+	case w := <-response:
+		t.Fatalf("reader abandoned fill before cancellation: %d", w.Code)
+	case <-time.After(time.Second):
+		t.Fatal("reader did not join third fill")
+	}
+	cancel()
+	select {
+	case w := <-response:
+		if w.Code != 503 {
+			t.Fatalf("unexpected cancellation response: %d", w.Code)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cache follower ignored request cancellation")
 	}
 }
