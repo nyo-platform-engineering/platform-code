@@ -22,7 +22,10 @@ def clock_offset(run, pod):
 
 
 def clock(run):
+    run.prompt(f"P2.4: prepare the actual {run.config.source} owner on {run.config.worker} before the clock test. Owner pods may be restarted.")
+    owner, moves = prepare_owner(run)
     pod = worker_pod(run)
+    require(pod == owner["pod"], "clock target is not the observed source owner")
     # Keep the mock clock and the database authority out of this worker-only test.
     require(not any(p["metadata"]["name"].startswith(("bmkg-", "pvmbg-", "citus-g0-"))
                     and p["spec"].get("nodeName") == run.config.worker for p in run.pods()),
@@ -40,16 +43,44 @@ def clock(run):
         run.prompt(f"Restore clock synchronization and correct time on {run.config.worker}, including after a failed check. Continue only after restoration.")
         restored = clock_offset(run, pod)
         require(abs(restored["offset_seconds"] - baseline["offset_seconds"]) <= 5, "worker clock was not restored")
-    return {"baseline": baseline, "offsets": results, "clock_restored": restored,
+    return {"owner_preparation": moves, "owner_pod": pod,
+            "baseline": baseline, "offsets": results, "clock_restored": restored,
             "stale_write_fencing": "log observations only; retain official fault/storage evidence"}
+
+
+def prepare_owner(run):
+    """Place the real source owner on the safe worker before a worker fault."""
+    deadline = time.monotonic() + run.config.recovery_seconds
+    moves = []
+    while True:
+        old = run.owner(run.config.source)
+        if old["node"] == run.config.worker:
+            return old, moves
+        require(time.monotonic() < deadline, "could not place source ownership on the safe worker")
+        epoch = int(old["log"]["poll_epoch"])
+        started = time.monotonic()
+        run.status(f"preparing owner on {run.config.worker}; current={old['node']}; epoch={epoch}")
+        run.kube("delete", "pod", old["pod"], "-n", NAMESPACE,
+                 "--grace-period=0", "--force", "--wait=false", json_output=False)
+        def successor():
+            return next((r for r in run.logs.snapshot() if r["observed"] >= started and not r.get("initial")
+                         and r["log"].get("msg") == "poll succeeded"
+                         and r["log"].get("source") == run.config.source
+                         and r["pod_uid"] != old["pod_uid"]
+                         and int(r["log"].get("epoch", 0)) > epoch), False)
+        run.wait(successor, timeout=min(run.config.takeover_seconds, max(1, deadline-time.monotonic())),
+                 description="preparing actual polling owner on safe worker")
+        moves.append({"deleted_owner": old["pod"], "old_epoch": epoch})
+        run.save("worker-owner-preparation.json", moves)
+        run.replicas(3, timeout=max(1, deadline-time.monotonic()))
 
 
 def freeze(run):
     require(run.config.kubeconfig.resolve() == (INFRA / ".state/kubeconfig").resolve(), "automatic freeze only supports the local Vagrant lab")
     identity = INFRA / "local/.vagrant/machines" / run.config.worker / "libvirt/id"
     require(identity.is_file(), "local Vagrant identity missing; use the official external freeze procedure")
-    old = run.owner(run.config.source)
-    require(old["node"] == run.config.worker, "configured source owner is not on worker; select its actual worker/source in CONFIG")
+    run.prompt(f"P2.5: prepare the actual {run.config.source} owner on {run.config.worker}, then suspend that worker. Owner pods may be restarted during preparation.")
+    old, moves = prepare_owner(run)
     epoch = int(old["log"]["poll_epoch"])
     run.prompt(f"P2.5: suspend {run.config.worker} for {run.config.freeze_seconds}s, then resume it. This freezes every workload on that worker.")
     started, wall = time.monotonic(), time.time()
@@ -77,15 +108,12 @@ def freeze(run):
              and r["log"].get("msg") == "poll succeeded" and r["log"].get("source") == run.config.source
              and int(r["log"].get("epoch", 0)) <= epoch]
     require(not stale, "resumed instance logged a successful poll using the old epoch")
-    result.update(old_epoch=epoch, takeover_epoch=new["log"]["epoch"], audit=run.checkpoint("freeze", wall, time.time()),
+    result.update(owner_preparation=moves, old_epoch=epoch, takeover_epoch=new["log"]["epoch"], audit=run.checkpoint("freeze", wall, time.time()),
                   limitation="No stale successful poll observed; this does not inject a pause exactly inside a storage commit.")
     return result
 
 
 def run_group(run):
-    if run.container_nodes:
-        for name in ("P2.4-clock-skew", "P2.5-freeze-resume"):
-            run.skip(name, "k3d shares a kernel; real clock/VM freeze evidence requires the VM/native demo cluster")
-        return
+    require(not run.container_nodes, "clock/freeze checks require separate-kernel VM nodes")
     run.stage("P2.4-clock-skew", lambda: clock(run))
     run.stage("P2.5-freeze-resume", lambda: freeze(run))

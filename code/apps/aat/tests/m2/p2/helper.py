@@ -69,6 +69,25 @@ def safe_error(text, credentials):
     return text.strip()[:1500]
 
 
+def previous_rolling_image(current, running_digests=()):
+    """Use a published GitOps version; a missing candidate is a preflight failure."""
+    repo = ROOT.parents[2]
+    pin = "code/infrastructure/argo-apps/dev/aat/aggregator/image.yaml"
+    history = subprocess.run(["git", "log", "-20", "--format=%H", "--", pin],
+                             cwd=repo, capture_output=True, text=True, timeout=15)
+    require(history.returncode == 0, "cannot read image history; set CONFIG.rolling_image")
+    for revision in history.stdout.splitlines():
+        result = subprocess.run(["git", "show", revision + ":" + pin], cwd=repo,
+                                capture_output=True, text=True, timeout=15)
+        repository = re.search(r"^  repository: ([a-zA-Z0-9./:_-]+)$", result.stdout, re.M)
+        digest = re.search(r"^  digest: (sha256:[a-f0-9]{64})$", result.stdout, re.M)
+        if repository and digest:
+            image = repository[1] + "@" + digest[1]
+            if image != current and digest[1] not in running_digests:
+                return image
+    raise ValueError("no different published image in Git history; set CONFIG.rolling_image")
+
+
 def ready(resource):
     return any(c["type"] == "Ready" and c["status"] == "True"
                for c in resource.get("status", {}).get("conditions", []))
@@ -427,6 +446,32 @@ class Run:
         self.original_template = deployment["spec"]["template"]
         container = next(c for c in deployment["spec"]["template"]["spec"]["containers"] if c["name"] == "aggregator")
         self.original_image = container["image"]
+        if 2 in self.config.groups:
+            require(not self.container_nodes, "P2.4/P2.5 require separate-kernel VM nodes; choose groups without 2 only for development")
+            unsafe = {p["spec"].get("nodeName") for p in pods
+                      if p["metadata"]["name"].startswith(("bmkg-", "pvmbg-", "citus-g0-"))}
+            safe = sorted(n["metadata"]["name"] for n in nodes if ready(n)
+                          and n["metadata"]["name"] in ("aat-worker-1", "aat-worker-2")
+                          and n["metadata"]["name"] not in unsafe)
+            if self.config.worker is None:
+                require(safe, "need a worker without mocks/coordinator for clock/freeze tests")
+                self.config.worker = safe[0]
+            require(self.config.worker in safe, "configured clock worker hosts a mock/coordinator or is not Ready")
+            self.report["clock_freeze_worker"] = self.config.worker
+            self.report["worker"] = self.config.worker
+        if 3 in self.config.groups:
+            current_ids = {c.get("imageID", "").split("@")[-1] for p in pods
+                           if p["metadata"].get("labels", {}).get("role") == "aggregator"
+                           for c in p.get("status", {}).get("containerStatuses", [])}
+            if not self.config.rolling_image:
+                self.config.rolling_image = previous_rolling_image(self.original_image, current_ids)
+            require(re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}", self.config.rolling_image),
+                    "rolling_image must be a different immutable image digest")
+            require(self.config.rolling_image != self.original_image
+                    and self.config.rolling_image.split("@")[-1] not in current_ids,
+                    "rolling_image matches the running version")
+            self.report["rolling_image"] = self.config.rolling_image
+
         self.save("deployment-baseline.json", {"image": self.original_image, "replicas": self.original_replicas,
                    "resources": container.get("resources"), "strategy": deployment["spec"].get("strategy"),
                    "topology_spread": deployment["spec"]["template"]["spec"].get("topologySpreadConstraints", []),
@@ -459,6 +504,8 @@ class Run:
             self.kube("annotate", "application", name, "-n", "argocd", "argocd.argoproj.io/skip-reconcile=true", "--overwrite", json_output=False)
         self.cleanup.append(self.restore_deployment)
         self.replicas(3)
+        if 3 in self.config.groups:
+            self.preload_rolling_image(sorted(n["metadata"]["name"] for n in nodes if ready(n)), deployment)
         route = {"apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute",
                  "metadata": {"name": self.run_id, "namespace": NAMESPACE},
                  "spec": {"parentRefs": [{"name": "local", "namespace": "traefik", "sectionName": "web"}],
@@ -472,6 +519,41 @@ class Run:
         return {"replicas": 3, "load_balancer": "Traefik -> Aggregator Service", "host": self.host,
                 "gateway_url": self.config.url, "cluster_mode": self.report["cluster_mode"],
                 "gitops": "disable auto-sync, drain operations, then skip reconciliation; restore in finally"}
+
+    def preload_rolling_image(self, nodes, deployment):
+        name = self.run_id + "-image"
+        selector = {"app": name}
+        manifest = {"apiVersion": "apps/v1", "kind": "DaemonSet",
+            "metadata": {"name": name, "namespace": NAMESPACE},
+            "spec": {"selector": {"matchLabels": selector}, "template": {
+                "metadata": {"labels": dict(selector, role="other")},
+                "spec": {"automountServiceAccountToken": False,
+                    "tolerations": [{"operator": "Exists"}],
+                    "affinity": {"nodeAffinity": {"requiredDuringSchedulingIgnoredDuringExecution": {
+                        "nodeSelectorTerms": [{"matchExpressions": [{"key": "kubernetes.io/hostname",
+                            "operator": "In", "values": nodes}]}]}}},
+                    "imagePullSecrets": deployment["spec"]["template"]["spec"].get("imagePullSecrets", []),
+                    "containers": [{"name": "image", "image": self.config.rolling_image,
+                        "imagePullPolicy": "IfNotPresent", "command": ["/bin/sh", "-c", "sleep 3600"],
+                        "securityContext": {"runAsNonRoot": True, "runAsUser": 10001,
+                                            "allowPrivilegeEscalation": False},
+                        "resources": {"requests": {"cpu": "1m", "memory": "8Mi"},
+                                      "limits": {"cpu": "100m", "memory": "64Mi"}}}]}}}}
+        def remove():
+            self.kube("delete", "daemonset", name, "-n", NAMESPACE, "--ignore-not-found", json_output=False)
+        self.cleanup.append(remove)
+        try:
+            self.kube("create", "-f", "-", body=manifest, json_output=False)
+            def cached():
+                pods = self.kube("get", "pods", "-n", NAMESPACE, "-l", "app=" + name, "-o", "json")["items"]
+                healthy = [p for p in pods if ready(p)]
+                self.status(f"rolling image cached on {len(healthy)}/{len(nodes)} nodes")
+                return {p["spec"]["nodeName"] for p in healthy} == set(nodes)
+            self.wait(cached, description="preloading mandatory rolling image on every node")
+            self.report["rolling_image_preloaded_nodes"] = nodes
+        finally:
+            remove()
+            self.cleanup.pop()
 
     def deployment_state(self):
         deployment = self.kube("get", "deployment", "aggregator", "-n", NAMESPACE, "-o", "json")

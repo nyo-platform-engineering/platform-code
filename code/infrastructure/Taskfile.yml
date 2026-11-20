@@ -40,7 +40,7 @@ tasks:
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p1/test-problem-1.py"'
   m2:p2:
-    desc: Run guided M2 P2 coordination, fault, and load checks; configure P2 first
+    desc: Run all eight guided M2 P2 checks, including 10,000-VU load and version rollout
     interactive: true
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p2/test-problem-2.py"'
