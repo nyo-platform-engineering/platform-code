@@ -2,9 +2,10 @@
 notifier, p95 <= 5 s). Runs last so it never holds up the other checks.
 
 The practice scenario sends its critical readings in the first sensor-hours after the
-sensor container starts (about 30, 90 and 150 s of real time at speed 60), and every
-restart replays the same readings. Re-sent readings are deduplicated, so they alert
-once, ever. The check therefore:
+sensor container starts (about 30, 90 and 150 s of real time at speed 60). A restart
+starts the scenario over, but the poller resumes from its stored cursor, so readings
+it already has are not fetched again (and would be deduplicated if they were). The
+check therefore:
 
 1. looks in the database: critical readings ingested while the current field-notifier
    was logging are measured at once (a fresh lab), with no restart;
@@ -81,9 +82,11 @@ def critical_alerts(run):
     alerts = [r["hazard_id"] for r in alert_records(run) if r["hazard_id"] in stored_ids]
     require(len(alerts) == len(set(alerts)), "a replayed critical reading was alerted twice")
     return {"skipped": True,
-            "reason": (f"the sensor restart replayed only the {len(stored_ids)} critical readings already stored; "
-                       "they were deduplicated and alert once, so p95 needs a SENSOR_PANTAI store that has not "
-                       "seen the scenario yet (fresh lab or first run on the VM cluster)"),
+            "reason": (f"no new critical reading after the sensor restart: the {len(stored_ids)} critical readings "
+                       "of its scenario were ingested before the current field-notifier started, and the poller "
+                       "resumes from its stored cursor (re-sent readings would also be deduplicated), so p95 needs "
+                       "a SENSOR_PANTAI store that has not seen the scenario yet (fresh lab or first run on the VM "
+                       "cluster, with P5 run soon after task up)"),
             "stored_critical_readings": len(stored_ids), "new_critical_readings": 0,
             "duplicate_events": 0, "duplicate_alerts": 0,
             "alerts_seen_by_this_notifier_before_restart": len(alerts_before)}

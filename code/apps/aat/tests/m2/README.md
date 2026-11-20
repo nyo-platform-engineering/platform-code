@@ -44,8 +44,10 @@ Needs `PANTAI_AUTH_TOKEN` (created by `task up`) and the client secrets.
 | [group4_critical.py](p5/group4_critical.py) | runs last: database check, then (if needed) restart the sensor; every new critical reading is alerted, p95 ≤ 5 s | 1 |
 
 The practice scenario sends its critical readings in the first ~150 s after the
-sensor container starts (speed 60), and every restart replays the same readings,
-which are deduplicated and alert only once. Group 4 therefore first checks the
+sensor container starts (speed 60). A restart starts the scenario over, but the
+poller resumes from its stored cursor, so readings it already has are not fetched
+again (re-sent ones would be deduplicated and alert only once). Group 4 therefore
+first checks the
 database: criticals ingested while the current notifier was logging are measured at
 once (a fresh lab). Otherwise it restarts the sensor and waits up to
 `CONFIG.wait_critical_seconds` (300) for new ones. If the restart replays only stored
