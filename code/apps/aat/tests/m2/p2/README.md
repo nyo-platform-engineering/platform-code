@@ -27,6 +27,7 @@ Edit `CONFIG` at the top of `test-problem-2.py`:
 | `observation_seconds` | 30 seconds of polling observations; at least three mock event intervals |
 | `takeover_seconds` | 60-second maximum from fault request to observed successful successor poll |
 | `freeze_seconds` | 30 seconds; must exceed the 20-second DB session idle timeout |
+| `clock_offsets` | `(45, -30)` seconds: configurable example cases, not mandatory specification values |
 | `event_intervals` | BMKG/PVMBG 10 seconds; must match running mock configuration |
 | `load_vus`, `load_seconds` | Full `TestConfig()` defaults: **10,000 VUs, 120 seconds per measured run** |
 | `scaling_seconds` | `None` uses `load_seconds`; set a longer scaling window while keeping throughput samples short |
@@ -63,12 +64,24 @@ checks. On `task up -- --novm` (k3d), explicitly select groups without Group 2 f
 development only; a full configuration fails preflight rather than silently
 skipping those criteria. The script never adjusts the shared Docker clock.
 
-The VM clock test is guided: the operator disables synchronization, applies +45 s,
-then -30 s relative to the original clock, and restores synchronization in the
-final prompt. The runner measures the node offset against its own midpoint clock,
-with a bounded measurement RTT. Keep source mocks and coordinator off that worker.
-Save the actual clock/Tester Agent commands separately. This is a worker-clock
-scenario, not a test of skewing the database authority itself.
+The VM clock test is automatic after Enter: via Vagrant SSH it records active
+worker time services, stops them, applies each `clock_offsets` case, verifies the
+actual skew, and observes polling/Audit reconciliation. The default +45/−30 seconds
+are examples from the specification, not required values. Both offsets are relative
+to the baseline, so −30 after +45 steps the clock backward by roughly 75 seconds.
+The criterion checks exclusive successful polling ownership, not a particular
+clock value. A failed injection still fails the test rather than crediting a
+scenario where no skew occurred.
+
+The runner checks that no two pod UIDs report successful polls for the same source
+epoch, alongside upstream ownership/overlap checks and Audit identities. It saves
+`clock-skew-observations.json` and prints measured skew/results. These observations
+remain log-based evidence; retain storage fencing/official fault evidence too.
+In `finally`, it corrects the worker clock, restarts the previously active time
+services and verifies restoration. Chrony restoration also steps/waits for sync.
+Cleanup retries if restoration failed. No manual clock commands are needed, and
+only the selected local Vagrant worker clock is changed. Keep the source mocks
+and database coordinator off that worker.
 
 Before each clock/freeze check, the runner prepares the actual source owner on the safe worker
 by restarting owner pods until an observed successor there has a newer epoch.
@@ -199,12 +212,15 @@ and the report still require review. `automated_criteria_complete` becomes true
 only when all eight checks pass at the required load size on VM nodes.
 
 On Ctrl+C the runner terminates k6/log streams, resumes a worker it suspended,
-restores deployment/GitOps settings, and removes its route. During a manual clock
-step, restore the worker clock when prompted even if the check fails. SIGKILL,
+restores the worker clock/time services and deployment/GitOps settings, and removes
+its route. SIGKILL,
 power loss, or a second interruption can prevent cleanup: inspect `result.json`,
 restore the original image/replicas, resume the selected worker, restore clock
 sync, remove the recorded route, and restore the three original Argo annotations
-before starting another run. Credentials and source/admin settings are not changed.
+before starting another run. `clock-recovery.json` records the worker, originally
+active time services and whether restoration completed; after an abrupt exit use
+`task clock:sync` to restore the lab's clock configuration and verify with
+`task clock:status`. Credentials and source/admin settings are not changed.
 
 Offline checks (no live faults or load against the cluster):
 

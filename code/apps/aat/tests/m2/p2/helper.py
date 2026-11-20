@@ -96,6 +96,7 @@ def ready(resource):
 def polling_evidence(records, start, end, poll_interval):
     callers, upstream = {}, []
     successes = Counter()
+    successful_owners = {}
     for item in records:
         log = item["log"]
         if log.get("msg") == "outbound_request" and log.get("source") in ("BMKG", "PVMBG"):
@@ -105,6 +106,13 @@ def polling_evidence(records, start, end, poll_interval):
         if not item.get("initial") and start + 2 <= item["observed"] <= end - 2:
             if log.get("msg") == "poll succeeded":
                 successes[log.get("source")] += 1
+                epoch = log.get("epoch")
+                require(str(epoch).isdigit(), "successful poll lacks ownership epoch")
+                key = (log.get("source"), int(epoch))
+                owner = item["pod_uid"]
+                require(key not in successful_owners or successful_owners[key] == owner,
+                        "multiple instances successfully polled in the same source epoch")
+                successful_owners[key] = owner
             if item["role"] in ("bmkg", "pvmbg") and log.get("msg") == "request" and log.get("path") in (
                     "/seismic-events", "/tsunami-warnings", "/volcanic-reports"):
                 upstream.append(item)
@@ -144,6 +152,8 @@ def polling_evidence(records, start, end, poll_interval):
             require(counts[(source, path)] <= bound, f"{source} request rate suggests multiplied pollers")
     return {"upstream_requests": {f"{s}{p}": n for (s, p), n in counts.items()},
             "epochs": [{"source": s, "epoch": e, "owner": o, "pod_uid": p} for (s, e), (o, p) in sorted(epochs.items())],
+            "successful_poll_owners": [{"source": s, "epoch": e, "pod_uid": p}
+                                       for (s, e), p in sorted(successful_owners.items())],
             "poll_successes": dict(successes), "scope": "observed request/commit logs; not a linearizability proof"}
 
 
@@ -476,7 +486,7 @@ class Run:
                    "resources": container.get("resources"), "strategy": deployment["spec"].get("strategy"),
                    "topology_spread": deployment["spec"]["template"]["spec"].get("topologySpreadConstraints", []),
                    "nodes": [{"name": n["metadata"]["name"], "kernel": n["status"]["nodeInfo"]["kernelVersion"]} for n in nodes]})
-        self.prompt("P2 will delete one Aggregator pod, scale replicas, and optionally roll its image. Enter enables the isolated test run.")
+        self.prompt("P2 applies faults for the selected groups: deletes owner pods, changes/restores a worker clock, suspends/resumes a worker, scales replicas and rolls the image. Enter enables the isolated test run.")
         self.report["argo_annotations_before"] = {}
         self.report["argo_automated_before"] = {}
         for name in ("platform", "dev-apps", "aat-aggregator-dev"):
