@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-P5 = Path(__file__).resolve().parent / 'm2/p5'
+P5 = Path(__file__).resolve().parent
 sys.path.insert(0, str(P5.parent))
 from common import Run
 spec = importlib.util.spec_from_file_location('p5_helper', P5 / 'helper.py')
