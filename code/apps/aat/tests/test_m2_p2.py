@@ -632,6 +632,55 @@ class AuditAndCleanupTests(unittest.TestCase):
     def make_run(self, folder):
         return p2_helper.Run(runner.TestConfig(), Path(folder), "unit-test")
 
+    def test_request_explains_transport_failure_without_credentials(self):
+        with tempfile.TemporaryDirectory() as folder:
+            run = self.make_run(folder)
+            run.config.url = "http://127.0.0.1:1"
+            run.credentials = {"AUDIT_TOKEN": "private-audit-token"}
+            with patch.object(p2_helper.urllib.request, "build_opener") as opener:
+                opener.return_value.open.side_effect = p2_helper.urllib.error.URLError(
+                    ConnectionRefusedError(111, "Connection refused"))
+                with self.assertRaisesRegex(p2_helper.RequestError, "audit/events: network error:.*Connection refused") as caught:
+                    run.request("/internal/audit/events", "AUDIT_TOKEN")
+                self.assertTrue(caught.exception.retryable)
+                self.assertNotIn("private-audit-token", str(caught.exception))
+                opener.return_value.open.side_effect = p2_helper.urllib.error.HTTPError("unused",401,"Unauthorized",None,None)
+                with self.assertRaises(p2_helper.RequestError) as caught:
+                    run.request("/internal/audit/events", "AUDIT_TOKEN")
+                self.assertFalse(caught.exception.retryable)
+
+    def test_audit_retry_keeps_the_same_cursor_and_checks_all_identities(self):
+        with tempfile.TemporaryDirectory() as folder:
+            run = self.make_run(folder)
+            def event(number):
+                return {"source":"BMKG", "source_ref_id":str(number),
+                        "hazard_id":"haz-"+str(number), "ingested_at":"first"}
+            pages = iter([{"partial":False,"unavailable_units":[],"items":[event(1)],"next_cursor":"page-2"},
+                          p2_helper.RequestError("connection reset",retryable=True),
+                          {"partial":False,"unavailable_units":[],"items":[event(2)],"next_cursor":None}])
+            calls = []
+            def request(path, token, params):
+                calls.append(dict(params))
+                result = next(pages)
+                if isinstance(result,Exception): raise result
+                return result
+            run.request = request
+            with patch.object(run, "pause") as pause:
+                self.assertEqual(len(run.audit()),2)
+            self.assertEqual(calls,[{"limit":1000},{"limit":1000,"cursor":"page-2"},{"limit":1000,"cursor":"page-2"}])
+            pause.assert_called_once()
+
+    def test_audit_does_not_retry_auth_failures_or_exceed_retry_budget(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for retryable in (False,True):
+                run = self.make_run(folder)
+                def failed(*args): raise p2_helper.RequestError("test failure",retryable=retryable)
+                run.request = failed
+                with patch.object(p2_helper.time,"monotonic",side_effect=[0,31]), patch.object(run,"pause") as pause:
+                    with self.assertRaisesRegex(p2_helper.RequestError,"test failure"):
+                        run.audit()
+                    pause.assert_not_called()
+
     def test_duplicate_version_fails_but_new_version_is_allowed(self):
         with tempfile.TemporaryDirectory() as folder:
             run = self.make_run(folder)
