@@ -76,23 +76,35 @@ def safe_error(text, credentials):
     return text.strip()[:1500]
 
 
-def previous_rolling_image(current, running_digests=()):
-    """Use a published GitOps version; a missing candidate is a preflight failure."""
+def previous_rolling_image(current, running_digests=(), preferred=None):
+    """Both published releases must contain the write-safe cache fill policy."""
     repo = ROOT.parents[2]
     pin = "code/infrastructure/argo-apps/dev/aat/aggregator/image.yaml"
-    history = subprocess.run(["git", "log", "-20", "--format=%H", "--", pin],
+    history = subprocess.run(["git", "log", "-20", "--format=%H", "origin/main", "--", pin],
                              cwd=repo, capture_output=True, text=True, timeout=15)
-    require(history.returncode == 0, "cannot read image history; set CONFIG.rolling_image")
+    require(history.returncode == 0, "cannot read published image history; run git fetch origin main")
+    candidate, current_safe = None, False
+    policies = {}
     for revision in history.stdout.splitlines():
         result = subprocess.run(["git", "show", revision + ":" + pin], cwd=repo,
                                 capture_output=True, text=True, timeout=15)
         repository = re.search(r"^  repository: ([a-zA-Z0-9./:_-]+)$", result.stdout, re.M)
         digest = re.search(r"^  digest: (sha256:[a-f0-9]{64})$", result.stdout, re.M)
-        if repository and digest:
+        source = re.search(r"^  tag: sha-([a-f0-9]{40})$", result.stdout, re.M)
+        if repository and digest and source:
             image = repository[1] + "@" + digest[1]
-            if image != current and digest[1] not in running_digests:
-                return image
-    raise ValueError("no different published image in Git history; set CONFIG.rolling_image")
+            if source[1] not in policies:
+                code = subprocess.run(["git", "show", source[1] + ":code/apps/aat/aggregator/internal/controller/hazards.go"],
+                                      cwd=repo, capture_output=True, text=True, timeout=15)
+                policies[source[1]] = ('const CacheFillPolicy = "coalesced-until-deadline-v2"' in code.stdout)
+            if image == current or digest[1] in running_digests:
+                current_safe |= policies[source[1]]
+            elif candidate is None and policies[source[1]] and (preferred is None or image == preferred):
+                candidate = image
+            if current_safe and candidate:
+                return candidate
+    require(current_safe, "running Aggregator image predates the cache fix or lacks published provenance; wait for the corrected image rollout")
+    raise ValueError("no different published image with the cache fix; publish a second Aggregator build (see P2 README)")
 
 
 def ready(resource):
@@ -108,7 +120,11 @@ def polling_evidence(records, start, end, poll_interval):
         log = item["log"]
         if log.get("msg") == "outbound_request" and log.get("source") in ("BMKG", "PVMBG"):
             key = (log["source"], log.get("path"), log.get("correlation_id"))
-            if log.get("status") == 200:
+            # status 0 means Do returned without a response (for example,
+            # cancellation during scale-down). The upstream can still have
+            # received and answered this exact request. This proves the caller,
+            # not a successful fetch or commit; those are checked separately.
+            if log.get("status") in (0, 200):
                 callers[key] = item
         if not item.get("initial") and start + 2 <= item["observed"] <= end - 2:
             if log.get("msg") == "poll succeeded":
@@ -124,6 +140,7 @@ def polling_evidence(records, start, end, poll_interval):
                     "/seismic-events", "/tsunami-warnings", "/volcanic-reports"):
                 upstream.append(item)
     counts, seen, epochs, intervals = Counter(), set(), {}, defaultdict(list)
+    unconfirmed_responses = []
     for item in upstream:
         log = item["log"]
         source = item["role"].upper()
@@ -136,6 +153,10 @@ def polling_evidence(records, start, end, poll_interval):
         request = caller["log"]
         owner, epoch = request.get("poll_owner"), request.get("poll_epoch")
         require(owner and str(epoch).isdigit(), "deploy images with X-Poll-Owner/epoch request logging")
+        if request.get("status") == 0:
+            unconfirmed_responses.append({"source": source, "path": log["path"],
+                                          "correlation_id": log.get("correlation_id"),
+                                          "pod_uid": caller["pod_uid"], "epoch": int(epoch)})
         identity = (source, int(epoch))
         authority = (owner, caller["pod_uid"])
         require(identity not in epochs or epochs[identity] == authority, "one polling epoch has multiple owners")
@@ -161,7 +182,8 @@ def polling_evidence(records, start, end, poll_interval):
             "epochs": [{"source": s, "epoch": e, "owner": o, "pod_uid": p} for (s, e), (o, p) in sorted(epochs.items())],
             "successful_poll_owners": [{"source": s, "epoch": e, "pod_uid": p}
                                        for (s, e), p in sorted(successful_owners.items())],
-            "poll_successes": dict(successes), "scope": "observed request/commit logs; not a linearizability proof"}
+            "poll_successes": dict(successes), "unconfirmed_responses": unconfirmed_responses,
+            "scope": "observed request/commit logs; not a linearizability proof"}
 
 
 class Logs:
@@ -547,8 +569,7 @@ class Run:
             current_ids = {c.get("imageID", "").split("@")[-1] for p in pods
                            if p["metadata"].get("labels", {}).get("role") == "aggregator"
                            for c in p.get("status", {}).get("containerStatuses", [])}
-            if not self.config.rolling_image:
-                self.config.rolling_image = previous_rolling_image(self.original_image, current_ids)
+            self.config.rolling_image = previous_rolling_image(self.original_image, current_ids, self.config.rolling_image)
             require(re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}", self.config.rolling_image),
                     "rolling_image must be a different immutable image digest")
             require(self.config.rolling_image != self.original_image

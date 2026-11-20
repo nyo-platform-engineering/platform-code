@@ -8,6 +8,9 @@ cd code/infrastructure
 task m2:p2
 ```
 
+At startup, the script lists older P2 evidence folders and asks whether to delete
+them. Enter keeps them; `y` or `yes` deletes them before creating the new run.
+
 Requires Python 3.9+, kubectl, a Ready three-node AAT cluster, Traefik's Gateway,
 Argo CD Applications `platform`, `dev-apps`, `aat-aggregator-dev`, `traefik`, and k6 for
 Group 3. Tokens come from `.env.runtime` or environment overrides. The separate
@@ -104,6 +107,40 @@ assuming the last 1,000 lines contain it. Recovery evidence is saved in
 also restored explicitly after resume, since guest time may lag after suspension.
 There is no disk erasure. Non-Vagrant/native environments need the external
 official procedure rather than pretending Docker pause is an equivalent demo.
+
+## One-time image preparation after the cache fix
+
+Both the running image and the rolling candidate must contain
+`CacheFillPolicy = "coalesced-until-deadline-v2"`. Older releases can reject cache
+followers when writes invalidate two consecutive fills. Preflight checks the
+published source revisions in fetched `origin/main` history and refuses those releases,
+including explicitly configured candidates. The zero-failed/rejected-request
+gate remains unchanged.
+
+After merging this fix:
+
+1. Wait for the normal AAT build, digest update and Argo rollout of the fixed image.
+2. Publish a second Aggregator build from the updated `main`, so both distinct
+   immutable releases contain the fix. Other services need not be rebuilt:
+
+   ```sh
+   gh workflow run aat-ci.yml --ref main -f service=aggregator
+   ```
+
+3. Wait for its digest update and rollout, then fetch the pin history:
+
+   ```sh
+   git fetch origin main
+   git switch main
+   git pull --ff-only
+   task m2:p2
+   ```
+
+The two release digests have different published source/build revisions while
+sharing the corrected cache behavior. This checks version replacement and
+availability, not compatibility of an arbitrary business-logic change. Do not
+use a same-image restart or a release with the known bug as a substitute. The
+manual workflow's default `service=all` retains its existing full-build behavior.
 
 ## Groups and evidence
 
