@@ -128,6 +128,44 @@ task m2:p4   # Feed Satelit: butuh SATELLITE_GROUP_TOKEN; menghapus semua pod Ag
 task m2:p5   # Sensor Pantai: menskalakan sensor ke 0 sebentar dan membanjiri Client API dengan klien Media
 ```
 
+### Freeze polling mock untuk checkpoint checksum
+
+P1 memanggil freeze/resume otomatis hanya pada tahap `global-reads` dan
+`dashboard-analytics`. Jalankan langsung `task m2:p1`; tidak perlu freeze manual
+sebelumnya. Tahap import, beban, serta recovery tetap memakai polling aktif.
+
+Untuk checkpoint manual di luar suite P1, jalankan pada terminal terpisah:
+
+```sh
+task polling:freeze
+```
+
+Task menyimpan URL BMKG/PVMBG dan pengaturan Argo, menunggu sync aktif selesai,
+lalu mengganti URL upstream kedua mock pada seluruh Aggregator dengan hostname
+`.invalid`. Rollout menutup koneksi HTTP lama; nama Service dan pod mock tetap
+utuh sehingga riwayat feed tidak direset. Argo dijeda sementara agar URL tidak
+langsung dikembalikan oleh self-heal.
+
+Task menunggu pod Aggregator lama berhenti dan inbox BMKG/PVMBG selesai diproses
+(melalui coordinator Citus lab). Tetap pastikan checksum/count sebelum dan sesudah
+pemeriksaan sama. Task ini menghentikan
+**fetch upstream BMKG/PVMBG**, bukan semua write: request ingest langsung serta
+integrasi Satelit/Pantai tetap aktif. Error polling/source-status selama freeze
+merupakan akibat maintenance yang disengaja. Gunakan hanya untuk checkpoint;
+jalankan uji polling, failover, recovery, dan beban dengan polling sudah aktif lagi.
+
+Tekan **Enter** atau **Ctrl+C** untuk mengembalikan URL dan pengaturan Argo semula.
+Jika terminal/proses mati atau pemulihan gagal, gunakan:
+
+```sh
+task polling:resume
+```
+
+Jurnal recovery berada di `.state/polling-freeze.json` dan dihapus hanya setelah
+pemulihan selesai. Perubahan env lain tetap dipertahankan; perubahan URL oleh proses
+lain tidak ditimpa otomatis. Freeze ini tidak menghapus data dan tidak mengubah
+Tester Agent.
+
 ### Pengujian Milestone 2 Problem 1
 
 Setelah rollout Citus dan Aggregator selesai, jalankan pengujian interaktif:

@@ -188,6 +188,7 @@ class Monitor:
         self.target_ready = None
 
     def __enter__(self):
+        self.run.active_monitors = getattr(self.run, "active_monitors", 0) + 1
         self.started = time.monotonic()
         self.last_progress_at = self.started
         self.threads = [
@@ -430,6 +431,7 @@ class Monitor:
             self.stop.set()
             for thread in self.threads:
                 thread.join()
+            self.run.active_monitors -= 1
             self.ended = time.monotonic()
             self.run.save(f"{self.name}-monitor.json", self.summary())
             summary = self.summary()

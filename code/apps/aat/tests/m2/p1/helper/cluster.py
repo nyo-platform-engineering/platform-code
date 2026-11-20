@@ -1,6 +1,7 @@
 """Kubernetes topology, worker actions, and verified storage recovery."""
 from contextlib import contextmanager
 import base64
+import importlib.util
 import json
 import shlex
 import socket
@@ -447,3 +448,53 @@ def restore_worker_on_failure(run, name, worker):
                   f"then from infrastructure/local: vagrant ssh {worker} "
                   "-c 'sudo systemctl start k3s-agent'")
         raise
+
+
+def polling_freeze_module():
+    script = INFRA / "scripts/tester/freeze-polling.py"
+    spec = importlib.util.spec_from_file_location("p1_polling_freeze", script)
+    polling = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(polling)
+    return polling
+
+
+@contextmanager
+def frozen_mock_checkpoint(run, name):
+    """Pause only mock fetches for a quiet checkpoint, never inside a live monitor."""
+    require(not getattr(run, "active_monitors", 0),
+            "mock polling freeze cannot run inside a load/recovery monitor")
+    require(run.config.kubeconfig.resolve() == (INFRA / ".state/kubeconfig").resolve(),
+            "automatic mock freeze only supports the local lab kubeconfig")
+    polling = polling_freeze_module()
+    record = {"checkpoint": name, "started_at": utc(), "sources": ["BMKG", "PVMBG"],
+              "scope": "upstream fetches only; other sources and direct writes remain live"}
+    records = run.report.setdefault("polling_freezes", [])
+    records.append(record)
+    entered = False
+    try:
+        output("CHECKPOINT", name, "P1 pauses BMKG/PVMBG polling automatically for this comparison.",
+               "Polling resumes before continuing; no separate polling:freeze task is needed.")
+        with polling.paused_polling():
+            entered = True
+            ensure = getattr(run.config, "ensure_endpoint", None)
+            if ensure:
+                ensure(30)
+            record["frozen_at"] = utc()
+            run.mock_polling_frozen = True
+            try:
+                yield
+            finally:
+                run.mock_polling_frozen = False
+        if ensure:
+            ensure(30)
+        record["status"] = "completed"
+    except BaseException:
+        record["status"] = "failed"
+        raise
+    finally:
+        run.mock_polling_frozen = False
+        record["restored"] = entered and not polling.STATE.exists()
+        record["finished_at"] = utc()
+        run.save("polling-freezes.json", records)
+        if record["restored"]:
+            output("CHECKPOINT", name, "Mock polling restored; subsequent load/recovery steps remain live.")
