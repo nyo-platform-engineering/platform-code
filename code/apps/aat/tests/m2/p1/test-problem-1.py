@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Configure and run M2 P1; press Enter between the three groups' test steps."""
 # Group 1 (group1_distribution.py):
-# 1. Muat dataset katalog gempa historis yang diberikan asisten. Tidak ada satu node pun yang menyimpan seluruh data, dan beban penyimpanan maupun penulisan tersebar ke lebih dari satu node. Laporkan sebaran data per node.
+# 1. Muat dataset katalog gempa historis yang diberikan asisten. Data dipartisi menjadi beberapa unit penyimpanan (shard). Tidak ada satu unit pun yang memuat seluruh data, dan peran primary (beban penulisan) tersebar ke lebih dari satu node. Sebuah node boleh menyimpan replica dari unit yang primary-nya berada di node lain. Laporkan sebaran unit (primary dan replica) per node.
 # 2. Tunjukkan bagaimana sistem menyikapi ketidakmerataan alami dataset tersebut. Ukur beban tiap node saat dataset dimuat dan saat lonjakan gempa di satu wilayah disimulasikan.
 # 3. Sediakan permintaan yang membaca data lintas seluruh lokasi penyimpanan (contoh: "50 event terbaru dari seluruh jenis bahaya", dengan pagination) dan menghasilkan urutan yang benar.
 # Group 2 (group2_recovery.py):
-# 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung.
+# 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung. Pada kondisi normal sebelum node dimatikan, setiap unit wajib memiliki minimal satu replica di node yang berbeda dari primary-nya.
 # 5. Tambahkan node baru (atau node yang sama dengan disk kosong). Tunjukkan node tersebut ikut menanggung data dan beban tanpa menghentikan penulisan maupun pembacaan.
 # 6. Setelah kriteria 4 dan 5, sistem kembali pada kondisi yang mampu bertahan dari kehilangan satu node berikutnya.
 # Group 3 (group3_analytics.py):
@@ -13,7 +13,7 @@
 #    - line chart jumlah kejadian per jenis bahaya terhadap waktu, dengan pilihan rentang waktu;
 #    - jumlah kejadian per tingkat severity;
 #    - jumlah kejadian per wilayah (area_name) dalam bentuk chart atau tabel.
-# 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
+# Lanjutan kriteria 7: Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, replace
 import builtins
@@ -73,7 +73,11 @@ class TestConfig:
     # Per-request bounds and sampling; replica/recovery waits continue until ready.
     request_timeout: float = 8
     max_read_seconds: float = 7
+    # Shared hazards/analytics pacing: at most 10 starts/s, below the lab 20 RPS limit.
+    read_interval: float = 0.1
     sample_interval: float = 2
+    # Bound waiting for Patroni replicas/routing before accepting shard placement.
+    shard_ready_timeout: float = 180
     metrics_interval: float = 5
     min_window_seconds: float = 20
 
@@ -158,9 +162,9 @@ class ConsoleOutput:
 
 CASE_GUIDE = {
     "catalog-import": ("1 dan 2", "Katalog historis dan sebaran awal",
-        "Dataset harus tersebar ke beberapa node; seluruh katalog tidak boleh berada di satu node.",
-        "Validasi input, bandingkan data sebelum/sesudah impor, ukur CPU/memori, lalu periksa lokasi setiap event katalog.",
-        "catalog-manifest.json, catalog-placement.json, catalog-load-monitor.json, baseline.json"),
+        "Data terbagi ke beberapa shard; tidak ada shard memuat seluruh data dan primary tersebar di lebih dari satu node.",
+        "Validasi input, bandingkan data sebelum/sesudah impor, ukur CPU/memori, lalu laporkan shard primary/replica per node dan periksa lokasi event katalog.",
+        "catalog-manifest.json, catalog-placement.json, catalog-shards.json, catalog-load-monitor.json, baseline.json"),
     "regional-surge": ("2", "Lonjakan gempa pada satu wilayah",
         "Beban geografis yang timpang tidak boleh hanya dinilai dari rata-rata cluster.",
         "Kirim event baru di Jawa, ukur tiap node selama penulisan, lalu bandingkan penempatan event lonjakan dengan katalog awal.",
@@ -170,8 +174,8 @@ CASE_GUIDE = {
         "Ikuti cursor dengan halaman berisi maksimal 50 event, periksa urutan dan duplikasi, lalu cocokkan dengan Audit API sebelum/sesudah pembacaan.",
         "global-reads.json dan http.jsonl"),
     "first-loss": ("4", "Worker mati dan data lokal dihapus",
-        "Replika harus menjaga event yang sudah ada dan penulisan yang telah diakui berhasil.",
-        "Hapus volume store, matikan worker, pantau request selama gangguan, lalu cocokkan identitas event dan checksum katalog.",
+        "Setiap shard harus memiliki replica siap di node berbeda sebelum worker dimatikan; event dan write yang diakui harus tetap tersimpan.",
+        "Periksa seluruh shard dan replica lintas node, hapus volume store, matikan worker, pantau request, lalu cocokkan event dan checksum katalog.",
         "first-loss.json, first-loss-monitor.json, first-loss-storage-erase.json"),
     "first-worker-rejoin": ("5", "Worker bergabung dengan disk kosong",
         "Status Ready saja belum membuktikan worker ikut menyimpan data atau penulisan tetap berjalan.",
@@ -259,6 +263,12 @@ def print_result(name, result):
                              ("Regional surge", result.get("surge_distribution"))):
         if not placement or "copies_per_node" not in placement:
             continue
+        shard_nodes = placement.get("shards_per_node", result.get("shards_per_node"))
+        if shard_nodes:
+            output("RESULT", "Sebaran shard per node", "Node | jumlah primary | jumlah replica | primary shard IDs | replica shard IDs",
+                   *(f"{node} | {len(units['primary_shards'])} | {len(units['replica_shards'])} | {units['primary_shards']} | {units['replica_shards']}"
+                     for node, units in sorted(shard_nodes.items())),
+                   "Satu node boleh menyimpan semua event melalui gabungan primary dan replica; setiap shard hanya memuat sebagian data.")
         rows = ["Node | primary events | stored copies"]
         rows.extend(f"{node} | {placement['primary_events_per_node'].get(node, 0)} | {count}"
                     for node, count in sorted(placement["copies_per_node"].items()))
