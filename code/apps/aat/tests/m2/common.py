@@ -27,7 +27,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]  # code/apps/aat
 INFRA = ROOT.parents[1] / "infrastructure"
 NAMESPACE = "sistem-informasi-kebencanaan-bnpb"
-SERVICE_PORTS = {"aggregator": 8083, "client": 8080, "auth": 8084}
+SERVICE_PORTS = {"aggregator": 8083, "client": 8080, "auth": 8084, "nats": 4222}
 # Client and Auth are also NodePorts; using them avoids pushing load tests
 # through a single kubectl tunnel. The Aggregator is cluster-internal.
 NODE_PORTS = {"client": 30080, "auth": 30084}
@@ -370,12 +370,17 @@ class Run:
     def finish(self, exit_code):
         self.forwards.close()
         self.report["finished_at"] = utc()
-        self.report["status"] = "automated_checks_passed_manual_evidence_pending" if exit_code == 0 else self.report.get("status", "failed")
+        incomplete = any(check["status"] == "skipped" for check in self.report["automated_checks"].values())
+        self.report["status"] = (("automated_checks_incomplete" if incomplete else
+                                  "automated_checks_passed_manual_evidence_pending")
+                                 if exit_code == 0 else self.report.get("status", "failed"))
         self.save("result.json", self.report)
         output("RESULT", "Stage summary", *(f"{check['status'].upper()}: {name}"
                                             for name, check in self.report["automated_checks"].items()))
-        if exit_code == 0:
+        if exit_code == 0 and not incomplete:
             output("PASS", f"All automated P{self.problem} checks passed")
+        elif exit_code == 0:
+            output("INFO", f"P{self.problem} incomplete: one or more automated checks were skipped")
         if getattr(self, "save_evidence", True):
             output("INFO", "Evidence", str(self.folder))
         else:
