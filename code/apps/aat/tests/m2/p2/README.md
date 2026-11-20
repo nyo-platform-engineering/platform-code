@@ -23,38 +23,45 @@ Edit `CONFIG` at the top of `test-problem-2.py`:
 | `groups` | `(1, 2, 3)`; choose `(1,)` for coordination/failover first |
 | `url` | `None`: auto-select VM control-node InternalIP on port 30088, or `http://127.0.0.1:30088` on k3d. Set an explicit Traefik origin to override. |
 | `source` | `BMKG`, whose owner is killed/frozen |
-| `worker` | `aat-worker-1`, only for VM clock/freeze tests |
+| `worker` | `None`: automatically choose a Ready lab worker without mocks/coordinator, for VM clock/freeze tests |
 | `observation_seconds` | 30 seconds of polling observations; at least three mock event intervals |
 | `takeover_seconds` | 60-second maximum from fault request to observed successful successor poll |
 | `freeze_seconds` | 30 seconds; must exceed the 20-second DB session idle timeout |
 | `event_intervals` | BMKG/PVMBG 10 seconds; must match running mock configuration |
 | `load_vus`, `load_seconds` | Full `TestConfig()` defaults: **10,000 VUs, 120 seconds per measured run** |
-| `scaling_seconds` | `None` uses `load_seconds`; set a longer window for scaling and rolling while keeping throughput samples short |
+| `scaling_seconds` | `None` uses `load_seconds`; set a longer scaling window while keeping throughput samples short |
 | `warmup_seconds` | Warmup before each run; full default 10 seconds |
-| `rolling_image` | Set a different immutable `repository@sha256:...` image, available on all target nodes |
+| `rolling_image` | `None`: select a different published GitOps pin from local Git history; or specify an immutable `repository@sha256:...` |
+| `rolling_seconds`, `rolling_rps` | 360 seconds at 30 aggregate offered requests/second, with the same 10,000 VUs |
 
-The checked-in `CONFIG` is a short development run: **100 VUs, 60 seconds for
-scaling, two 20-second throughput samples, and 3 seconds of warmup per run**.
-That is about **109 seconds of generator traffic**, plus readiness waits, Audit
-exports, and polling observations. An optional rolling update adds 60 seconds
-plus warmup. Scale transitions must still finish while traffic is running, with
-five seconds of traffic after each transition. If pods start too slowly, increase
-`scaling_seconds`; its waits are bounded by the remaining measurement window.
+The checked-in `CONFIG = TestConfig()` runs **all three groups and all eight
+criteria**. Scaling uses **10,000 VUs for 120 measured seconds**, followed by two
+120-second throughput samples at one and three replicas. The mandatory version
+rollout uses the same 10,000 VUs for 360 measured seconds, paced at 30 aggregate
+RPS so the zero-failed-request criterion can be tested below the unchanged
+admission limit. Every VU must send a measured request; sleeping unused VUs do not
+qualify. Each run has a 10-second warmup. Generator traffic takes about **12 minutes
+40 seconds**, plus readiness, image downloads, Audit exports, polling observations,
+and the guided clock/fault actions.
 
-Use `CONFIG = TestConfig()` for the full run: three 120-second measurements plus
-10-second warmup each (6.5 minutes), before an optional fourth run. The PDF's
-sustained scaling test requires **at least 10,000 VUs for 120 seconds**. Short or
-small runs explicitly record `pdf_load_minimum_met: false`; shortening a run does
-not lower the error-rate or **2.0x throughput** requirements. `load_configuration`
-in `result.json` records the selected durations and sustained-load minimum flag.
-10,000 VUs can consume substantial CPU/memory on the generator; active-VU/window
-checks do not by themselves prove the generator is free from CPU/network limits.
-Run the generator outside application pods and retain host resource evidence.
+Scale transitions must finish during measured traffic, with at least five seconds
+after each transition. Increase `scaling_seconds` if pods start too slowly; waits
+are bounded by the remaining measurement window. `rolling_seconds` is separate
+and must allow every VU a paced request plus ten seconds of margin. A different
+actual image is mandatory: missing candidates, unavailable images, failed or
+rejected requests, and unexercised VUs fail the rollout check instead of skipping it.
 
-The same command supports `task up` (VM) and `task up -- --novm` (k3d). Groups 1
-and 3 run on either mode. Both VM clock/freeze checks are **SKIP** on container
-nodes. All k3d results are development observations, not qualifying separate-kernel
-demo evidence. The script never adjusts the shared Docker clock.
+Small/subgroup runs explicitly remain development evidence. `result.json` records
+all eight check statuses, the sustained-load minimum, and whether all automated
+criteria completed. The error-rate and **2.0x throughput** requirements remain the
+same. 10,000 VUs can consume substantial CPU/memory on the generator; active-VU
+checks do not prove it is free from CPU/network limits. Run k6 outside application
+pods and retain host resource evidence.
+
+The default full suite requires the VM lab for separate-kernel clock/freeze
+checks. On `task up -- --novm` (k3d), explicitly select groups without Group 2 for
+development only; a full configuration fails preflight rather than silently
+skipping those criteria. The script never adjusts the shared Docker clock.
 
 The VM clock test is guided: the operator disables synchronization, applies +45 s,
 then -30 s relative to the original clock, and restores synchronization in the
@@ -63,9 +70,10 @@ with a bounded measurement RTT. Keep source mocks and coordinator off that worke
 Save the actual clock/Tester Agent commands separately. This is a worker-clock
 scenario, not a test of skewing the database authority itself.
 
-The freeze test requires the selected source's current owner to be on the selected
-non-control-plane worker. Choose `source`/`worker` accordingly before running.
-Enter suspends the known local Vagrant/libvirt worker and resumes it in `finally`.
+Before each clock/freeze check, the runner prepares the actual source owner on the safe worker
+by restarting owner pods until an observed successor there has a newer epoch.
+Preparation is bounded and recorded separately from the measured freeze. Enter
+suspends the known local Vagrant/libvirt worker and resumes it in `finally`.
 There is no disk erasure. Non-Vagrant/native environments need the external
 official procedure rather than pretending Docker pause is an equivalent demo.
 
@@ -88,8 +96,8 @@ configuration differences. A capped ratio measures configured admission capacity
 not maximum uncapped throughput; retain this distinction in the report. Controlled
 rejections are allowed by P2.6, but this does not guarantee that a cap-derived
 ratio will be accepted as P2.7 capacity evidence. P2.8 still requires zero 429s;
-run its workload below the available admission capacity, without changing the cap
-between replica counts to manufacture a ratio.
+the separate paced workload stays below the aggregate admission capacity without
+changing the cap. Its measured offered RPS and number of exercised VUs are saved.
 Both comparison runs advertise `Accept-Encoding: gzip` and validate the decoded
 JSON; response bodies are not discarded. Keep the same compression negotiation
 when comparing results so network bandwidth does not change between samples.
@@ -113,10 +121,14 @@ auto-sync policy and annotation, then removes its route. The throughput comparis
 records actual running image IDs and a pod-template hash before/after each sample;
 an image/configuration change invalidates the comparison instead of reporting a ratio.
 Other cluster changes should not be made concurrently. HPA must be disabled for
-these manual-replica tests. Local image pull policy `Never` requires pre-importing
-the candidate rolling image into **all nodes**; a missing/unavailable image must
-fail rather than being counted as a successful rollout. A same-image restart
-does not satisfy P2.8; without a candidate that criterion is SKIP.
+these manual-replica tests. Preflight selects a different published digest and
+preloads it onto **all Ready nodes**, including when the Deployment uses pull
+policy `Never`. Temporary preload pods run only `sleep`, so they cannot become
+extra pollers. They are removed after preloading or failure. Missing image history
+or unavailable images fail preflight; set `rolling_image` explicitly if needed.
+A same-image restart does not satisfy P2.8. The original Deployment template and
+replica count are restored after the run. Mock polling stays live throughout P2;
+do not run the P1 polling-freeze task at the same time.
 
 Evidence is written to `tests/m2/p2/evidence/m2-p2-<timestamp>-<id>/` (ignored by Git):
 
@@ -130,6 +142,12 @@ Evidence is written to `tests/m2/p2/evidence/m2-p2-<timestamp>-<id>/` (ignored b
 - `scale-transitions.json`: requested and Ready times for each replica transition, including failed runs.
 - `kubectl-errors.jsonl`: bounded/redacted stderr when a Kubernetes command fails.
 - `progress.jsonl`: timestamped phases, wait durations, budgets and last observed state.
+
+Each k6 run prints an indented `[RESULT]` block with measured successful/total
+RPS, request counts, controlled rejections, unexpected error rate and exercised
+VUs. These exclude warmup and also print before validation when a k6 summary is
+available for a failed run. The throughput comparison prints both successful RPS
+values, the ratio and the >=2.0x verdict; rollout prints its zero-failure result.
 
 While an automated stage or cleanup is waiting, `[WAIT]` appears every five
 seconds. It names the current operation: owner takeover, Ready replicas, Audit
@@ -176,7 +194,9 @@ Clock/freeze observations cannot prove linearizability or force a pause at every
 storage commit boundary. A delayed success log can also arrive after an earlier
 commit; inspect such a failure against storage/Tester Agent traces. Retain the
 fencing integration tests and official fault evidence. `full_demo_certified`
-always remains false; skipped criteria and development-sized runs are explicit.
+always remains false: official fault/storage proof, generator capacity evidence,
+and the report still require review. `automated_criteria_complete` becomes true
+only when all eight checks pass at the required load size on VM nodes.
 
 On Ctrl+C the runner terminates k6/log streams, resumes a worker it suspended,
 restores deployment/GitOps settings, and removes its route. During a manual clock

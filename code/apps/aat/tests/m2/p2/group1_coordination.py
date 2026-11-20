@@ -18,6 +18,8 @@ def topology(run):
         run.status(f"load-balancer probe {_ + 1}/60")
         page = run.request("/internal/hazards", params={"limit": 1})
         require(isinstance(page.get("items"), list), "invalid routed response")
+        # This probes routing; keep it below the unchanged read admission limit.
+        time.sleep(0.1)
     run.wait(lambda: len([uid for uid, count in run.logs.traffic.items() if count > before.get(uid, 0)]) >= 3,
              timeout=15, description="requests observed on three Aggregator backends")
     return {"pods": [{"name": p["metadata"]["name"], "uid": p["metadata"]["uid"], "node": p["spec"]["nodeName"]} for p in pods],

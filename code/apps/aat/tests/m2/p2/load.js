@@ -7,11 +7,16 @@ import { Counter, Rate, Trend } from 'k6/metrics';
 const vus = Number(__ENV.P2_VUS);
 const seconds = Number(__ENV.P2_SECONDS);
 const warmup = Number(__ENV.P2_WARMUP);
+const targetRPS = Number(__ENV.P2_TARGET_RPS || 0);
+if (!Number.isFinite(targetRPS) || targetRPS < 0 || (targetRPS > 0 && seconds < vus / targetRPS + 10)) {
+  throw new Error('Paced window must exercise every VU, with 10s margin');
+}
 if (![vus, seconds, warmup].every(Number.isInteger) || vus < 1 || seconds < 15 || warmup < 1) {
   throw new Error('Invalid P2 load configuration');
 }
 const requests = new Counter('p2_requests');
 const successes = new Counter('p2_successes');
+const exercised = new Counter('p2_vus_exercised');
 const rejected = new Counter('p2_controlled_rejections');
 const failures = new Counter('p2_failures');
 const errorRate = new Rate('p2_error_rate_excluding_controlled');
@@ -20,6 +25,7 @@ const active = new Trend('p2_active_vus');
 const statuses = new Counter('p2_http_status');
 const cacheResults = new Counter('p2_cache_results');
 const thresholds = { p2_error_rate_excluding_controlled: ['rate<0.01'], p2_successes: ['count>0'] };
+if (targetRPS > 0) thresholds.p2_vus_exercised = [`count>=${vus}`];
 for (const status of [0, 200, 429, 500, 502, 503, 504]) {
   thresholds[`p2_http_status{status:${status}}`] = ['count>=0'];
 }
@@ -38,8 +44,34 @@ export const options = {
   thresholds,
 };
 let announced = false;
+let measuredOnce = false;
+let pacedIteration = 0;
 export default function () {
-  const elapsed = (Date.now() - exec.scenario.startTime) / 1000 - warmup;
+  const elapsedNow = () => (Date.now() - exec.scenario.startTime) / 1000 - warmup;
+  let elapsed = elapsedNow();
+  if (targetRPS > 0) {
+    // VU 1 warms the query; other VUs wait for evenly staggered measured slots.
+    // All 10,000 remain allocated, and every VU must issue a measured request.
+    const offset = (exec.vu.idInTest - 1) / targetRPS;
+    if (elapsed < 0 && __VU !== 1) {
+      sleep(-elapsed + offset);
+      elapsed = elapsedNow();
+    }
+    if (elapsed >= 0) {
+      if (!announced && __VU === 1) {
+        console.log('P2_MEASUREMENT_START');
+        announced = true;
+      }
+      const slot = offset + pacedIteration * vus / targetRPS;
+      pacedIteration++;
+      if (slot >= seconds) {
+        sleep(Math.max(0.01, seconds - elapsed + 0.05));
+        return;
+      }
+      if (slot > elapsed) sleep(slot - elapsed);
+      elapsed = elapsedNow();
+    }
+  }
   const measuring = elapsed >= 0 && elapsed < seconds;
   if (measuring && !announced && __VU === 1) {
     console.log('P2_MEASUREMENT_START');
@@ -57,6 +89,7 @@ export default function () {
   const controlled = response.status === 429 && Number.isFinite(retryAfter) && retryAfter >= 1;
   if (!measuring) {
     if (controlled) sleep(Math.min(retryAfter, 5));
+    else if (targetRPS > 0) sleep(0.1);
     return;
   }
   let valid = false;
@@ -68,6 +101,7 @@ export default function () {
   } catch (_) { /* Invalid responses count as failures. */ }
   const tags = { window: String(window) };
   requests.add(1, tags);
+  if (!measuredOnce) { exercised.add(1); measuredOnce = true; }
   statuses.add(1, {status: String(response.status)});
   cacheResults.add(1, {result: controlled ? 'limited' : (response.headers['X-Hazard-Cache'] || 'uncached')});
   successes.add(valid ? 1 : 0, tags);

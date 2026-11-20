@@ -46,7 +46,8 @@ def records():
 
 def summary():
     metrics = {name: {"values": {"count": count}} for name, count in (
-        ("p2_requests", 30), ("p2_successes", 30), ("p2_failures", 0), ("p2_controlled_rejections", 0))}
+        ("p2_requests", 30), ("p2_successes", 30), ("p2_failures", 0), ("p2_controlled_rejections", 0),
+        ("p2_vus_exercised", 2))}
     for window in range(3):
         metrics[f"p2_requests{{window:{window}}}"] = {"values": {"count": 10}}
         metrics[f"p2_successes{{window:{window}}}"] = {"values": {"count": 10}}
@@ -76,6 +77,35 @@ class HelperCompatibilityTests(unittest.TestCase):
         settings["c"] = "40\n20\n"
         with self.assertRaisesRegex(ValueError, "different read rate limits"):
             run.deployment_state()
+
+    def test_previous_version_excludes_current_runtime_digest(self):
+        current, old = "a" * 64, "b" * 64
+        responses = [SimpleNamespace(returncode=0, stdout="latest\nprevious\n"),
+                     SimpleNamespace(stdout=f"  repository: example/aggregator\n  digest: sha256:{current}\n"),
+                     SimpleNamespace(stdout=f"  repository: example/aggregator\n  digest: sha256:{old}\n")]
+        with patch.object(p2_helper.subprocess, "run", side_effect=responses):
+            self.assertEqual(p2_helper.previous_rolling_image("local:current", {"sha256:" + current}),
+                             "example/aggregator@sha256:" + old)
+        with patch.object(p2_helper.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="")):
+            with self.assertRaisesRegex(ValueError, "no different published image"):
+                p2_helper.previous_rolling_image("local:current")
+
+    def test_image_preload_cleans_up_after_failed_pull(self):
+        run = object.__new__(p2_helper.Run)
+        run.run_id = "test"
+        run.config = SimpleNamespace(rolling_image="example/aggregator@sha256:" + "b" * 64)
+        run.cleanup = []
+        calls = []
+        run.kube = lambda *args, **kwargs: calls.append((args, kwargs))
+        run.wait = lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("pull failed"))
+        with self.assertRaisesRegex(ValueError, "pull failed"):
+            run.preload_rolling_image(["worker"], {"spec": {"template": {"spec": {}}}})
+        manifest = calls[0][1]["body"]
+        pod = manifest["spec"]["template"]["spec"]
+        self.assertEqual(pod["containers"][0]["command"], ["/bin/sh", "-c", "sleep 3600"])
+        self.assertFalse(pod["automountServiceAccountToken"])
+        self.assertEqual(calls[-1][0][:2], ("delete", "daemonset"))
+        self.assertEqual(run.cleanup, [])
 
     def test_wait_timeout_keeps_the_condition_name(self):
         run = object.__new__(p2_helper.Run)
@@ -230,11 +260,10 @@ class GatewayPreflightTests(unittest.TestCase):
                     self.run.wait_for_route()
 
     def test_k3d_does_not_run_vm_clock_or_suspend_actions(self):
-        skipped = []
-        run = SimpleNamespace(container_nodes=True, skip=lambda *args: skipped.append(args),
+        run = SimpleNamespace(container_nodes=True,
                               stage=lambda *args: self.fail("must not change the shared container clock"))
-        runner.group2_clock_freeze.run_group(run)
-        self.assertEqual([name for name, _ in skipped], ["P2.4-clock-skew", "P2.5-freeze-resume"])
+        with self.assertRaisesRegex(ValueError, "separate-kernel VM"):
+            runner.group2_clock_freeze.run_group(run)
 
 
 class PollingEvidenceTests(unittest.TestCase):
@@ -405,6 +434,13 @@ console.log(JSON.stringify(observations));
         with self.assertRaisesRegex(ValueError, "failed or rejected"):
             group3_load.validate_summary(data, 2, 15, strict=True)
 
+    def test_rolling_requires_every_vu_to_send_a_request(self):
+        group3_load.validate_summary(summary(), 2, 15, strict=True)
+        data = summary()
+        data["metrics"]["p2_vus_exercised"]["values"]["count"] = 1
+        with self.assertRaisesRegex(ValueError, "exercise every VU"):
+            group3_load.validate_summary(data, 2, 15, strict=True)
+
     def test_error_denominator_excludes_rejections(self):
         data = summary()
         data["metrics"]["p2_requests"]["values"]["count"] = 1030
@@ -413,6 +449,37 @@ console.log(JSON.stringify(observations));
         data["metrics"]["p2_controlled_rejections"]["values"]["count"] = 1000
         with self.assertRaisesRegex(ValueError, ">=1%"):
             group3_load.validate_summary(data, 2, 15)
+
+
+class WorkerOwnerPreparationTests(unittest.TestCase):
+    def test_restart_waits_for_real_new_epoch_on_target_worker(self):
+        current = {"pod": "old", "pod_uid": "uid-old", "node": "control", "log": {"poll_epoch": "2"}}
+        target = {"pod": "target", "pod_uid": "uid-new", "node": "worker", "log": {"poll_epoch": "3"}}
+        writes, calls = {}, []
+        run = SimpleNamespace(config=SimpleNamespace(source="BMKG", worker="worker", recovery_seconds=180, takeover_seconds=60),
+                              owner=lambda source: current, status=lambda text: None,
+                              kube=lambda *args, **kwargs: calls.append(args),
+                              save=lambda name, value: writes.update({name: value}),
+                              replicas=lambda count, **kwargs: calls.append(("replicas", count)))
+        logs = []
+        run.logs = SimpleNamespace(snapshot=lambda: logs)
+        def wait(operation, **kwargs):
+            nonlocal current
+            base = {"observed": p2_helper.time.monotonic()+1, "pod_uid": "uid-new", "initial": False,
+                    "log": {"msg": "poll succeeded", "source": "BMKG", "epoch": 2}}
+            logs.append(base)
+            self.assertFalse(operation(), "old epochs must not qualify")
+            logs[0] = dict(base, log=dict(base["log"], epoch=3), initial=True)
+            self.assertFalse(operation(), "historical startup logs must not qualify")
+            logs[0]["initial"] = False
+            self.assertTrue(operation())
+            current = target
+        run.wait = wait
+        owner, moves = runner.group2_clock_freeze.prepare_owner(run)
+        self.assertEqual(owner, target)
+        self.assertEqual(moves, [{"deleted_owner": "old", "old_epoch": 2}])
+        self.assertEqual(calls[0][:3], ("delete", "pod", "old"))
+        self.assertIn(("replicas", 3), calls)
 
 
 class AuditAndCleanupTests(unittest.TestCase):
@@ -459,6 +526,15 @@ class AuditAndCleanupTests(unittest.TestCase):
             config = runner.TestConfig()
             config.url = "http://token:secret@localhost"
             with self.assertRaisesRegex(ValueError, "without credentials"):
+                runner.validate_config(config)
+
+    def test_checked_in_config_runs_all_groups_at_pdf_load_size(self):
+        self.assertEqual(runner.CONFIG.groups, (1, 2, 3))
+        self.assertGreaterEqual(runner.CONFIG.load_vus, 10_000)
+        self.assertGreaterEqual(runner.CONFIG.load_seconds, 120)
+        with patch.object(sys.stdin, "isatty", return_value=True):
+            config = runner.TestConfig(rolling_seconds=120)
+            with self.assertRaisesRegex(ValueError, "every VU"):
                 runner.validate_config(config)
 
     def test_short_throughput_can_use_a_separate_scaling_window(self):

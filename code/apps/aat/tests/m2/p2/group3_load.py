@@ -25,6 +25,21 @@ def failure_message(summary, code):
             f"failed thresholds: {', '.join(failed[:8]) or 'see generator log'}")
 
 
+def print_load_result(name, summary, vus, seconds):
+    total = metric(summary, "p2_requests")
+    good = metric(summary, "p2_successes")
+    rejected = metric(summary, "p2_controlled_rejections")
+    errors = metric(summary, "p2_failures")
+    denominator = total - rejected
+    error_rate = f"{100 * errors / denominator:.2f}%" if denominator > 0 else "unavailable"
+    output("RESULT", f"{name} — measured traffic\n"
+           f"    Configured VUs: {vus:,}; duration: {seconds}s (warmup excluded)\n"
+           f"    Successful RPS: {good / seconds:.2f}; total request RPS: {total / seconds:.2f}\n"
+           f"    Requests: {total:,.0f}; successful: {good:,.0f}; controlled 429s: {rejected:,.0f}\n"
+           f"    Unexpected failures: {errors:,.0f}/{denominator:,.0f} ({error_rate}); required: <1%\n"
+           f"    VUs with a measured request: {metric(summary, 'p2_vus_exercised'):,.0f}")
+
+
 def validate_summary(summary, vus, seconds, strict=False):
     total = metric(summary, "p2_requests")
     good = metric(summary, "p2_successes")
@@ -34,6 +49,7 @@ def validate_summary(summary, vus, seconds, strict=False):
     require(total > rejected and errors / (total - rejected) < 0.01, "unexpected error rate is >=1%")
     if strict:
         require(errors == 0 and rejected == 0, "rolling update had a failed or rejected request")
+        require(metric(summary, "p2_vus_exercised") >= vus, "rolling load did not exercise every VU")
     for window in range((seconds + 4) // 5):
         require(metric(summary, f"p2_requests{{window:{window}}}") > 0, "load did not span every measurement window")
         require(metric(summary, f"p2_successes{{window:{window}}}") > 0, "no successful traffic in a measurement window")
@@ -49,12 +65,12 @@ def validate_summary(summary, vus, seconds, strict=False):
             "latency": summary.get("metrics", {}).get("p2_latency_ms", {}).get("values", {})}
 
 
-def load(run, name, action=None, strict=False, seconds=None):
+def load(run, name, action=None, strict=False, seconds=None, target_rps=0):
     config = run.config
     seconds = config.load_seconds if seconds is None else seconds
     summary_path = run.folder / (name + "-k6.json")
     env = dict(os.environ, P2_VUS=str(config.load_vus), P2_SECONDS=str(seconds),
-               P2_WARMUP=str(config.warmup_seconds), P2_LIMIT=str(config.load_limit), P2_URL=config.url.rstrip("/"),
+               P2_WARMUP=str(config.warmup_seconds), P2_TARGET_RPS=str(target_rps), P2_LIMIT=str(config.load_limit), P2_URL=config.url.rstrip("/"),
                P2_HOST=run.host, P2_TOKEN=run.credentials["AGGREGATOR_TOKEN"], P2_RUN_ID=run.run_id,
                P2_SUMMARY=str(summary_path), K6_NO_USAGE_REPORT="true")
     # Keep credentials in the child environment; never in argv, logs or evidence.
@@ -90,10 +106,15 @@ def load(run, name, action=None, strict=False, seconds=None):
                 actions = action(measurement, process) if action else None
                 code = process.wait(timeout=seconds + 60)
             summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
+            if summary:
+                print_load_result(name, summary, config.load_vus, seconds)
             require(code == 0, failure_message(summary, code))
             require(summary_path.is_file(), "k6 summary missing")
             result = validate_summary(summary, config.load_vus, seconds, strict)
             result["actions"] = actions
+            result["target_offered_rps"] = target_rps or None
+            result["vus_exercised"] = metric(summary, "p2_vus_exercised")
+            result["offered_requests_per_second"] = result["requests"] / seconds
             time.sleep(2)
             run.save(name + "-load-result.json", result)
             require(not run.logs.errors, "log collection interrupted during load: " + "; ".join(run.logs.errors[:3]))
@@ -172,6 +193,11 @@ def throughput(run):
                   if (expected.get("read_admission") or {}).get("rps_per_replica", 0) > 0 else "no configured read RPS cap",
                   "workload": "same VUs, duration, route, query, gzip negotiation and resource limits; successful JSON responses only"}
     run.save("throughput-comparison.json", comparison)
+    output("RESULT", "P2.7 — throughput comparison\n"
+           f"    1 replica: {results[1]['successes_per_second']:.2f} successful RPS\n"
+           f"    3 replicas: {results[3]['successes_per_second']:.2f} successful RPS\n"
+           f"    Ratio: {ratio:.2f}x; required: >=2.00x; {'PASS' if ratio >= 2 else 'FAIL'}\n"
+           f"    Scope: {comparison['capacity_interpretation']}")
     require(ratio >= 2, f"3-replica throughput is {ratio:.2f}x baseline, below 2.0x "
             f"(1 replica: {results[1]['successes_per_second']:.2f} successful RPS; "
             f"3 replicas: {results[3]['successes_per_second']:.2f} successful RPS)")
@@ -179,7 +205,7 @@ def throughput(run):
 
 
 def rolling(run):
-    seconds = run.config.scaling_seconds or run.config.load_seconds
+    seconds = run.config.rolling_seconds
     image = run.config.rolling_image
     require(re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}", image or ""), "rolling_image must be an immutable digest reference")
     run.replicas(3)
@@ -191,14 +217,18 @@ def rolling(run):
             time.sleep(0.2)
         run.kube("set", "image", "deployment/aggregator", "-n", NAMESPACE, "aggregator=" + image, json_output=False)
         remaining = seconds - (time.monotonic() - start) - 5
-        require(remaining > 0, "load window ended before rollout; increase scaling_seconds")
+        require(remaining > 0, "load window ended before rollout; increase rolling_seconds")
         run.replicas(3, timeout=remaining)
         new_ids = {s["imageID"] for p in run.pods() if p["metadata"].get("labels", {}).get("role") == "aggregator"
                    and not p["metadata"].get("deletionTimestamp") for s in p.get("status", {}).get("containerStatuses", [])}
         require(new_ids and not (new_ids & old_ids), "rolling update did not change the actual running image")
-        require(time.monotonic() - start < seconds - 5, "rollout finished after measurement; increase scaling_seconds")
+        require(time.monotonic() - start < seconds - 5, "rollout finished after measurement; increase rolling_seconds")
         return {"old_image_ids": sorted(old_ids), "new_image_ids": sorted(new_ids), "image": image}
-    return load(run, "rolling-update", action, strict=True, seconds=seconds)
+    result = load(run, "rolling-update", action, strict=True, seconds=seconds, target_rps=run.config.rolling_rps)
+    output("RESULT", "P2.8 — version rollout\n"
+           f"    Different running image verified; {result['failures']:,.0f} failures, "
+           f"{result['controlled_rejections']:,.0f} rejections; required: both zero")
+    return result
 
 
 def run_group(run):
@@ -207,17 +237,16 @@ def run_group(run):
     run.report["load_configuration"] = {
         "vus": config.load_vus, "scaling_seconds": scaling_seconds,
         "throughput_seconds_each": config.load_seconds, "warmup_seconds_each": config.warmup_seconds,
+        "rolling_seconds": config.rolling_seconds, "rolling_target_offered_rps": config.rolling_rps,
         "pdf_sustained_load_minimum_met": config.load_vus >= 10_000 and scaling_seconds >= 120,
     }
     message = f"Group 3: {config.load_vus} VUs; scaling {scaling_seconds}s; throughput 2 x {config.load_seconds}s; warmup {config.warmup_seconds}s per run."
-    if config.rolling_image:
-        message += f" Optional image rollout adds {scaling_seconds}s plus warmup."
+    message += (f" Mandatory image rollout: {config.rolling_seconds}s at {config.rolling_rps} offered RPS, "
+                "same VU count; all VUs must send a measured request.")
     if not run.report["load_configuration"]["pdf_sustained_load_minimum_met"]:
         message += " Development run: does not meet the PDF sustained-load minimum (10,000 VUs, 120s)."
     run.prompt(message + " It changes replicas and may change the image. Continue only on an isolated test cluster.")
     run.stage("P2.6-scaling-load", lambda: scaling(run))
     run.stage("P2.7-throughput-ratio", lambda: throughput(run))
-    if run.config.rolling_image:
-        run.stage("P2.8-rolling-update", lambda: rolling(run))
-    else:
-        run.skip("P2.8-rolling-update", "set CONFIG.rolling_image to a different available immutable image digest")
+    require(run.config.rolling_image, "rolling-update image must be resolved during preflight")
+    run.stage("P2.8-rolling-update", lambda: rolling(run))
