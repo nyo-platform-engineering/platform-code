@@ -8,6 +8,9 @@ cd code/infrastructure
 task m2:p2
 ```
 
+At startup, the script lists older P2 evidence folders and asks whether to delete
+them. Enter keeps them; `y` or `yes` deletes them before creating the new run.
+
 Requires Python 3.9+, kubectl, a Ready three-node AAT cluster, Traefik's Gateway,
 Argo CD Applications `platform`, `dev-apps`, `aat-aggregator-dev`, `traefik`, and k6 for
 Group 3. Tokens come from `.env.runtime` or environment overrides. The separate
