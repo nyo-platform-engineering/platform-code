@@ -10,8 +10,8 @@ plugins:
 grafana.ini:
   feature_toggles:
     enable: externalServiceAccounts
-  auth.managed_service_accounts:
-    enabled: true
+  auth:
+    managed_service_accounts_enabled: true
 # Provider credentials and app/tool settings are stored in Grafana secure UI
 # settings on its PVC, so restarts do not overwrite operator configuration.
 adminUser: admin
