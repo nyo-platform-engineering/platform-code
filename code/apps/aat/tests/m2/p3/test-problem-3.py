@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Guided P3 tests; edit CONFIG below."""
 from __future__ import annotations
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
+import datetime as dt
 import math
 from pathlib import Path
 import sys
+import uuid
 
 import group1_schema
 import group2_recovery
 import group3_reports
 from support import INFRA, Run, output, require
+from common import console_log
 
 
 @dataclass
@@ -51,29 +55,35 @@ def main():
     if len(sys.argv) != 1:
         print("No command-line options. Edit CONFIG in test-problem-3.py.", file=sys.stderr)
         return 2
-    run, code = None, 1
-    try:
-        require(sys.stdin.isatty(), "run task m2:p3 in an interactive terminal")
-        config = replace(CONFIG)
-        validate_config(config)
-        run = Run(config)
-        run.stage("preflight", run.preflight)
-        for number, group in ((1, group1_schema), (2, group2_recovery), (3, group3_reports)):
-            if number in config.groups:
-                group.run_group(run)
-        code = 0
-    except (Exception, KeyboardInterrupt) as error:
-        message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
-        output("FAIL", run.clean(message) if run else message)
-        if run:
-            run.report["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
-            run.report["error"] = run.clean(message)
-    finally:
-        if run:
-            code = run.finish(code)
-            output("INFO", f"Evidence: {run.folder}")
-            output("MANUAL", "Automated scenarios do not replace official Tester Agent, durability explanation, report and demo.")
-    return code
+    with ExitStack() as console:
+        run, code = None, 1
+        try:
+            require(sys.stdin.isatty(), "run task m2:p3 in an interactive terminal")
+            config = replace(CONFIG)
+            validate_config(config)
+            stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
+            name = f"m2-p3-{stamp}-{uuid.uuid4().hex[:8]}"
+            folder = Path(config.output_dir or Path(__file__).resolve().parent / "evidence" / name).resolve()
+            folder.mkdir(parents=True, exist_ok=False)
+            console.enter_context(console_log(folder))
+            run = Run(config, folder)
+            run.stage("preflight", run.preflight)
+            for number, group in ((1, group1_schema), (2, group2_recovery), (3, group3_reports)):
+                if number in config.groups:
+                    group.run_group(run)
+            code = 0
+        except (Exception, KeyboardInterrupt) as error:
+            message = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+            output("FAIL", run.clean(message) if run else message)
+            if run:
+                run.report["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+                run.report["error"] = run.clean(message)
+        finally:
+            if run:
+                code = run.finish(code)
+                output("INFO", f"Evidence: {run.folder}")
+                output("MANUAL", "Automated scenarios do not replace official Tester Agent, durability explanation, report and demo.")
+        return code
 
 
 if __name__ == "__main__":

@@ -43,7 +43,8 @@ route. The test verifies that application/user tokens do not work as Audit token
 
 ## Evidence and limits
 
-Each run writes `tests/m2/p3/evidence/m2-p3-*/result.json` (ignored by Git), bounded HTTP metadata,
+Each run writes evidence under `tests/m2/p3/evidence/m2-p3-*/` (ignored by Git):
+`result.json`, `console.log` (terminal messages, stderr, progress, Enter prompts and cleanup/summary), bounded HTTP metadata,
 original poison/schema inbox details, retry/ordering observations, and accepted
 receipts before receiver deletion. SQL is used for independent canonical/result
 counts; credentials are read inside the database pod and never put in argv or
