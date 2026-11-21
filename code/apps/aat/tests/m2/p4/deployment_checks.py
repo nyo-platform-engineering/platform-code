@@ -26,7 +26,8 @@ def preflight(run):
                     "allowed_lateness_minutes": config.get("SATELLITE_ALLOWED_LATENESS_MINUTES"),
                     "official_reference_verified": False}
         require(evidence["ready_replicas"] > 0, "no ready Aggregator replicas")
-        code, capability, _ = run.call("aggregator", "/internal/satellite/capabilities", expected=(200, 404))
+        code, capability, _ = run.call("aggregator", "/internal/satellite/capabilities",
+                                       token=run.env["AGGREGATOR_TOKEN"], expected=(200, 404))
         require(code == 200 and capability.get("controlled_verification_version") == 1,
                 "deploy this PR's Aggregator image before P4; no deployment changes were made")
         require(not capability.get("verification_schema"), "restore the active controlled P4 run first")
