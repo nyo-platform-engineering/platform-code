@@ -62,6 +62,13 @@ class TestConfig:
     burst_observation_timeout: float = 900
     burst_sample_seconds: float = 5
 
+    # Waits have no time limit: each one logs what it is waiting for (and the current
+    # value, e.g. the committed offset) every wait_log_seconds until it is done or you
+    # press Ctrl+C, which still restores the deployment. The 60 s recovery limit of
+    # criterion 4 is a requirement, not a wait, and stays.
+    wait_timeouts: bool = False
+    wait_log_seconds: float = 15
+
     # Per-request bound.
     request_timeout: float = 15
 

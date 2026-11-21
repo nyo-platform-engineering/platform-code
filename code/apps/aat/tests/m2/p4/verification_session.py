@@ -71,7 +71,11 @@ class Verification:
             return (deploy.get("status", {}).get("observedGeneration", 0) >= deploy["metadata"]["generation"]
                     and deploy.get("status", {}).get("updatedReplicas", 0) == count
                     and len(pods) == count and all(ready(p) for p in pods))
-        self.run.wait("Aggregator rollout and old-pod termination", settled, self.run.config.resume_timeout)
+        def progress():
+            pods = self.pods()
+            return (f"{sum(1 for p in pods if ready(p))}/{len(pods)} Aggregator pods ready; "
+                    + ", ".join(f"{p['metadata']['name']}={p.get('status', {}).get('phase')}" for p in pods))
+        self.run.wait("Aggregator rollout and old-pod termination", settled, self.run.config.resume_timeout, status=progress)
         self.run.forwards.close("aggregator")
         self.run.forwards.urls.pop("aggregator", None)
 
@@ -142,7 +146,17 @@ class Verification:
                                  "apply", "-f", "-"], input=json.dumps({"apiVersion": "v1", "kind": "List", "items": objects}),
                                 text=True, capture_output=True, timeout=60)
         require(result.returncode == 0, "could not create controlled SSE source")
-        self.run.cluster.kubectl("rollout", "status", "deployment/" + self.name, "--timeout=180s", timeout=190)
+        def feed_ready():
+            dep = self.run.cluster.kubectl("get", "deployment", self.name, "-o", "json", json_output=True)
+            return dep.get("status", {}).get("readyReplicas", 0) >= 1
+
+        def feed_status():
+            pods = self.run.cluster.kubectl("get", "pods", "-l", "p4-fixture=" + self.name, "-o", "json", json_output=True)["items"]
+            return "; ".join(f"{p['metadata']['name']}: {p.get('status', {}).get('phase')} "
+                             + ",".join((c.get('state', {}).get('waiting') or {}).get('reason', '')
+                                        for c in p.get('status', {}).get('containerStatuses', []))
+                             for p in pods) or "no fixture pod yet"
+        self.run.wait("controlled SSE feed pod ready", feed_ready, 180, status=feed_status)
         SERVICE_PORTS[self.name] = 9000
 
     def feed(self, path, body=None):

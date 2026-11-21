@@ -346,16 +346,41 @@ class Run:
         self.secrets.update({pair["access_token"], pair.get("refresh_token") or ""})
         return pair["access_token"]
 
-    def wait(self, description, check, timeout):
-        """Poll check() until it returns something truthy; transient errors are retried."""
-        deadline, last = time.monotonic() + timeout, None
-        while time.monotonic() < deadline:
+    def wait(self, description, check, timeout, status=None):
+        """Poll check() until it returns something truthy; transient errors are retried.
+
+        Every CONFIG.wait_log_seconds (default 15) it logs what it is still waiting for,
+        with status() when given (e.g. the current offset) or the last error. With
+        CONFIG.wait_timeouts False the timeout is ignored: it waits until check() passes
+        or Ctrl+C (which still runs every restore step)."""
+        unlimited = not getattr(self.config, "wait_timeouts", True)
+        every = getattr(self.config, "wait_log_seconds", 15)
+        started = time.monotonic()
+        deadline, next_log, last = started + timeout, started + every, None
+        while unlimited or time.monotonic() < deadline:
             try:
                 result = check()
+                if not result:
+                    last = None
             except (RuntimeError, ValueError) as error:
                 result, last = None, str(error)
+            now = time.monotonic()
             if result:
+                if now - started >= every:
+                    output("INFO", f"Done waiting for {description}", f"after {now - started:.0f}s")
                 return result
+            if now >= next_log:
+                detail = None
+                if status is not None:
+                    try:
+                        detail = status()
+                    except Exception as error:  # status is only for the log line
+                        detail = f"status unavailable: {type(error).__name__}"
+                limit = "no time limit; Ctrl+C stops and restores" if unlimited else f"limit {timeout:.0f}s"
+                output("WAIT", f"Still waiting for {description}", f"{now - started:.0f}s elapsed ({limit})",
+                       *([self.clean(str(detail))] if detail else []),
+                       f"last error: {self.clean(last)}" if last else "not ready yet")
+                next_log = now + every
             time.sleep(1)
         raise ValueError("timed out waiting for " + description + (f" (last error: {self.clean(last)})" if last else ""))
 

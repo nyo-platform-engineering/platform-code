@@ -11,12 +11,18 @@ import consumer_stats
 
 
 def wait_offset(run, target):
+    seen = {}
+
     def committed():
         body = run.aggregator("/internal/satellite/stats")
-        offset = body["feed"].get("offset")
+        feed = body["feed"]
+        offset = feed.get("offset")
+        seen.update(offset=offset, lag=feed.get("lag_events"), rejected=feed.get("rejected_events"))
         require(offset is None or offset <= target, "consumer advanced past the finite fixture cutoff")
         return body if offset == target else None
-    return run.wait(f"deployed consumer offset {target}", committed, run.config.resume_timeout)
+    return run.wait(f"deployed consumer offset {target}", committed, run.config.resume_timeout,
+                    status=lambda: f"committed offset {seen.get('offset')} of {target}; "
+                                   f"lag {seen.get('lag')}; rejected {seen.get('rejected')}")
 
 
 def verify_cases(run, session):
@@ -202,7 +208,11 @@ def verify_crash(run, session):
                         "owner did not exit through the abrupt verification checkpoint")
                 return True
         return False
-    run.wait("killed Aggregator container restart", restarted, run.config.resume_timeout)
+    def restart_status():
+        p = run.cluster.kubectl("get", "pod", pod, "-o", "json", json_output=True)
+        c = next((c for c in p.get("status", {}).get("containerStatuses", []) if c.get("name") == "aggregator"), {})
+        return f"pod {pod}: ready={c.get('ready')}, restarts={c.get('restartCount')}, state={list((c.get('state') or {}).keys())}"
+    run.wait("killed Aggregator container restart", restarted, run.config.resume_timeout, status=restart_status)
     run.forwards.close("aggregator"); run.forwards.urls.pop("aggregator", None)
     session.feed("/admin/resume-all", {"count": run.p4_total})
     wait_offset(run, run.p4_total - 1)
@@ -221,7 +231,8 @@ def verify_crash(run, session):
             return None
         require(source["last_from"] == run.p4_total - 1, "SSE reconnect did not resume from the committed offset")
         return source
-    replay = run.wait("actual SSE reconnect at committed offset", reconnected, run.config.resume_timeout)
+    replay = run.wait("actual SSE reconnect at committed offset", reconnected, run.config.resume_timeout,
+                      status=lambda: "feed connections {stream_connections}, last from {last_from}".format(**session.feed("/v1/session")))
     time.sleep(2)
     require(session.snapshot() == recovered, "inclusive reconnect/replay changed committed business state")
     result = {"origin": "running_deployment", "hard_crash_before_commit": True,
