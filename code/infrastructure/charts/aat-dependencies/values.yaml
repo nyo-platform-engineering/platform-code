@@ -20,6 +20,13 @@ services:
   nats:
     image: nats:2.11-alpine
     port: 4222
+    metrics:
+      enabled: true
+      image: natsio/prometheus-nats-exporter:0.20.3
+      port: 7777
+      resources:
+        requests: {cpu: 5m, memory: 16Mi}
+        limits: {memory: 64Mi}
     uid: 10001
     size: 1Gi
     mountPath: /data

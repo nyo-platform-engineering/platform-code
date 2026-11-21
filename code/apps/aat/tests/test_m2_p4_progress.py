@@ -31,7 +31,7 @@ class FeedProgressTests(unittest.TestCase):
             reporters, lines, clock = [], [], [0.0]
             run = SimpleNamespace(folder=Path(folder),
                                   config=SimpleNamespace(catch_up_timeout=300, max_lag_events=500,
-                                                         lag_observe_seconds=30, request_timeout=15),
+                                                         lag_observe_seconds=30, request_timeout=15, observe_seconds=180),
                                   clean=lambda value: value.replace("private-token", "[REDACTED]"),
                                   aggregator=Mock(side_effect=samples), cluster=Mock())
 
@@ -42,7 +42,7 @@ class FeedProgressTests(unittest.TestCase):
                 return progress
 
             def wait(description, check, timeout):
-                self.assertIn(timeout, (65, 300))
+                self.assertIn(timeout, (65, 215, 300))
                 for _ in samples:
                     try:
                         result = check()
@@ -146,6 +146,14 @@ class FeedProgressTests(unittest.TestCase):
             self.assertEqual(stages, ["live-feed-consumed", "feed-backlog-observation",
                                       "no-rejected-feed-events", "consumer-stats"])
             self.assertTrue(any(kind == "WARN" for kind, _ in lines))
+
+    def test_live_observation_runs_for_several_minutes_with_progress(self):
+        samples = [snapshot(1000 + i * 20, 0) for i in range(20)]
+        with self.run_samples(samples) as (run, lines):
+            result = feed.live_feed(run)
+            self.assertGreaterEqual(result["seconds"], 180)
+            self.assertGreater(result["offset_after"], result["offset_before"])
+            self.assertIn("observe live satellite feed for 180s", " ".join(text for _, text in lines))
 
     def test_first_offset_reports_missing_offset_and_accepts_zero(self):
         with self.run_samples([snapshot(offset=None, lag=None), snapshot(offset=0)]) as (run, lines):

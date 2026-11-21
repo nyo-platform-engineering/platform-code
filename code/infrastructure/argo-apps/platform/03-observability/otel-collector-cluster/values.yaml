@@ -43,11 +43,29 @@ alternateConfig:
           static_configs:
           - targets:
             - kube-state-metrics:8080
+    prometheus/nats_jetstream:
+      config:
+        scrape_configs:
+        - job_name: nats-jetstream
+          scrape_interval: 5s
+          scrape_timeout: 4s
+          static_configs:
+          - targets:
+            - nats.sistem-informasi-kebencanaan-bnpb.svc.cluster.local:7777
+          metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: jetstream_consumer_num_pending
+            action: keep
   processors:
     memory_limiter:
       check_interval: 1s
       limit_mib: 192
       spike_limit_mib: 32
+    # Keep only consumer backlog, including removal of scrape-generated metrics.
+    filter/nats_jetstream:
+      error_mode: propagate
+      metric_conditions:
+      - 'metric.name != "jetstream_consumer_num_pending"'
     batch:
       timeout: 5s
       send_batch_size: 128
@@ -69,6 +87,15 @@ alternateConfig:
         - prometheus
         processors:
         - memory_limiter
+        - batch
+        exporters:
+        - prometheus_remote_write
+      metrics/nats_jetstream:
+        receivers:
+        - prometheus/nats_jetstream
+        processors:
+        - memory_limiter
+        - filter/nats_jetstream
         - batch
         exporters:
         - prometheus_remote_write

@@ -96,7 +96,7 @@ def run_group(run):
            f"Detections inside fires: {result['detections_in_fires']}")
     run.stage("excluded-detections-counted", counted, run)
     if run.config.compare_audit_checksum:
-        input("Enter → compare the Audit API checksum with the stored events: ")
-        run.stage("audit-checksum", audit, run)
+        input("Enter → check internal Audit/store consistency (not the assistants reference): ")
+        run.stage("internal-audit-consistency", audit, run)
     else:
         run.skip("audit-checksum", "CONFIG.compare_audit_checksum is False")

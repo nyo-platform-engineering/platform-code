@@ -97,6 +97,7 @@ func (ctrl *Controller) SatelliteStatsHandler(c *gin.Context) {
 	}
 	c.JSON(200, struct {
 		SatelliteStats
-		Feed SatelliteFeedStatus `json:"feed"`
-	}{stats, feed})
+		Feed               SatelliteFeedStatus `json:"feed"`
+		VerificationSchema string              `json:"verification_schema,omitempty"`
+	}{stats, feed, ctrl.SatelliteVerificationSchema})
 }

@@ -170,8 +170,16 @@ func (c satelliteConsumer) follow(ctx context.Context) (progressed bool, err err
 		if err != nil {
 			return err
 		}
+		committedAt := time.Now()
+		latencies := make([]float64, 0, len(pending))
+		for _, event := range pending {
+			if event.Type != "heartbeat" {
+				latencies = append(latencies, float64(committedAt.Sub(event.ReceivedAt).Microseconds())/1000)
+			}
+		}
 		oldest := pending[0].ReceivedAt
 		slog.Info("satellite batch committed",
+			"verification_schema", c.ctrl.SatelliteVerificationSchema,
 			"correlation_id", correlationID,
 			"offset", result.Offset,
 			"events", len(pending),
@@ -181,7 +189,8 @@ func (c satelliteConsumer) follow(ctx context.Context) (progressed bool, err err
 			"changed", len(result.Changed),
 			"commit_ms", time.Since(started).Milliseconds(),
 			// Arrival of the oldest event in the batch to commit: the worst ingest latency in it.
-			"ingest_latency_ms", time.Since(oldest).Milliseconds(),
+			"ingest_latency_ms", committedAt.Sub(oldest).Milliseconds(),
+			"ingest_latency_samples_ms", latencies,
 		)
 		pending = pending[:0]
 		progressed = true

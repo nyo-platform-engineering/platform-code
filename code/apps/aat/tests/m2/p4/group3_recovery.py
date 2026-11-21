@@ -48,7 +48,8 @@ def restart(run):
     stats = run.aggregator("/internal/satellite/stats")
     require(stats["feed"]["rejected_events"] == 0, "events were rejected after the restart")
     return {"offset_before_kill": before, "offset_after_resume": after, "fires_before": len(refs_before),
-            "fires_after": len(refs), "duplicates": 0, "lost": 0}
+            "fires_after": len(refs), "duplicate_source_refs": 0, "missing_preexisting_refs": 0,
+            "same_prefix_crash_equivalence_verified": False}
 
 
 def run_group(run):
@@ -58,4 +59,5 @@ def run_group(run):
     input("Enter → delete every Aggregator pod mid-stream and verify the exact resume: ")
     result = run.stage("resume-after-killing-all-aggregators", restart, run)
     output("RESULT", "Resume", f"Offset {result['offset_before_kill']} → {result['offset_after_resume']}",
-           f"Fires {result['fires_before']} → {result['fires_after']}; none lost or duplicated")
+           f"Fires {result['fires_before']} → {result['fires_after']}; no missing preexisting refs or duplicate refs",
+           "Restart/resume smoke test; exact equivalence at the same input offset remains unverified.")

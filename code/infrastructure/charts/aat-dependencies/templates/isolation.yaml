@@ -46,3 +46,15 @@ spec:
       ports:
         - protocol: TCP
           port: 4222
+    # Collector may scrape the exporter only; NATS monitoring stays pod-local.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+              app.kubernetes.io/instance: otel-collector-cluster
+      ports:
+        - protocol: TCP
+          port: 7777

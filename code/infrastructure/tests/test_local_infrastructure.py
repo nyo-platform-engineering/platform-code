@@ -255,7 +255,7 @@ class WorkloadTests(unittest.TestCase):
         collector = values("03-observability/otel-collector-cluster")["alternateConfig"]
         self.assertEqual(collector["exporters"]["otlp_http/loki"]["endpoint"], "http://loki:3100/otlp")
         self.assertEqual(collector["exporters"]["otlp_http/tempo"]["endpoint"], "http://tempo:4318")
-        self.assertEqual(set(collector["service"]["pipelines"]), {"logs", "metrics", "traces"})
+        self.assertEqual(set(collector["service"]["pipelines"]), {"logs", "metrics", "metrics/nats_jetstream", "traces"})
         daemon = values("03-observability/otel-collector-daemon")["alternateConfig"]
         self.assertEqual(daemon["exporters"]["otlp_http"]["endpoint"], "http://otel-collector-cluster:4318")
         self.assertNotIn("clickhouse", yaml.safe_dump([collector, daemon]).lower())
@@ -272,6 +272,27 @@ class WorkloadTests(unittest.TestCase):
         pod = next(d for d in self.monitoring if d["kind"] == "Deployment")["spec"]["template"]
         self.assertEqual(pod["metadata"]["labels"]["role"], "store")
         self.assertEqual(pod["spec"]["containers"][0]["resources"], {"requests": {"cpu": "5m", "memory": "61Mi"}, "limits": {"memory": "1Gi"}})
+
+    def test_jetstream_scrape_keeps_only_pending_in_its_own_pipeline(self):
+        values = yaml.safe_load((ROOT / "argo-apps/platform/03-observability/otel-collector-cluster/values.yaml").read_text())
+        config = values["alternateConfig"]
+        receiver = config["receivers"]["prometheus/nats_jetstream"]
+        job = receiver["config"]["scrape_configs"][0]
+        self.assertEqual(job["metric_relabel_configs"], [{"source_labels": ["__name__"],
+                         "regex": "jetstream_consumer_num_pending", "action": "keep"}])
+        self.assertEqual(config["processors"]["filter/nats_jetstream"]["metric_conditions"],
+                         ['metric.name != "jetstream_consumer_num_pending"'])
+        pipelines = config["service"]["pipelines"]
+        self.assertEqual(pipelines["metrics/nats_jetstream"]["receivers"], ["prometheus/nats_jetstream"])
+        self.assertNotIn("filter/nats_jetstream", pipelines["metrics"]["processors"])
+        nats = next(d for d in self.dependencies if d["kind"] == "StatefulSet" and d["metadata"]["name"] == "nats")
+        exporter = next(c for c in nats["spec"]["template"]["spec"]["containers"] if c["name"] == "prometheus-exporter")
+        self.assertIn("http://127.0.0.1:8222", exporter["args"])
+        service = next(d for d in self.dependencies if d["kind"] == "Service" and d["metadata"]["name"] == "nats")
+        self.assertEqual({p["port"] for p in service["spec"]["ports"]}, {4222, 7777})
+        policy = next(d for d in self.dependencies if d["kind"] == "NetworkPolicy" and d["metadata"]["name"] == "nats-publishers-consumers-only")
+        scrape = next(rule for rule in policy["spec"]["ingress"] if rule["ports"] == [{"protocol": "TCP", "port": 7777}])
+        self.assertEqual(scrape["from"][0]["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"], "monitoring")
 
     def test_no_gitlab_vps_or_policy_blocks_in_local_render(self):
         documents = self.dependencies + self.monitoring + sum(self.services.values(), [])

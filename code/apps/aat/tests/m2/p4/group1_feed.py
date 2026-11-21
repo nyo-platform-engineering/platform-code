@@ -1,7 +1,4 @@
-"""Group 1 — the live feed: criterion 7 (live processing), backlog observation,
-plus format compatibility (no event rejected). It also records the consumer's
-statistics from the Aggregator logs (group 4's burst forecast uses them; group 3
-deletes the pods and their logs)."""
+"""Live-feed processing, bounded backlog observation, and consumer log evidence."""
 import time
 
 from common import output, require
@@ -61,13 +58,18 @@ def first_offset(run):
 
 def live_feed(run):
     first = first_offset(run)
-    time.sleep(run.config.observe_seconds)
-    second = stats(run)
+    started = time.monotonic()
+    second = wait_for_feed(run, "live-feed-consumed",
+                           f"observe live satellite feed for {run.config.observe_seconds:g}s",
+                           lambda _: time.monotonic() - started >= run.config.observe_seconds,
+                           timeout=run.config.observe_seconds + 2 * run.config.request_timeout + 5)
+    elapsed = time.monotonic() - started
     before, after = first["feed"]["offset"], second["feed"]["offset"]
-    require(after > before, f"feed offset did not advance in {run.config.observe_seconds:.0f}s ({before} -> {after})")
-    run.live_events_per_second = (after - before) / run.config.observe_seconds
-    return {"offset_before": before, "offset_after": after, "seconds": run.config.observe_seconds,
-            "events_per_second": round((after - before) / run.config.observe_seconds, 1)}
+    require(after is not None and after > before,
+            f"feed offset did not advance in {elapsed:.0f}s ({before} -> {after})")
+    run.live_events_per_second = (after - before) / elapsed
+    return {"offset_before": before, "offset_after": after, "seconds": round(elapsed, 1),
+            "events_per_second": round(run.live_events_per_second, 1)}
 
 
 def observe_backlog(run):

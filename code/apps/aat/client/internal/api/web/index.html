@@ -172,6 +172,21 @@
               </div>
             </section>
           </div>
+          <section class="panel satellite-panel" aria-labelledby="satellite-title">
+            <div class="panel-heading"><div><h2 id="satellite-title">Feed satelit</h2>
+              <p>Ketertinggalan pemrosesan saat feed berjalan dan selama lonjakan</p></div></div>
+            <p id="satellite-state" role="status">Menunggu status consumer…</p>
+            <dl class="satellite-metrics">
+              <div><dt>Event belum diproses</dt><dd id="satellite-lag">—</dd></div>
+              <div><dt>Offset tersimpan</dt><dd id="satellite-offset">—</dd></div>
+              <div><dt>Offset feed</dt><dd id="satellite-latest">—</dd></div>
+              <div><dt>Deteksi melewati batas terlambat</dt><dd id="satellite-late">—</dd></div>
+              <div><dt>Event ditolak karena format</dt><dd id="satellite-rejected">—</dd></div>
+            </dl>
+            <div id="satellite-history" aria-label="Riwayat ketertinggalan feed satelit"></div>
+            <p class="chart-note" id="satellite-history-caption">Riwayat lag akan muncul setelah status tersedia.</p>
+            <p class="chart-note" id="satellite-updated">Status diperbarui tiap 5 detik. Keterlambatan dihitung berdasarkan waktu deteksi.</p>
+          </section>
           <div class="detail-grid">
             <section class="panel area-panel" aria-labelledby="area-title">
               <div class="panel-heading">

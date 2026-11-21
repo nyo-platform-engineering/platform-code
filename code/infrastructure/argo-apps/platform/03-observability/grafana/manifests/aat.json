@@ -1,6 +1,6 @@
 {
   "uid": "aat-local",
-  "title": "AAT — layanan dan runtime lokal",
+  "title": "AAT \u2014 layanan dan runtime lokal",
   "schemaVersion": 40,
   "version": 1,
   "timezone": "browser",
@@ -196,7 +196,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Buka **Explore → Tempo** untuk trace OTLP. Aplikasi harus diinstrumentasi dan meneruskan trace context. Mengatur OTEL_* saja tidak menginstrumentasi binary Go lama. Log ber-correlation ID dapat ditelusuri melalui Loki."
+        "content": "Buka **Explore \u2192 Tempo** untuk trace OTLP. Aplikasi harus diinstrumentasi dan meneruskan trace context. Mengatur OTEL_* saja tidak menginstrumentasi binary Go lama. Log ber-correlation ID dapat ditelusuri melalui Loki."
       }
     },
     {
@@ -230,9 +230,9 @@
     },
     {
       "id": 10,
-      "title": "P4 Feed Satelit: p95 latensi data masuk sampai HazardEvent tersimpan",
+      "title": "P4 ingest latency \u2014 p95 of batch maxima (estimate)",
       "type": "timeseries",
-      "description": "Dari tibanya event tertua dalam batch sampai commit; batas atas latensi per event.",
+      "description": "This historical log metric is p95 across batch maxima, not per-event p95. Use per-event ingest_latency_samples_ms and the P4 evidence report for event p95.",
       "gridPos": {
         "x": 12,
         "y": 32,

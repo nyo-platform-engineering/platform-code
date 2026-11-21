@@ -23,12 +23,30 @@ func NewHandlerWithAudit(ctrl *controller.Controller, token, auditToken string) 
 	private := mux.Group("", httpkit.Auth("Authorization", "Bearer "+token))
 
 	mux.GET("/health", ctrl.Health)
+	private.Use(func(c *gin.Context) {
+		if ctrl.SatelliteVerificationSchema != "" && c.Request.Method != http.MethodGet && c.Request.URL.Path != "/internal/satellite/verification/crash" {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "controlled P4 verification in progress"})
+			return
+		}
+		c.Next()
+	})
 	reads := limitClassedReads(ctrl.ReadConcurrency, ctrl.ReadPriorityConcurrency)
 	rate := limitReadRate(ctrl.ReadRPSLimit, ctrl.ReadRPSBurst)
 	private.GET("/internal/hazards", rate, limitReads(128), ctrl.CachedHazards, reads, ctrl.Hazards)
 	private.GET("/internal/analytics", rate, reads, ctrl.Analytics)
 	private.GET("/internal/source-status", ctrl.SourceStatus)
 	private.GET("/internal/satellite/stats", ctrl.SatelliteStatsHandler)
+	private.POST("/internal/satellite/verification/crash", func(c *gin.Context) {
+		if ctrl.SatelliteVerificationSchema == "" || ctrl.VerificationCrash == nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		ctrl.VerificationCrash() // Abrupt exit; never run in live mode.
+		c.Status(http.StatusAccepted)
+	})
+	private.GET("/internal/satellite/capabilities", func(c *gin.Context) {
+		c.JSON(200, gin.H{"controlled_verification_version": 1, "verification_schema": ctrl.SatelliteVerificationSchema, "database_role": ctrl.DatabaseRole})
+	})
 	private.GET("/internal/sensor/status", ctrl.SensorStatusHandler)
 	private.POST("/internal/ingest/bmkg", ctrl.Ingest("BMKG"))
 	private.POST("/internal/ingest/pvmbg", ctrl.Ingest("PVMBG"))

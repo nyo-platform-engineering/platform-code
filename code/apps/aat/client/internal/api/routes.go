@@ -129,6 +129,8 @@ func Handler(config Config) (http.Handler, error) {
 		}
 		c.JSON(200, gin.H{"items": items, "next_after": page.Next, "next_cursor": page.Cursor, "sources": statuses, "partial": page.Partial, "unavailable_units": units})
 	})
+	// Same analyst authorization as Ops; only the fixed satellite stats path is exposed.
+	router.GET("/satellite/stats", u.ops)
 	router.GET("/ops/unprocessed", u.ops)
 	router.POST("/field-reports", u.fieldReports)
 	router.GET("/ops/field-reports/:report_id", u.ops)

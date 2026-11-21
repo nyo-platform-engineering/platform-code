@@ -437,3 +437,13 @@ scripts/                  status, links, password, tester, dan operasi VM
 scripts/up/               main.sh, langkah startup, kredensial, dan gateway
 tests/                    pemeriksaan konfigurasi dan bootstrap
 ```
+
+NATS JetStream consumer backlog is scraped by the cluster OTel Collector from a
+pod-local NATS Prometheus exporter (`0.20.3`). The dedicated NATS pipeline keeps
+only `jetstream_consumer_num_pending` (messages not yet delivered to each consumer),
+including removal of scrape-generated metrics; the existing application/node/Kubernetes
+metrics pipeline is unaffected. Preserve `stream_name` and `consumer_name` when
+querying Mimir. `num_ack_pending` (delivered but unacknowledged) is a different
+metric and is intentionally not collected by this allowlist. Queue backlog is
+separate from satellite SSE offset lag. Only the monitoring collector can reach
+exporter port 7777 through NetworkPolicy; monitoring port 8222 is not a Service port.
