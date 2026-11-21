@@ -26,7 +26,8 @@ from helper import nats_request, sql
 
 LABEL = "aat-gameday"
 WORKERS = ("aat-worker-1", "aat-worker-2")  # never the control plane
-CRITICAL_CONSUMERS = ("FIELD_NOTIFIER_CRITICAL",)
+# JetStream durable name, not the FIELD_NOTIFIER_CRITICAL receipt-bucket prefix.
+CRITICAL_CONSUMERS = ("field-notifier-critical",)
 
 
 # ---------------------------------------------------------------- faults
@@ -323,12 +324,14 @@ def health(run, config):
                        "WHERE published_at IS NULL AND lane IN ('critical','critical_only');")
     checks["critical_outbox_drained"] = pending == [0]
     address = urllib.parse.urlsplit(run.url("nats"))
+    consumers = {}
     for consumer in CRITICAL_CONSUMERS:
         info = nats_request((address.hostname, address.port),
                             f"$JS.API.CONSUMER.INFO.HAZARDS_STREAM.{consumer}", {})
-        checks[f"{consumer.lower()}_drained"] = ("error" not in info and info.get("num_pending", 1) == 0
-                                                 and info.get("num_ack_pending", 1) == 0)
-    return all(checks.values()), {"checks": checks, "stale_sources": stale}
+        consumers[consumer] = {key: info.get(key) for key in ("num_pending", "num_ack_pending", "error")}
+        checks[f"{consumer.replace('-', '_')}_drained"] = ("error" not in info and info.get("num_pending", 1) == 0
+                                                        and info.get("num_ack_pending", 1) == 0)
+    return all(checks.values()), {"checks": checks, "stale_sources": stale, "critical_consumers": consumers}
 
 
 def wait_healthy(run, config, timeout, label):
@@ -345,7 +348,10 @@ def wait_healthy(run, config, timeout, label):
                 run.forwards.urls.pop(service, None)
         if ok:
             return round(time.monotonic() - started, 1), last
-        output("WAIT", label, ", ".join(k for k, v in (last.get("checks") or {}).items() if not v) or last.get("error", ""))
+        detail = ", ".join(k for k, v in (last.get("checks") or {}).items() if not v) or last.get("error", "")
+        if last.get("critical_consumers"):
+            detail += "; critical consumers=" + json.dumps(last["critical_consumers"], sort_keys=True)
+        output("WAIT", label, detail)
         time.sleep(config.health_interval)
     return None, last
 
