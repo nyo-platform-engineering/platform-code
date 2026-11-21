@@ -8,11 +8,15 @@ batch at a time, a batch is flushed at batch_size events or every 0.5 s, and a b
 of n events takes fixed + per_event * n seconds, scaled so that full batches run at
 the measured capacity.
 
-Scenarios: the burst runs at CONFIG.burst_factor x the live peak rate, and at
-CONFIG.spike_factor times that again (a satellite pass concentrated in a short
-time; the worst case), for each of CONFIG.burst_seconds. "Current" means lag back
-to <= CONFIG.max_lag_events. The verdict is the realistic case: burst_factor x live
-peak for CONFIG.verdict_burst_seconds must be current within 60 s.
+Scenarios, each for every CONFIG.burst_seconds:
+- realistic: CONFIG.burst_factor x the live *average* rate. A feed sped up 60x
+  delivers 60x the volume, so the average sets the sustained rate;
+- worst case: CONFIG.burst_factor x the busiest CONFIG.peak_window_seconds of the
+  live feed. In practice that minute holds a satellite pass (~900 events in ~10 s),
+  so this assumes passes back to back for the whole burst.
+"Current" means lag back to <= CONFIG.max_lag_events. The verdict is the realistic
+case for CONFIG.verdict_burst_seconds: current again within 60 s. Capacity is the
+median catch-up rate measured in group 1 (p10/p90 are printed alongside).
 """
 import bisect
 
@@ -100,29 +104,34 @@ def forecast(run):
     normal, peak = stats["live_average_events_per_second"], stats["live_peak"]
 
     scenarios, table = [], []
-    for label, rate in ((f"{config.burst_factor:.0f}x live peak", config.burst_factor * peak),
-                        (f"{config.burst_factor * config.spike_factor:.0f}x live peak (spike, worst case)",
-                         config.burst_factor * config.spike_factor * peak)):
+    realistic = f"{config.burst_factor:.0f}x live average (realistic)"
+    for label, rate in ((realistic, config.burst_factor * normal),
+                        (f"{config.burst_factor:.0f}x busiest {config.peak_window_seconds:.0f} s (worst case)",
+                         config.burst_factor * peak)):
         for seconds in config.burst_seconds:
             r = simulate(max(normal, 0.01), rate, seconds, batch_time, size, config.max_lag_events)
             ok = r["current_after_seconds"] is not None and r["current_after_seconds"] <= CURRENT_WITHIN
             scenarios.append({"scenario": label, "burst_events_per_second": round(rate, 1), "burst_seconds": seconds,
                               **r, "would_pass": ok})
             current = "> 1 h" if r["current_after_seconds"] is None else f"{r['current_after_seconds']:.0f} s"
-            table.append(f"{'PASS' if ok else 'FAIL'}  {rate:7.0f} ev/s for {seconds:4.0f} s → lag peak "
+            short = "realistic " if label == realistic else "worst case"
+            table.append(f"{'PASS' if ok else 'FAIL'}  {short} {rate:6.0f} ev/s for {seconds:4.0f} s → lag peak "
                          f"{r['lag_peak']:>8,}, current after {current:>6}, p95 feed→stored {r['p95_feed_to_stored_seconds']:.1f} s")
     run.save("burst-simulation.json", {"inputs": stats, "scenarios": scenarios})
 
-    burst = config.burst_factor * peak
+    burst = config.burst_factor * normal
     longest = (CURRENT_WITHIN * (capacity - normal) / (burst - capacity)) if burst > capacity else None
-    output("INFO", f"Burst simulation (capacity {capacity:.0f} ev/s, {stats['capacity_source']}; "
-           f"live {normal:.1f} ev/s, peak {peak:.1f} ev/s)", *table,
+    spread = (f", p10 {stats['capacity_p10_events_per_second']:.0f} / p90 {stats['capacity_p90_events_per_second']:.0f}"
+              if stats.get("capacity_p10_events_per_second") else "")
+    output("INFO", f"Burst simulation (capacity {capacity:.0f} ev/s, {stats['capacity_source']}{spread}; "
+           f"live {normal:.1f} ev/s, busiest {config.peak_window_seconds:.0f} s {peak:.1f} ev/s)", *table,
            "Longest realistic burst that stays within 60 s: "
            + ("any length (capacity above the burst rate)" if longest is None else f"about {longest:.0f} s"))
     verdict = next(s for s in scenarios if s["burst_seconds"] == config.verdict_burst_seconds
-                   and s["burst_events_per_second"] == round(burst, 1))
+                   and s["scenario"] == realistic)
     result = {"capacity_events_per_second": round(capacity, 1), "capacity_source": stats["capacity_source"],
-              "live_peak_events_per_second": round(peak, 2), "burst_events_per_second": round(burst, 1),
+              "live_average_events_per_second": round(normal, 2), "live_peak_events_per_second": round(peak, 2),
+              "burst_events_per_second": round(burst, 1),
               "verdict_burst_seconds": config.verdict_burst_seconds,
               "verdict_current_after_seconds": verdict["current_after_seconds"],
               "verdict_lag_peak": verdict["lag_peak"],

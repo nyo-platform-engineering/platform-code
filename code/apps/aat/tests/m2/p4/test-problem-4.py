@@ -30,20 +30,28 @@ class TestConfig:
     restart_aggregators: bool = True
     resume_timeout: float = 300
 
-    # Consumer statistics (group 1, from the Aggregator logs): a catch-up counts when at
-    # least this many full batches run back to back; the live peak is the busiest window.
-    # satellite_batch_size must match the Aggregator's SATELLITE_BATCH_SIZE (default 200).
-    min_catch_up_batches: int = 10
-    satellite_batch_size: int = 200
+    # Consumer statistics (group 1, from the Aggregator logs, see consumer_stats.py).
+    # The batch and lag lines are read from Loki over the last loki_lookback_hours (they
+    # survive pod restarts and log rotation); use_loki False reads only the current pods'
+    # logs. Time is cut into window_seconds windows: behind = lag >= catch_up_min_lag
+    # (capacity, needs min_catch_up_windows of them); current = lag <= max_lag_events
+    # (live rate, busiest peak_window_seconds). satellite_batch_size must match the
+    # Aggregator's SATELLITE_BATCH_SIZE (default 200).
+    use_loki: bool = True
+    loki_lookback_hours: float = 6
+    window_seconds: float = 10
+    catch_up_min_lag: int = 2000
+    min_catch_up_windows: int = 6
     peak_window_seconds: float = 60
+    satellite_batch_size: int = 200
 
     # Criterion 4 forecast (group 4, run last): simulate a burst of burst_factor x the
-    # live peak (and spike_factor x that, the worst case) for each burst_seconds, with
-    # the measured capacity. The verdict: burst_factor x peak for verdict_burst_seconds
-    # is current (lag <= max_lag_events) within 60 s. A model, not the exam burst.
+    # live average (realistic) and burst_factor x the busiest peak_window_seconds (worst
+    # case: satellite passes back to back) for each burst_seconds, with the measured
+    # capacity. The verdict: the realistic case for verdict_burst_seconds is current
+    # (lag <= max_lag_events) within 60 s. A model, not the exam burst.
     simulate_burst: bool = True
     burst_factor: float = 60
-    spike_factor: float = 2
     burst_seconds: tuple = (60, 120, 300, 600)
     verdict_burst_seconds: float = 120
 
@@ -74,8 +82,9 @@ def validate_config(config):
         require(math.isfinite(value) and value > 0, f"CONFIG.{name} must be finite and positive")
     require(config.max_lag_events >= 0, "CONFIG.max_lag_events must not be negative")
     require(config.satellite_batch_size >= 1, "CONFIG.satellite_batch_size must be positive")
-    require(config.min_catch_up_batches >= 2, "CONFIG.min_catch_up_batches must be at least 2")
-    for name in ("peak_window_seconds", "burst_factor", "spike_factor"):
+    require(config.min_catch_up_windows >= 1, "CONFIG.min_catch_up_windows must be at least 1")
+    require(config.catch_up_min_lag > config.max_lag_events, "CONFIG.catch_up_min_lag must be above max_lag_events")
+    for name in ("peak_window_seconds", "burst_factor", "loki_lookback_hours", "window_seconds"):
         value = getattr(config, name)
         require(math.isfinite(value) and value > 0, f"CONFIG.{name} must be finite and positive")
     require(config.burst_seconds and all(s > 0 for s in config.burst_seconds), "CONFIG.burst_seconds must be positive")
