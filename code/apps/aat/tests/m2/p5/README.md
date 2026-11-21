@@ -49,3 +49,18 @@ menggantinya dengan port-forward yang terikat ke satu Pod. Endpoint pengukuran
 tersimpan di `gameday-endpoint.json`. Penggantian tunnel internal diserialkan agar
 thread Media tidak saling mematikan koneksi tester. Kegagalan request tetap
 dicatat dan tidak dihapus dari hasil SLO.
+
+Jika fault gagal diakhiri, window recovery belum dimulai: run gagal sebagai
+skenario tidak valid, bukan diklaim sebagai layanan gagal pulih selama 150 detik.
+Angka probe tetap disimpan untuk diagnosis, tetapi bukan hasil SLO game day sah.
+
+| Kriteria | Bukti yang tetap diperlukan |
+| --- | --- |
+| 1 | Seluruh 3 critical reading practice punya receipt durable; 0 hilang, p95 ≤5 detik. |
+| 2 | Mapping/akses Ops diperiksa; seluruh pelanggaran kontrak harus dibuktikan terpisah, tidak dianggap lulus hanya karena daftar parked kosong. |
+| 3 | P95 setiap sumber lain saat sensor outage tetap <300 ms. |
+| 4 | Back-off request, jawaban cepat dengan status stale, lalu breaker pulih sendiri. |
+| 5 | Media mendapat 429 terkontrol, request Tim Lapangan tetap terlayani. |
+| 6 | Semua fault diakhiri; setelah `hands-off` runner hanya membaca. Recovery harus terbukti lewat endpoint publik. Rehearsal tidak menggantikan profil ujian/Tester Agent. |
+| 7 | Rekaman dan penjelasan dashboard, metrik, serta trace tetap wajib sebagai evidence manual. |
+| 8 | Laporkan SLO/error budget dari run yang valid. Availability HTTP 99% terpisah dari SLI pengiriman alert; receipt/p95 alert game day tetap harus dilaporkan, bukan digantikan angka HTTP. |

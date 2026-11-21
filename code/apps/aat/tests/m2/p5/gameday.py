@@ -298,6 +298,8 @@ def verdict(scenario, samples, recovered_after, config):
     after = summarize(samples, "recovery")
     budget = slo([s for s in samples if s["phase"] in ("faults", "recovery")], config.field_availability_slo)
     failures = []
+    if not budget["requests"]:
+        failures.append("no Field Team probe requests during faults/recovery; availability was not measured")
     if during["unanswered"] or after["unanswered"]:
         failures.append(f"{during['unanswered'] + after['unanswered']} probe requests got no answer "
                         f"(statuses {sorted(set(during['unanswered_statuses'] + after['unanswered_statuses']))})")
@@ -449,12 +451,27 @@ def play(run, scenario, config):
     finally:
         # The faults end; from here on the test does nothing but observe.
         revert_errors = revert_all(run, active, log)
-        probe.set_phase("recovery")
-        log.append({"at": utc(), "action": "hands-off", "note": "no further actions until the verdict"})
-    recovered_after, last = wait_healthy(run, config, config.recovery_timeout, f"{scenario.name}: recovering on its own")
-    time.sleep(config.after_recovery_seconds)
+        if revert_errors:
+            probe.set_phase("fault_removal_failed")
+            log.append({"at": utc(), "action": "fault-removal-incomplete",
+                        "note": "recovery window did not start; scenario invalid"})
+        else:
+            probe.set_phase("recovery")
+            log.append({"at": utc(), "action": "hands-off", "note": "no further actions until the verdict"})
+    if revert_errors:
+        recovered_after, last = None, {"fault_removal_errors": revert_errors}
+    else:
+        recovered_after, last = wait_healthy(run, config, config.recovery_timeout, f"{scenario.name}: recovering on its own")
+        time.sleep(config.after_recovery_seconds)
     samples = probe.finish()
     result = verdict(scenario, samples, recovered_after, config)
+    result["recovery_window_started"] = not revert_errors
+    result["measurement_valid"] = not inject_error and not revert_errors
+    result["slo"]["valid_for_gameday"] = result["measurement_valid"]
+    if revert_errors:
+        # Do not report a 150s recovery timeout for a window that never started.
+        result["failures"] = [reason for reason in result["failures"]
+                              if not reason.startswith("not fully healthy within ")]
     flood = next((s.fault for s in scenario.steps if isinstance(s.fault, MediaFlood)), None)
     if flood is not None:
         result["media"] = {"requests": len(flood.codes), "shed_429": flood.codes.count(429)}
