@@ -27,7 +27,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]  # code/apps/aat
 INFRA = ROOT.parents[1] / "infrastructure"
 NAMESPACE = "sistem-informasi-kebencanaan-bnpb"
-SERVICE_PORTS = {"aggregator": 8083, "client": 8080, "auth": 8084, "nats": 4222}
+SERVICE_PORTS = {"aggregator": 8083, "client": 8080, "auth": 8084, "nats": 4222, "pvmbg": 8082}
 # Client and Auth are also NodePorts; using them avoids pushing load tests
 # through a single kubectl tunnel. The Aggregator is cluster-internal.
 NODE_PORTS = {"client": 30080, "auth": 30084}

@@ -55,10 +55,10 @@ tasks:
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p4/test-problem-4.py" {{.CLI_ARGS}}'
   m2:p5:
-    desc: Reset Sensor Pantai practice data, verify critical alerts, then test outage and client overload
+    desc: Reset Sensor Pantai practice data, verify critical alerts, test outage and client overload, then a game day rehearsal
     interactive: true
     cmds:
-      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p5/test-problem-5.py"'
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p5/test-problem-5.py" {{.CLI_ARGS}}'
   polling:freeze:
     desc: Temporarily disconnect BMKG/PVMBG upstreams; Enter or Ctrl+C restores them
     interactive: true
