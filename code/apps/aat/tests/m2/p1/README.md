@@ -37,10 +37,10 @@ Error polling/source-status saat jeda adalah efek maintenance yang disengaja.
 
 | No. | Yang dibuktikan | Test case |
 | --- | --- | --- |
-| 1 | Katalog gempa tersebar; tidak ada node menyimpan seluruh dataset. Laporkan jumlah data dan primary per node. | Group 1: `catalog_distribution` |
+| 1 | Data terbagi ke beberapa shard; tidak ada shard memuat seluruh data. Primary tersebar pada lebih dari satu node; laporkan shard primary/replica per node. Node boleh menyimpan replica shard milik node lain. | Group 1: `catalog_distribution` |
 | 2 | Ukur beban tiap node saat impor dan lonjakan gempa satu wilayah; jelaskan ketidakmerataannya. | Group 1: `catalog_distribution`, `uneven_load` |
 | 3 | Baca 50 event terbaru lintas penyimpanan, ikuti pagination, dan pastikan urutannya benar. | Group 1: `global_reads` |
-| 4 | Setelah worker mati dan datanya dihapus, event/checksum tetap terjaga. Selama pemulihan, respons lengkap atau parsial dengan penanda eksplisit; error dan permintaan melewati batas waktu menggagalkan tes. | Group 2: `lose_worker` |
+| 4 | Sebelum worker dimatikan, setiap shard wajib punya replica siap pada node berbeda. Setelah worker mati dan datanya dihapus, event/checksum tetap terjaga. Selama pemulihan, respons lengkap atau parsial dengan penanda eksplisit; error dan permintaan melewati batas waktu menggagalkan tes. | Group 2: `lose_worker` |
 | 5 | Worker berdisk kosong bergabung dan kembali menyimpan data sambil pembacaan serta penulisan terus dipantau. | Group 2: `rejoin_worker` |
 | 6 | Pulihkan replika, matikan worker lain, lalu verifikasi data bertahan dan pulihkan redundansi lagi. | Group 2: `restored_resilience` |
 | 7 | Dashboard analitik menampilkan gempa, tsunami, gunung berapi, kebakaran hutan, dan pesisir: timeline dengan rentang waktu, jumlah per severity, dan jumlah per `area_name`. | Group 3: `dashboard` |
@@ -57,7 +57,15 @@ harus ditunjukkan langsung di peramban, terpisah dari dashboard metrik.
 
 Hasil tersimpan di `code/apps/aat/tests/m2/p1/evidence/m2-p1-*/`: `result.json`,
 output lengkap `console.log`, rekaman HTTP, metrik per node, penempatan data,
-dan checkpoint checksum/analitik.
+dan checkpoint checksum/analitik. `catalog-shards.json` mencatat seluruh shard,
+jumlah baris pada primary, serta ID shard primary/replica per node. Pemeriksaan
+ini membaca metadata Citus dan tabel shard melalui `kubectl exec`/`psql`, lalu
+memastikan kesiapan primary dan replica melalui Patroni (`/primary`, `/replica?lag=0`).
+HTTP 503 dari pemeriksaan Patroni menampilkan status WAIT dan mengulang pembacaan
+role/metadata hingga `CONFIG.shard_ready_timeout` (default 180 detik). Jika belum
+pulih, tahap gagal dengan alasan jelas; HTTP error dari endpoint data tetap gagal.
+`*-pre-loss-shards.json` disimpan sebelum tiap penghapusan worker; `*-rejoin-shards.json`
+mencatat redundansi setelah rebuild. Tidak diperlukan perubahan atau deploy API.
 Sebelum setiap run, pilih apakah folder evidence P1 lama dihapus; **Enter** menyimpannya.
 
 Dataset bawaan adalah **mock pengembangan**, bukan katalog/checksum resmi asisten.
@@ -74,5 +82,9 @@ dengan hasil tidak diketahui tetap gagal/dicatat. Reconnect ikut memakai batas w
 dan tercatat di `http.jsonl` serta `result.json`.
 
 Runner mengantrekan `/internal/hazards` dan `/internal/analytics` agar probe sendiri
-tidak berebut satu slot baca pada konfigurasi lab. Penulisan tetap berjalan bersamaan.
+tidak berebut satu slot baca pada konfigurasi lab. Kedua endpoint juga berbagi jeda
+minimal `CONFIG.read_interval` (default 0,1 detik, maksimal 10 request/detik) agar
+pagination cepat tidak menghabiskan burst batas 20 RPS per pod. Waktu antre dan
+jeda tercakup dalam deadline request serta dicatat di `http.jsonl`. Penulisan dan
+Audit tidak diberi jeda ini; penulisan tetap berjalan bersamaan.
 429 dari server tetap menggagalkan tahap dan penyebabnya dicetak langsung di terminal.

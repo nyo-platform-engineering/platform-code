@@ -107,6 +107,7 @@ class EvidenceAPI:
         # Both endpoints share one read-admission slot in the default lab.
         # Serialize runner reads across foreground checks and background probes.
         self.read_slot = threading.Lock()
+        self.next_read_at = 0.0
 
     def request(self, path, token, params=None, body=None):
         started = time.monotonic()
@@ -123,6 +124,17 @@ class EvidenceAPI:
                 entry["read_queue_seconds"] = time.monotonic() - queued_at
                 if not read_slot_acquired:
                     raise TimeoutError(f"{path}: runner read queue exceeded the request deadline")
+                # Serial requests can still exhaust the server token bucket when
+                # pagination is fast. Pace both endpoints together, including probes.
+                interval = getattr(self.config, "read_interval", 0.1)
+                require(interval > 0, "read_interval must be positive")
+                wait = max(0.0, self.next_read_at - time.monotonic())
+                if wait >= deadline - time.monotonic():
+                    raise TimeoutError(f"{path}: runner read pacing exceeded the request deadline")
+                if wait:
+                    time.sleep(wait)
+                entry["read_pacing_seconds"] = wait
+                self.next_read_at = time.monotonic() + interval
             ensure = getattr(self.config, "ensure_endpoint", None)
             if ensure:
                 entry["tunnel_reconnected"] = ensure(deadline - time.monotonic())

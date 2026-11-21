@@ -52,6 +52,122 @@ def cluster_topology(config):
     }
 
 
+
+class ShardsNotReady(RuntimeError):
+    """A storage member or its routing metadata is still recovering."""
+
+
+def shard_distribution(config, catalog_refs=None):
+    """Wait for healthy cross-node copies, then inspect every canonical shard."""
+    started = time.monotonic()
+    timeout = getattr(config, "shard_ready_timeout", 180)
+    while True:
+        try:
+            # Refresh pods and routing on every attempt: failover can change roles.
+            return _shard_distribution(config, catalog_refs)
+        except ShardsNotReady as error:
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                raise TimeoutError(f"shard readiness did not recover within {timeout}s: {error}") from None
+            output("WAIT", "Kesiapan shard", str(error),
+                   f"Elapsed: {time.monotonic() - started:.0f}s / {timeout}s; belum melanjutkan tahap.")
+            time.sleep(min(getattr(config, "sample_interval", 2), remaining))
+
+
+def _shard_distribution(config, catalog_refs=None):
+    """Inspect all shards once; only readiness failures are safe to poll again."""
+    def ready(condition, message):
+        if not condition:
+            raise ShardsNotReady(message)
+
+    pods = kubectl_json(config, "get", "pods", "-n", NAMESPACE,
+                        "-l", "app.kubernetes.io/name=aat-citus", "-o", "json")["items"]
+
+    def sql(pod, query):
+        # Credentials stay inside the container; SQL and output contain no secrets.
+        command = 'exec psql -X -h /tmp -U "$PATRONI_SUPERUSER_USERNAME" -d "$PATRONI_CITUS_DATABASE" -v ON_ERROR_STOP=1 -At -c "$1"'
+        return json.loads(kubectl(config, "exec", pod, "-c", "postgres", "--",
+                                  "sh", "-ec", command, "p1-shards", query, timeout=30))
+
+    coordinators = [p for p in pods if p["metadata"].get("labels", {}).get("citus-group") == "0"
+                    and p["metadata"]["labels"].get("patroni-role") == "primary" and is_ready(p)]
+    ready(len(coordinators) == 1, "expected one Ready Citus coordinator")
+    shards = sql(coordinators[0]["metadata"]["name"], """
+        SELECT coalesce(json_agg(t ORDER BY shard_id), '[]'::json) FROM (
+          SELECT s.shardid AS shard_id, p.groupid AS group_id, n.nodename AS primary_host
+          FROM pg_dist_shard s JOIN pg_dist_placement p USING (shardid)
+          JOIN pg_dist_node n USING (groupid)
+          WHERE s.logicalrelid = 'hazard_events'::regclass AND n.noderole = 'primary'
+        ) t""")
+    require(len(shards) >= 2, "hazard_events must have multiple shards")
+    require(len({s["shard_id"] for s in shards}) == len(shards), "expected one placement group per shard")
+    groups = {s["group_id"] for s in shards}
+    members = {}
+    # Verify Patroni's live endpoint as well as Kubernetes labels/readiness.
+    health_check = """import urllib.request,urllib.error,sys
+try:
+    with urllib.request.urlopen('http://127.0.0.1:8008/' + sys.argv[1], timeout=5) as response:
+        print(response.status)
+except urllib.error.HTTPError as error:
+    print(error.code)
+except (urllib.error.URLError, TimeoutError):
+    print(0)
+"""
+    for pod in pods:
+        labels = pod["metadata"].get("labels", {})
+        group = int(labels.get("citus-group", "0"))
+        role = labels.get("patroni-role")
+        if group not in groups or role not in ("primary", "replica") or not is_ready(pod):
+            continue
+        path = 'primary' if role == 'primary' else 'replica?lag=0'
+        status = kubectl(config, "exec", pod["metadata"]["name"], "-c", "postgres", "--",
+                         "python3", "-c", health_check, path, timeout=15)
+        status = int(status.strip())
+        member_name = pod["metadata"]["name"]
+        ready(status not in (0, 503), f"{member_name}: Patroni /{path} HTTP {status}; {role} belum siap")
+        require(status == 200, f"{member_name}: unexpected Patroni /{path} HTTP {status}")
+        members.setdefault(group, []).append({"node": pod["spec"]["nodeName"],
+                                              "unit": pod["metadata"]["name"], "role": role})
+    per_node = {p["spec"]["nodeName"]: {"primary_shards": [], "replica_shards": []} for p in pods}
+    for group in sorted(groups):
+        copies = members.get(group, [])
+        primary = [m for m in copies if m["role"] == "primary"]
+        ready(len(primary) == 1, f"group {group}: expected one ready primary")
+        ready(any(m["role"] == "replica" and m["node"] != primary[0]["node"] for m in copies),
+                f"group {group}: no ready replica on a different node")
+        group_shards = [s for s in shards if s["group_id"] == group]
+        ready(all(s["primary_host"].split('.')[0] == primary[0]["unit"] for s in group_shards),
+                f"group {group}: Citus routing disagrees with Patroni primary")
+        # Count actual rows on primary shards; replicas must not inflate the total.
+        catalog_count = ""
+        if catalog_refs is not None:
+            require(bool(catalog_refs), "catalog references must not be empty")
+            references = ",".join("'" + ref.replace("'", "''") + "'" for ref in sorted(catalog_refs))
+            catalog_count = f", count(*) FILTER (WHERE source = 'BMKG' AND source_ref_id IN ({references})) AS catalog_events"
+        selects = [f"SELECT {int(s['shard_id'])}::bigint AS shard_id, count(*) AS events{catalog_count} "
+                   f"FROM public.hazard_events_{int(s['shard_id'])}" for s in group_shards]
+        counts = sql(primary[0]["unit"], "SELECT json_agg(t) FROM (" + " UNION ALL ".join(selects) + ") t")
+        counts = {row["shard_id"]: row for row in counts}
+        for shard in group_shards:
+            shard.update(counts[shard["shard_id"]])
+            shard["locations"] = copies
+            for member in copies:
+                per_node[member["node"]][member["role"] + "_shards"].append(shard["shard_id"])
+    if catalog_refs is not None:
+        catalog_total = sum(s["catalog_events"] for s in shards)
+        require(catalog_total == len(catalog_refs), "shard counts do not cover the catalog")
+        require(all(s["catalog_events"] < catalog_total for s in shards), "one shard holds the whole catalog")
+        catalog_primary_nodes = {m["node"] for s in shards if s["catalog_events"] > 0
+                                 for m in s["locations"] if m["role"] == "primary"}
+        require(len(catalog_primary_nodes) >= 2, "catalog primary writes are concentrated on one node")
+    total = sum(s["events"] for s in shards)
+    require(total > 0 and all(s["events"] < total for s in shards), "one shard holds the whole dataset")
+    require(sum(bool(n["primary_shards"]) for n in per_node.values()) >= 2,
+            "primary shards are concentrated on one node")
+    return {"at": utc(), "scope": "all_hazard_events_shards", "events": total,
+            "shards": shards, "shards_per_node": per_node, "redundancy_checked": True}
+
+
 def cluster_metrics(config):
     node_path = "/apis/metrics.k8s.io/v1beta1/nodes"
     pod_path = f"/apis/metrics.k8s.io/v1beta1/namespaces/{NAMESPACE}/pods"

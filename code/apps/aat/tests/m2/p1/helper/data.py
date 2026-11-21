@@ -317,7 +317,6 @@ def distribution(api, events, redundant=True, poll_interval=2):
             progress("replica placement", checked, total, started)
             last_progress = time.monotonic()
     require(len(primaries) >= 2, "primary writes/data are concentrated on one node")
-    require(all(count < len(events) for count in nodes.values()), "one node holds the whole dataset")
     return {"events": len(events), "copies_per_node": dict(nodes), "primary_events_per_node": dict(primaries),
             "redundancy_checked": redundant, "locations": locations}
 
