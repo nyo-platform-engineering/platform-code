@@ -7,8 +7,13 @@ citus:
   nodes: [aat-control, aat-worker-1, aat-worker-2]
   size: 2Gi
   groups:
+  # The coordinator (group 0) also holds the satellite clustering tables, so the feed's
+  # catch-up/burst speed is its CPU: at 1 CPU it was throttled ~20% of the time while the
+  # Aggregators idled. Lampiran B fixes memory only (CPU is optional), so it gets 2 CPUs
+  # as a ceiling; the request stays 100m, so it fits the 4-vCPU control VM.
   - id: 0
     nodes: [aat-control]
+    cpuLimit: '2'
   - id: 1
     nodes: [aat-control, aat-worker-1]
   - id: 2

@@ -34,7 +34,8 @@ class TestConfig:
     # The batch and lag lines are read from Loki over the last loki_lookback_hours (they
     # survive pod restarts and log rotation); use_loki False reads only the current pods'
     # logs. Time is cut into window_seconds windows: behind = lag >= catch_up_min_lag
-    # (capacity, needs min_catch_up_windows of them); current = lag <= max_lag_events
+    # (capacity of the most recent catch-up: min_catch_up_windows of them, or for a short
+    # one min_catch_up_batches full batches in a row); current = lag <= max_lag_events
     # (live rate, busiest peak_window_seconds). satellite_batch_size must match the
     # Aggregator's SATELLITE_BATCH_SIZE (default 200).
     use_loki: bool = True
@@ -42,6 +43,7 @@ class TestConfig:
     window_seconds: float = 10
     catch_up_min_lag: int = 2000
     min_catch_up_windows: int = 6
+    min_catch_up_batches: int = 10
     peak_window_seconds: float = 60
     satellite_batch_size: int = 200
 
@@ -83,6 +85,7 @@ def validate_config(config):
     require(config.max_lag_events >= 0, "CONFIG.max_lag_events must not be negative")
     require(config.satellite_batch_size >= 1, "CONFIG.satellite_batch_size must be positive")
     require(config.min_catch_up_windows >= 1, "CONFIG.min_catch_up_windows must be at least 1")
+    require(config.min_catch_up_batches >= 2, "CONFIG.min_catch_up_batches must be at least 2")
     require(config.catch_up_min_lag > config.max_lag_events, "CONFIG.catch_up_min_lag must be above max_lag_events")
     for name in ("peak_window_seconds", "burst_factor", "loki_lookback_hours", "window_seconds"):
         value = getattr(config, name)

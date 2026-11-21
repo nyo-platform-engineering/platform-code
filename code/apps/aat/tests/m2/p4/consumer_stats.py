@@ -13,8 +13,11 @@ while behind, full 200-event batches alternate with tiny ones whenever the 0.5 s
 flush fires between them. A window holding a full batch (and the one after it) is
 never current, though: a restart's short catch-up often fits between two samples.
 
-- capacity: events/s in the behind windows (median, with p10 and p90), i.e. the real
-  speed of this cluster with reading and committing included;
+- capacity: the speed of the most recent catch-up (the deployed code may have changed
+  since an older one), reading and committing included: the median events/s of its
+  behind windows (with p10 and p90), or, for a catch-up too short for
+  CONFIG.min_catch_up_windows windows, its back-to-back full batches
+  (CONFIG.min_catch_up_batches or more on one pod);
 - commit cost: commit_ms = fixed + per_event * events (least squares), used when the
   logs hold no catch-up (optimistic: it leaves out reading time);
 - live rate: events/s in the current windows, average and the busiest
@@ -148,6 +151,10 @@ def fit(rows):
     return {"fixed_ms": round(max(0.0, my - per_event * mx), 2), "per_event_ms": round(per_event, 3)}
 
 
+def stamp(seconds):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(seconds))
+
+
 def epoch(row):
     return parse_time(row["time"]).timestamp()
 
@@ -168,6 +175,34 @@ def classify(progress, config):
         elif max(lags) <= config.max_lag_events:
             kinds[index] = "current"
     return kinds
+
+
+def episodes(indexes, gap):
+    """Consecutive behind windows (allowing gap missing ones) form one catch-up episode."""
+    groups = []
+    for i in indexes:
+        if groups and i - groups[-1][-1] <= gap + 1:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    return groups
+
+
+def full_runs(batches, batch_size, min_batches):
+    """Back-to-back full batches on one pod: a short catch-up. With the flush fix a
+    catch-up is all full batches, so this measures one too short for the windows."""
+    runs, current = [], []
+    for b in batches:
+        full = b["events"] >= 0.9 * batch_size
+        if full and current and current[-1]["pod"] == b["pod"]:
+            current.append(b)
+            continue
+        if len(current) >= min_batches:
+            runs.append(current)
+        current = [b] if full else []
+    if len(current) >= min_batches:
+        runs.append(current)
+    return runs
 
 
 def percentile(values, q):
@@ -198,8 +233,29 @@ def measure(run):
     current = sorted(i for i, kind in kinds.items()
                      if kind == "current" and i not in full and i - 1 not in full)
 
-    rates = [events[i] / width for i in behind]
-    capacity = percentile(rates, 0.5) if len(rates) >= config.min_catch_up_windows else None
+    # Capacity comes from the most recent catch-up: the deployed code may have changed
+    # since an older one. A long one is measured in windows (median of their rates); a
+    # short one, too short for windows, from its back-to-back full batches.
+    long_ones = [g for g in episodes(behind, 1) if len(g) >= config.min_catch_up_windows]
+    runs = full_runs(batches, config.satellite_batch_size, config.min_catch_up_batches)
+    episode = long_ones[-1] if long_ones else None
+    latest_run = runs[-1] if runs else None
+    episode_end = (episode[-1] + 1) * width if episode else float("-inf")
+    run_end = epoch(latest_run[-1]) if latest_run else float("-inf")
+    rates, capacity, measured = [], None, None
+    if episode and episode_end >= run_end - width:
+        rates = [events[i] / width for i in episode]
+        capacity = percentile(rates, 0.5)
+        catch_events, catch_seconds = sum(events[i] for i in episode), len(episode) * width
+        measured = ("windows", episode[0] * width, episode_end)
+    elif latest_run:
+        # The first batch's commit started before its log line: count the batches after it.
+        catch_events = sum(b["events"] for b in latest_run[1:])
+        catch_seconds = epoch(latest_run[-1]) - epoch(latest_run[0])
+        capacity = catch_events / catch_seconds if catch_seconds > 0 else None
+        measured = ("full batches", epoch(latest_run[0]), epoch(latest_run[-1]))
+    if capacity is None:
+        catch_events, catch_seconds = 0, 0
     commit = fit(batches)
     estimated = None
     if commit:
@@ -216,10 +272,13 @@ def measure(run):
         group = range(i, i + per_peak)
         if all(j in current_set for j in group):
             peak = max(peak, sum(events[j] for j in group) / (per_peak * width))
+    # Group 1's 15 s live check is only a fallback: right after a catch-up it can still
+    # see the catch-up's tail and would inflate the peak.
     observed = getattr(run, "live_events_per_second", None)
     if not current:
         average = observed or 0.0
-    peak = max(peak, observed or 0.0, average)
+        peak = max(peak, observed or 0.0)
+    peak = max(peak, average)
 
     def latencies(indexes):
         return [b["ingest_latency_ms"] for i in indexes for b in by_window[i] if b["ingest_latency_ms"] is not None]
@@ -229,12 +288,15 @@ def measure(run):
         "pods": len({b["pod"] for b in batches}), "batch_size": config.satellite_batch_size,
         "first_log": batches[0]["time"], "last_log": batches[-1]["time"],
         "capacity_events_per_second": round(capacity, 1) if capacity else None,
-        "capacity_source": ("measured catch-up (median)" if capacity else
+        "capacity_source": (f"latest catch-up ({measured[0]})" if capacity else
                             "commit times only (optimistic)" if estimated else None),
-        "capacity_p10_events_per_second": round(percentile(rates, 0.1), 1) if capacity else None,
-        "capacity_p90_events_per_second": round(percentile(rates, 0.9), 1) if capacity else None,
-        "catch_up_seconds": len(behind) * width,
-        "catch_up_events": sum(events[i] for i in behind),
+        "capacity_measured_from": stamp(measured[1]) if capacity else None,
+        "capacity_measured_to": stamp(measured[2]) if capacity else None,
+        "capacity_p10_events_per_second": round(percentile(rates, 0.1), 1) if rates else None,
+        "capacity_p90_events_per_second": round(percentile(rates, 0.9), 1) if rates else None,
+        "catch_up_seconds": round(catch_seconds, 1),
+        "catch_up_events": int(catch_events),
+        "earlier_catch_ups": max(0, len(long_ones) + len(runs) - 1),
         "commit_fixed_ms": commit["fixed_ms"] if commit else None,
         "commit_per_event_ms": commit["per_event_ms"] if commit else None,
         "capacity_from_commit_times": round(estimated, 1) if estimated else None,
@@ -247,8 +309,8 @@ def measure(run):
     run.consumer_stats = {**result, "live_peak": peak}
     if not capacity:
         output("WARN", f"No catch-up in the logs ({source})",
-               f"Fewer than {config.min_catch_up_windows} windows of {width:g} s with the lag at "
-               f"{config.catch_up_min_lag}+ events. Capacity is estimated from commit times only "
+               f"Neither {config.min_catch_up_windows} windows of {width:g} s with the lag at "
+               f"{config.catch_up_min_lag}+ events nor {config.min_catch_up_batches} full batches in a row. Capacity is estimated from commit times only "
                "(it leaves out reading time), or the forecast is skipped. For a measured number, run P4 "
                f"within {config.loki_lookback_hours:g} h of a catch-up (a fresh task up replays the feed "
                "from offset 0 at full speed; so does a lab that was off for a while).")
