@@ -76,7 +76,8 @@ class Verification:
         self.run.forwards.urls.pop("aggregator", None)
 
     def __enter__(self):
-        code, capability, _ = self.run.call("aggregator", "/internal/satellite/capabilities", expected=(200, 404))
+        code, capability, _ = self.run.call("aggregator", "/internal/satellite/capabilities",
+                                             token=self.run.env["AGGREGATOR_TOKEN"], expected=(200, 404))
         require(code == 200 and capability.get("controlled_verification_version") == 1,
                 "deploy the PR's Aggregator image before controlled P4 checks; no deployment changes were made")
         require(not capability.get("verification_schema"), "another P4 verification is active; restore it first")
@@ -181,7 +182,8 @@ SELECT to_json(true);'''
                                 "SATELLITE_FEED_URL=http://" + self.name + ":9000", "SATELLITE_GROUP_TOKEN=" + self.token,
                                 "SATELLITE_ALLOWED_LATENESS_MINUTES=360")
         self.settle()
-        code, body, _ = self.run.call("aggregator", "/internal/satellite/capabilities")
+        code, body, _ = self.run.call("aggregator", "/internal/satellite/capabilities",
+                                      token=self.run.env["AGGREGATOR_TOKEN"])
         require(body.get("verification_schema") == schema, "deployed Aggregator did not activate verification isolation")
         self.schema = schema
         return schema
