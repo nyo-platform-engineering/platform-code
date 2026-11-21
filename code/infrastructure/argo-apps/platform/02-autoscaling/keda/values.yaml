@@ -1,0 +1,11 @@
+# Install the operator through GitOps; Aggregator scaling remains OFF until requested.
+resources:
+  operator:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: null, memory: 256Mi}
+  metricServer:
+    requests: {cpu: 25m, memory: 128Mi}
+    limits: {cpu: null, memory: 256Mi}
+  webhooks:
+    requests: {cpu: 10m, memory: 128Mi}
+    limits: {cpu: null, memory: 256Mi}
