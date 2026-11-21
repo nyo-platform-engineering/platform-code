@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guided M2 P2 checks; edit CONFIG and press Enter between steps."""
+"""Guided P2 tests; edit CONFIG below."""
 from __future__ import annotations
 from dataclasses import dataclass, field, replace
 import datetime as dt
@@ -20,40 +20,35 @@ from helper import INFRA, ROOT, Run, output, require, utc
 class TestConfig:
     kubeconfig: Path = INFRA / ".state/kubeconfig"
     env_file: Path = INFRA / ".env.runtime"
-    # Auto: VM control-node IP or k3d's published loopback NodePort.
-    # Set an origin explicitly when using another Traefik gateway address.
+    # None detects the VM or k3d gateway.
     url: str | None = None
-    worker: str | None = None  # Auto-select a worker without mocks/coordinator.
+    worker: str | None = None  # None selects a worker without mocks/coordinator.
     source: str = "BMKG"
     groups: tuple = (1, 2, 3)
     observation_seconds: float = 30
     takeover_seconds: float = 60
     recovery_seconds: float = 180
     freeze_seconds: float = 30
-    # Examples from the specification; configure other nonzero skew cases here.
     clock_offsets: tuple = (45, -30)
     request_timeout: float = 8
     poll_interval: float = 3
-    # Our deterministic development mocks, not an external feed contract.
+    # Must match the running mocks.
     event_intervals: dict = field(default_factory=lambda: {"BMKG": 10, "PVMBG": 10})
     load_vus: int = 10_000
     load_seconds: int = 120
-    # Aggregate offered traffic, identical for scaling and both throughput samples.
+    # Total offered RPS, shared by scaling and throughput tests.
     load_rps: int = 100
-    # Scaling may need a longer window than the two throughput samples.
-    # None uses load_seconds for scaling.
+    # None uses load_seconds.
     scaling_seconds: int | None = None
     warmup_seconds: int = 10
     load_limit: int = 50
     k6: str = "k6"
-    # Use a different immutable image digest, available to the cluster.
-    rolling_image: str | None = None  # None selects a previous published GitOps pin.
+    rolling_image: str | None = None  # None selects a previous published image digest.
     rolling_seconds: int = 360
     rolling_rps: int = 30
     output_dir: Path | None = None
 
 
-# Full criteria run; smaller configurations are development evidence only.
 CONFIG = TestConfig()
 
 def validate_config(config):
@@ -115,7 +110,6 @@ def create_evidence_folder(config, name):
         for folder in older_runs:
             shutil.rmtree(folder)
 
-    # Keep previous evidence by default; create this run after the decision.
     folder = Path(config.output_dir or evidence_root / name).resolve()
     folder.mkdir(parents=True, exist_ok=False)
     return folder
@@ -152,7 +146,7 @@ def main():
             code = 0
     except (Exception, KeyboardInterrupt) as error:
         run.report["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
-        # Do not persist subprocess output, URLs containing credentials, or tokens.
+        # Keep credentials out of error evidence.
         run.report["error"] = str(error) if isinstance(error, ValueError) else type(error).__name__
         output("FAIL", run.report["error"])
     finally:

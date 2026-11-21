@@ -1,8 +1,27 @@
 customLabels:
   platform.local/owner: platform-team
-# Validation and reports only; ownership starts in Audit mode.
+# Admission mutation only: remove CPU limits; all validation/reporting is disabled.
 config:
   enableDefaultRegistryMutation: false
+  # Include system workloads and Kyverno itself, as well as application namespaces.
+  resourceFilters: []
+  excludeKyvernoNamespace: false
+  webhooks:
+    namespaceSelector:
+      matchExpressions: []
+features:
+  admissionReports:
+    enabled: false
+  aggregateReports:
+    enabled: false
+  policyReports:
+    enabled: false
+  validatingAdmissionPolicyReports:
+    enabled: false
+  backgroundScan:
+    enabled: false
+  generateValidatingAdmissionPolicy:
+    enabled: false
 crds:
   migration:
     podLabels:
@@ -11,10 +30,6 @@ crds:
       requests: null
       limits: null
 admissionController:
-  backgroundScan:
-    skipResourceFilters: true
-  validatingAdmissionPolicyReports:
-    enabled: true
   podLabels:
     platform.local/owner: platform-team
   replicas: 1
@@ -31,6 +46,7 @@ backgroundController:
 cleanupController:
   enabled: false
 reportsController:
+  enabled: false
   podLabels:
     platform.local/owner: platform-team
   replicas: 1

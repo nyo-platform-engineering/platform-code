@@ -1,4 +1,4 @@
-"""Criteria 2–4: poison isolation, transient retries and ordered schema replay."""
+"""P3.2–4: poison isolation, retries and ordered replay."""
 import base64
 import json
 
@@ -50,7 +50,7 @@ def prepare_replay(run):
     run.captured(encode(missing), "record")
     run.replay_ids.update((message_id(first_raw), identity, message_id(encode(missing))))
     run.ordering = (first, second)
-    # Recover every newly parked schema record, including repeated mock batches.
+    # Replay only schema failures created during this run.
     for row in run.unprocessed():
         if row["message_id"] in run.baseline_unprocessed:
             continue
@@ -117,7 +117,6 @@ def replay(run):
     missing = run.hazard(run.name + "-missing")
     require(missing and "eruption_count_24h" not in missing["attributes"], "v2 invented a value for missing count")
     require(all(not item.get("raw_base64") for item in states.values()), "processed raw was not compacted as documented")
-    # Replaying completed messages must not apply their effects again.
     for identity in sorted(run.replay_ids):
         run.http("client", "/ops/unprocessed/" + identity + "/replay", token=run.tokens["analyst"], method="POST", expected=(409,))
     require(run.hazard(first["report_id"]) == final, "repeated replay changed canonical state")

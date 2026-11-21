@@ -40,7 +40,6 @@ resources:
     cpu: 100m
     memory: 64Mi
   limits:
-    cpu: '1'
     memory: 128Mi
 image:
   repository: ghcr.io/yonatan-nyo/aat-apps/pvmbg

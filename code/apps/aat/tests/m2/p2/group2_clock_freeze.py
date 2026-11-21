@@ -1,4 +1,4 @@
-"""Criteria 4–5: measured clock offsets and real worker freeze/resume."""
+"""P2.4–5: worker clock skew and freeze/resume."""
 import json
 import shlex
 import subprocess
@@ -8,7 +8,7 @@ from helper import INFRA, NAMESPACE, output, ready, require
 
 
 def vm_python(run, source):
-    """Run only on the selected local VM, never the generator/shared host clock."""
+    """Run on the selected VM only."""
     require(not run.container_nodes, "clock injection requires a separate-kernel VM")
     require(run.config.worker in ("aat-worker-1", "aat-worker-2"), "invalid clock worker")
     require(run.config.kubeconfig.resolve() == (INFRA / ".state/kubeconfig").resolve(),
@@ -25,7 +25,7 @@ def vm_python(run, source):
 
 
 def shift_clock(run, target_offset):
-    # Measure through SSH so cleanup also works if the Aggregator pod disappears.
+    # Use SSH so clock recovery survives pod deletion.
     before = time.time()
     remote = vm_python(run, "import json,time; print(json.dumps(time.time()))")
     after = time.time()
@@ -85,7 +85,7 @@ def clock(run):
     owner, moves = prepare_owner(run)
     pod = worker_pod(run)
     require(pod == owner["pod"], "clock target is not the observed source owner")
-    # Keep the mock clock and the database authority out of this worker-only test.
+    # Isolate clock skew from mocks and the coordinator.
     require(not any(p["metadata"]["name"].startswith(("bmkg-", "pvmbg-", "citus-g0-"))
                     and p["spec"].get("nodeName") == run.config.worker for p in run.pods()),
             "choose a worker without BMKG/PVMBG/coordinator for this clock-isolation scenario")
@@ -123,7 +123,7 @@ def clock(run):
 
 
 def prepare_owner(run):
-    """Place the real source owner on the safe worker before a worker fault."""
+    """Move the source owner to the test worker."""
     deadline = time.monotonic() + run.config.recovery_seconds
     moves = []
     while True:
@@ -168,8 +168,7 @@ def freeze(run):
     def resume():
         run.logs.resume_freeze(old["pod_uid"])
         action("resume-worker")
-        # Suspending the guest can leave CLOCK_REALTIME behind. Restore it
-        # explicitly without invoking Vagrant's always-run provisioner.
+        # Restore guest time without rerunning VM provisioners.
         vm_python(run, "import json,subprocess; "
                   f"services={services!r}; "
                   "[subprocess.run(['systemctl','stop',s],check=True) for s in services]; "

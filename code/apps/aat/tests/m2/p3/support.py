@@ -1,4 +1,4 @@
-"""Cluster operations, bounded HTTP, evidence, and restoration for P3."""
+"""P3 cluster access, HTTP, evidence and cleanup."""
 from contextlib import contextmanager, nullcontext
 import base64
 import datetime as dt
@@ -164,7 +164,7 @@ class Run(CommonRun):
         raise ValueError("unprocessed pagination exceeded CONFIG.max_pages")
 
     def sql_command(self, host="127.0.0.1"):
-        # Credentials stay inside the database pod, never in argv or evidence.
+        # Read credentials inside the database pod.
         script = ('PGPASSWORD="$PATRONI_SUPERUSER_PASSWORD" exec psql -h "$1" '
                   '-U "$PATRONI_SUPERUSER_USERNAME" -d "$PATRONI_CITUS_DATABASE" -w -X -qAt -v ON_ERROR_STOP=1')
         return ["kubectl", "--kubeconfig", str(self.config.kubeconfig), "-n", NAMESPACE,
@@ -241,7 +241,6 @@ class Run(CommonRun):
         for identity in ("analyst", "responder", "public"):
             self.login_role(identity)
         self.secrets.discard("")
-        # Temporary forwards use the common helper's process/cleanup management.
         from common import SERVICE_PORTS
         SERVICE_PORTS["pvmbg"] = 8082
         pods = self.pods()
@@ -286,7 +285,7 @@ class Run(CommonRun):
                 "mutations": "isolated test configuration; finally restores env/schema/GitOps"}
 
     def restore_env(self):
-        # Replace the env list rather than merge it, so added overrides disappear.
+        # Replace env to remove temporary overrides.
         self.cluster.kubectl("patch", "deployment", "aggregator", "--type=json", "-p", json.dumps([
             {"op": "add", "path": f"/spec/template/spec/containers/{self.container_index}/env", "value": self.original_env}]))
         self.settled()

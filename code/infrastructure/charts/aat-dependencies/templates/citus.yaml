@@ -210,7 +210,7 @@ spec:
           exec patroni /etc/patroni/patroni.yaml
         resources:
           requests: {cpu: 100m, memory: 512Mi}
-          limits: {cpu: {{ $group.cpuLimit | default "1" | quote }}, memory: 1Gi}
+          limits: {memory: 1Gi}
         ports:
         - name: postgres
           containerPort: 5432

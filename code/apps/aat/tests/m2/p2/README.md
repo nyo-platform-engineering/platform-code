@@ -295,9 +295,8 @@ active time services and whether restoration completed; after an abrupt exit use
 `task clock:sync` to restore the lab's clock configuration and verify with
 `task clock:status`. Credentials and source/admin settings are not changed.
 
-Offline checks (no live faults or load against the cluster):
+Inspect the k6 workload without generating traffic:
 
 ```sh
-python3 -m unittest discover -s ../apps/aat/tests -p test_m2_p2.py
 k6 inspect -e P2_VUS=2 -e P2_SECONDS=15 -e P2_WARMUP=1 ../apps/aat/tests/m2/p2/load.js
 ```
