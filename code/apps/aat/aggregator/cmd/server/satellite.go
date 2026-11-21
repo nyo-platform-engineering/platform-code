@@ -225,8 +225,14 @@ func (c satelliteConsumer) follow(ctx context.Context) (progressed bool, err err
 				}
 			}
 		case <-tick.C:
-			if err := flush(); err != nil {
-				return progressed, err
+			// Events already waiting mean the consumer is behind (they queued during the
+			// last commit): take them first and let them fill a full batch, instead of
+			// committing the few pending ones as a batch of their own. When the feed is
+			// live the channel is empty, so the tick flushes as before.
+			if len(events) == 0 || len(pending) >= c.batchSize {
+				if err := flush(); err != nil {
+					return progressed, err
+				}
 			}
 			if time.Since(time.Unix(0, lastRead.Load())) > c.idleTimeout {
 				return progressed, errFeedIdle
