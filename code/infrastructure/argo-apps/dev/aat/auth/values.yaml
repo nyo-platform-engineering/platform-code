@@ -41,7 +41,6 @@ resources:
     cpu: 100m
     memory: 128Mi
   limits:
-    cpu: '1'
     memory: 256Mi
 image:
   repository: ghcr.io/yonatan-nyo/aat-apps/auth

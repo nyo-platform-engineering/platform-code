@@ -30,5 +30,4 @@ resources:
   # CPU = 1.4 x observed average; memory = 1.4 x observed peak. Rounded up.
   requests: {cpu: 3m, memory: 86Mi}
   limits:
-    cpu: 500m
     memory: 256Mi

@@ -67,6 +67,21 @@ class WorkloadTests(unittest.TestCase):
                 self.assertIn("livenessProbe", container)
                 self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
 
+    def test_workloads_have_no_cpu_limits_and_keep_cpu_requests(self):
+        documents = self.dependencies + self.monitoring + sum(self.services.values(), [])
+        for document in documents:
+            pod = document.get("spec", {}).get("template", {}).get("spec", {})
+            for field in ("containers", "initContainers", "ephemeralContainers"):
+                for container in pod.get(field, []):
+                    with self.subTest(workload=document["metadata"]["name"], container=container["name"]):
+                        resources = container.get("resources", {})
+                        self.assertNotIn("cpu", resources.get("limits", {}))
+                        if field == "containers":
+                            self.assertIn("cpu", resources["requests"])
+        radar = yaml.safe_load((ROOT / "argo-apps/platform/02-monitoring/radar/values.yaml").read_text())
+        self.assertNotIn("cpu", radar["resources"]["limits"])
+        self.assertEqual(radar["resources"]["requests"]["cpu"], "3m")
+
     def test_argo_registrations_resolve_to_the_same_runtime_values(self):
         documents = list(yaml.safe_load_all(subprocess.check_output(
             ["kubectl", "kustomize", str(ROOT / "argo-apps/dev")], text=True,
@@ -97,14 +112,14 @@ class WorkloadTests(unittest.TestCase):
         repo = ROOT.parents[1]
         applications = list(load_module("check-lgtm").platform_applications())
         self.assertTrue(all(app["kind"] == "Application" for app in applications))
-        self.assertEqual(len(applications), 13)
+        self.assertEqual(len(applications), 15)
         self.assertFalse((ROOT / "argo-apps/platform/kustomization.yaml").exists())
         self.assertEqual({app["metadata"]["name"] for app in applications},
                          {"argocd", "loki", "tempo", "mimir", "grafana", "otel-collector-cluster",
                           "otel-collector-daemon", "kube-state-metrics", "dev-apps",
-                          "gateway-api", "traefik", "radar", "gateway"})
+                          "gateway-api", "traefik", "radar", "gateway", "kyverno", "cluster-policies"})
         for folder in ("03-cd/gitlab", "02-cd/gitlab-services", "03-observability/clickhouse",
-                       "02-policy/kyverno", "03-policy/policies", "03-observability/policy-reporter"):
+                       "03-observability/policy-reporter"):
             self.assertTrue((ROOT / "argo-apps/platform" / folder / "app.yaml.disabled").exists())
             self.assertFalse((ROOT / "argo-apps/platform" / folder / "app.yaml").exists())
         self.assertFalse((ROOT / "charts/lgtm").exists())
@@ -115,6 +130,23 @@ class WorkloadTests(unittest.TestCase):
                     self.assertTrue((repo / value.removeprefix("$values/")).is_file())
         dev = next(app for app in applications if app["metadata"]["name"] == "dev-apps")
         self.assertEqual(repo / dev["spec"]["source"]["path"], ROOT / "argo-apps/dev")
+
+    def test_kyverno_enables_only_cpu_limit_mutation(self):
+        platform = ROOT / "argo-apps/platform"
+        folder = platform / "03-policy/policies/manifests"
+        documents = [d for path in folder.glob("*.yaml") for d in yaml.safe_load_all(path.read_text()) if d]
+        self.assertEqual([(d["kind"], d["metadata"]["name"]) for d in documents],
+                         [("ClusterPolicy", "remove-cpu-limits")])
+        self.assertEqual(len(documents[0]["spec"]["rules"]), 1)
+        self.assertFalse(documents[0]["spec"]["background"])
+        for name in ("policies", "ownership", "ownership-reporting"):
+            self.assertTrue((folder / f"{name}.yaml.disabled").exists())
+        config = yaml.safe_load((platform / "02-policy/kyverno/values.yaml").read_text())
+        for controller in ("backgroundController", "cleanupController", "reportsController"):
+            self.assertFalse(config[controller]["enabled"])
+        self.assertEqual(config["config"]["resourceFilters"], [])
+        self.assertFalse(config["config"]["excludeKyvernoNamespace"])
+        self.assertEqual(config["config"]["webhooks"]["namespaceSelector"]["matchExpressions"], [])
 
     def test_config_and_credentials_have_separate_sources(self):
         for name, documents in self.services.items():

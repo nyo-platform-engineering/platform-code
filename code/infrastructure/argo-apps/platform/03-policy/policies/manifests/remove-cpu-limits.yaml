@@ -1,0 +1,48 @@
+# The only active policy. Autogen applies the same mutation to workload templates.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: remove-cpu-limits
+  labels:
+    platform.local/owner: platform-team
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: Deployment,DaemonSet,StatefulSet,Job,CronJob,ReplicaSet,ReplicationController
+spec:
+  background: false
+  webhookConfiguration:
+    # Keep admission available while the single lab controller restarts.
+    failurePolicy: Ignore
+  rules:
+    - name: remove-cpu-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              operations: [CREATE, UPDATE]
+      # Resolve null at evaluation time; literal null is pruned from stored policy JSON.
+      mutate:
+        foreach:
+          - list: "request.object.spec.containers || `[]`"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    resources:
+                      limits:
+                        cpu: "{{ parse_json('null') }}"
+          - list: "request.object.spec.initContainers || `[]`"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    resources:
+                      limits:
+                        cpu: "{{ parse_json('null') }}"
+          - list: "request.object.spec.ephemeralContainers || `[]`"
+            patchStrategicMerge:
+              spec:
+                ephemeralContainers:
+                  - name: "{{ element.name }}"
+                    resources:
+                      limits:
+                        cpu: "{{ parse_json('null') }}"
