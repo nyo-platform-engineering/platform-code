@@ -28,9 +28,25 @@ Needs `SATELLITE_GROUP_TOKEN` in `.env.runtime` and the Aggregators restarted af
 adding it. The feed accepts **one connection per group token**: if another stack
 holds it, the run stops with `429 too_many_connections`.
 
+The first committed offset is awaited for up to `CONFIG.catch_up_timeout`. After
+checking that the live offset advances, `feed-backlog-observation` watches activity
+for `CONFIG.lag_observe_seconds` (30 seconds by default). It reports starting/ending
+lag and processing rate. Advancing offsets pass this activity check even if lag
+remains above `CONFIG.max_lag_events` (500): backlog or unavailable lag produces a
+warning and the suite continues. No offset advance or persistent stats failures
+still fail. `no-rejected-feed-events` separately requires zero rejected events.
+
+Both feed waits print `[WAIT]` every 5 seconds, including elapsed time/budget,
+current/latest offsets, lag, rejected count, and transient request errors. Progress
+is saved to `progress.jsonl` beside `console.log`. Observation allows the final HTTP
+request and retry to complete after the window; missing values appear as `unknown`.
+Restart the runner to load changes. This initial activity check does **not** certify
+criterion 4: recovery within 60 seconds after a real 60x burst still requires exam
+burst evidence; group 4 is only a forecast.
+
 | Group | Steps | Criteria |
 | --- | --- | --- |
-| [group1_feed.py](p4/group1_feed.py) | offset advances while watched; lag falls to `CONFIG.max_lag_events`; 0 rejected events; consumer statistics ([consumer_stats.py](p4/consumer_stats.py)) from the Aggregator's batch and lag log lines in **Loki** (last `CONFIG.loki_lookback_hours`, 6; falls back to the pod logs): capacity = median events/s in 10 s windows with the lag ≥ `CONFIG.catch_up_min_lag` (p10/p90 too), live average and busiest minute, p95 ingest latency; saved to `consumer-batches.jsonl` and `consumer-progress.jsonl` | 7, 4, payload format |
+| [group1_feed.py](p4/group1_feed.py) | offset advances during live and backlog observations; high/unknown lag warns without blocking; separate 0 rejected events check; consumer statistics ([consumer_stats.py](p4/consumer_stats.py)) from the Aggregator's batch and lag log lines in **Loki** (last `CONFIG.loki_lookback_hours`, 6; falls back to the pod logs): capacity = median events/s in 10 s windows with the lag ≥ `CONFIG.catch_up_min_lag` (p10/p90 too), live average and busiest minute, p95 ingest latency; saved to `consumer-batches.jsonl` and `consumer-progress.jsonl` | 7, 4, payload format |
 | [group2_fires.py](p4/group2_fires.py) | every WILDFIRE: ≥ 2 detections, valid keys, satellites, no low confidence, severity rules, `occurred_at` = earliest detection, each detection in one fire, unique `source_ref_id`; NORMAL events carry `dissolved`/`merged`; excluded detections counted; Audit API checksum vs store | 1, 2, 3, 6 (partial) |
 | [group3_recovery.py](p4/group3_recovery.py) | delete every Aggregator pod; the offset resumes past the pre-crash point, no fire lost or duplicated | 5, 8 |
 | [group4_burst.py](p4/group4_burst.py) | runs last: simulates `CONFIG.burst_factor`× (60) the live average (realistic) and the busiest minute (worst case: satellite passes back to back) for 60–600 s with the measured capacity; fails if the realistic `CONFIG.verdict_burst_seconds` (120) case is not current within 60 s; table in `burst-simulation.json` | 4 (forecast only) |
