@@ -3,14 +3,14 @@
 #    - line chart jumlah kejadian per jenis bahaya terhadap waktu, dengan pilihan rentang waktu;
 #    - jumlah kejadian per tingkat severity;
 #    - jumlah kejadian per wilayah (area_name) dalam bentuk chart atau tabel.
-# 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
+# Lanjutan kriteria 7: Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
 from helper.cluster import frozen_mock_checkpoint
 from helper.data import read_live_view
 from common import output
 
 
 # 7. Sediakan satu dashboard analitik yang dapat dibuka melalui peramban dan menampilkan agregasi seluruh HazardEvent per jenis bahaya (gempa, tsunami, gunung berapi, kebakaran hutan, dan pesisir). Dashboard ini berbeda dari dashboard metrik pada bagian Observabilitas dan minimal memuat:
-# 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
+# Lanjutan kriteria 7: Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
 def dashboard(run):
     # Recompute the displayed aggregates from Audit API data.
     with frozen_mock_checkpoint(run, "dashboard-analytics"):
@@ -38,5 +38,5 @@ def run_group(run):
     #    - jumlah kejadian per wilayah (area_name) dalam bentuk chart atau tabel.
     input("Open the analytics dashboard. Enter → compare all charts with Audit API: ")
 
-    # 8. Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
+    # Lanjutan kriteria 7: Angka dihitung dari data lintas seluruh lokasi penyimpanan dan harus sama dengan hasil penghitungan langsung dari Audit API. Bila satu node dimatikan, dashboard tetap tampil dan menandai dengan jelas bahwa angkanya belum lengkap, bukan menampilkan angka keliru tanpa penanda.
     run.stage("dashboard-analytics", dashboard, run)

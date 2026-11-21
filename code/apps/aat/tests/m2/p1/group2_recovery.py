@@ -1,19 +1,21 @@
 """Group 2 — bounded availability, worker loss, and recovery (criteria 4–6)."""
-# 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung.
+# 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung. Pada kondisi normal sebelum node dimatikan, setiap unit wajib memiliki minimal satu replica di node yang berbeda dari primary-nya.
 # 5. Tambahkan node baru (atau node yang sama dengan disk kosong). Tunjukkan node tersebut ikut menanggung data dan beban tanpa menghentikan penulisan maupun pembacaan.
 # 6. Setelah kriteria 4 dan 5, sistem kembali pada kondisi yang mampu bertahan dari kehilangan satu node berikutnya.
 from helper.monitor import Monitor
 from helper.data import export, verify_preservation
 from helper.cluster import (
     restore_worker_on_failure, run_worker_action, storage_plan, wait_for_node_state,
-    wait_for_recovery, worker_storage,
+    wait_for_recovery, worker_storage, shard_distribution,
 )
 from common import output, require
 
 
-# 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung.
+# 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung. Pada kondisi normal sebelum node dimatikan, setiap unit wajib memiliki minimal satu replica di node yang berbeda dari primary-nya.
 def lose_worker(run, name, worker):
     print(f"\n{name}: target {worker}.", flush=True)
+    # Require a ready cross-node replica for every shard before any destructive action.
+    run.save(f"{name}-pre-loss-shards.json", shard_distribution(run.config))
     automatic = run.config.automatic_worker_actions
     proof = None
 
@@ -105,6 +107,9 @@ def rejoin_worker(run, name, worker):
             # Ready alone is not enough: wait for full replica placement too.
             wait_for_node_state(run, monitor, worker, ready=True)
             result = wait_for_recovery(run, name, redundant=True)
+            shard_placement = shard_distribution(run.config)
+            run.save(f"{name}-shards.json", shard_placement)
+            result["shards_per_node"] = shard_placement["shards_per_node"]
 
             if automatic:
                 # Check that PostgreSQL actually rebuilt the erased volumes.
@@ -149,7 +154,7 @@ def run_group(run):
     print("\nGroup 2: failure and recovery — criteria 4–6", flush=True)
     worker = run.config.worker
 
-    # 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung.
+    # 4. Bila satu node worker dimatikan dan seluruh datanya dihapus, tunjukkan bahwa tidak ada HazardEvent yang hilang (diverifikasi melalui Audit API terhadap checksum asisten). Selama sistem memulihkan diri, setiap permintaan tetap dijawab: lengkap bila datanya tersedia, atau sebagian dengan penanda eksplisit bahwa jawabannya tidak lengkap, bukan error 500 dan bukan permintaan yang menggantung. Pada kondisi normal sebelum node dimatikan, setiap unit wajib memiliki minimal satu replica di node yang berbeda dari primary-nya.
     run.stage("first-loss", lose_worker, run, "first-loss", worker)
 
     # 5. Tambahkan node baru (atau node yang sama dengan disk kosong). Tunjukkan node tersebut ikut menanggung data dan beban tanpa menghentikan penulisan maupun pembacaan.

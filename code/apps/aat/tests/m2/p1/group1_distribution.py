@@ -1,10 +1,10 @@
 """Group 1 — catalog placement, uneven load, and global reads (criteria 1–3)."""
-# 1. Muat dataset katalog gempa historis yang diberikan asisten. Tidak ada satu node pun yang menyimpan seluruh data, dan beban penyimpanan maupun penulisan tersebar ke lebih dari satu node. Laporkan sebaran data per node.
+# 1. Muat dataset katalog gempa historis yang diberikan asisten. Data dipartisi menjadi beberapa unit penyimpanan (shard). Tidak ada satu unit pun yang memuat seluruh data, dan peran primary (beban penulisan) tersebar ke lebih dari satu node. Sebuah node boleh menyimpan replica dari unit yang primary-nya berada di node lain. Laporkan sebaran unit (primary dan replica) per node.
 # 2. Tunjukkan bagaimana sistem menyikapi ketidakmerataan alami dataset tersebut. Ukur beban tiap node saat dataset dimuat dan saat lonjakan gempa di satu wilayah disimulasikan.
 # 3. Sediakan permintaan yang membaca data lintas seluruh lokasi penyimpanan (contoh: "50 event terbaru dari seluruh jenis bahaya", dengan pagination) dan menghasilkan urutan yang benar.
 from collections import Counter
 
-from helper.cluster import frozen_mock_checkpoint
+from helper.cluster import frozen_mock_checkpoint, shard_distribution
 from helper.monitor import Monitor
 from helper.data import (
     capture_snapshot, checksum, distribution, export, preserve, read_catalog,
@@ -13,7 +13,7 @@ from helper.data import (
 from common import output, require, utc
 
 
-# 1. Muat dataset katalog gempa historis yang diberikan asisten. Tidak ada satu node pun yang menyimpan seluruh data, dan beban penyimpanan maupun penulisan tersebar ke lebih dari satu node. Laporkan sebaran data per node.
+# 1. Muat dataset katalog gempa historis yang diberikan asisten. Data dipartisi menjadi beberapa unit penyimpanan (shard). Tidak ada satu unit pun yang memuat seluruh data, dan peran primary (beban penulisan) tersebar ke lebih dari satu node. Sebuah node boleh menyimpan replica dari unit yang primary-nya berada di node lain. Laporkan sebaran unit (primary dan replica) per node.
 def catalog_distribution(run):
     # Validate the catalog before sending any records to the cluster.
     records = read_catalog(run.config.catalog)
@@ -84,6 +84,8 @@ def catalog_distribution(run):
         poll_interval=run.config.sample_interval,
     )
     run.save("catalog-placement.json", placement)
+    shard_placement = shard_distribution(run.config, catalog_references)
+    run.save("catalog-shards.json", shard_placement)
 
     # Keep a verified baseline for the later surge and recovery cases.
     baseline = capture_snapshot(run, "baseline")
@@ -95,6 +97,7 @@ def catalog_distribution(run):
         "reference": baseline["reference"],
         "primary_events_per_node": placement["primary_events_per_node"],
         "copies_per_node": placement["copies_per_node"],
+        "shards_per_node": shard_placement["shards_per_node"],
         "live_events_updated_during_import": len(updates),
         "already_present": len(already_present),
         "changed_records": changed_records,
@@ -157,8 +160,8 @@ def global_reads(run):
 def run_group(run):
     print("\nGroup 1: data distribution and reads — criteria 1–3", flush=True)
 
-    # 1. Muat dataset katalog gempa historis yang diberikan asisten. Tidak ada satu node pun yang menyimpan seluruh data, dan beban penyimpanan maupun penulisan tersebar ke lebih dari satu node. Laporkan sebaran data per node.
-    input("Enter → import the historical catalog and report per-node distribution: ")
+    # 1. Muat dataset katalog gempa historis yang diberikan asisten. Data dipartisi menjadi beberapa unit penyimpanan (shard). Tidak ada satu unit pun yang memuat seluruh data, dan peran primary (beban penulisan) tersebar ke lebih dari satu node. Sebuah node boleh menyimpan replica dari unit yang primary-nya berada di node lain. Laporkan sebaran unit (primary dan replica) per node.
+    input("Enter → import the historical catalog and report primary/replica shards per node: ")
     run.stage("catalog-import", catalog_distribution, run)
 
     # 2. Tunjukkan bagaimana sistem menyikapi ketidakmerataan alami dataset tersebut. Ukur beban tiap node saat dataset dimuat dan saat lonjakan gempa di satu wilayah disimulasikan.
