@@ -15,6 +15,8 @@ Deploy image Aggregator dan chart terbaru sebelum mengulang game day:
 
 - Client: 3 replika tersebar di tiga node. NodePort melayani replika lokal;
   akses entrypoint pada node yang hidup. NodePort pada node mati tetap tidak tersedia.
+  Argo harus mengelola `/spec/replicas` Client agar konfigurasi 3 replika benar-benar
+  diterapkan; setup menolak deployment yang masih dikonfigurasi 1–2 replika.
 - Citus coordinator: sidecar `metadata-reconciler` menyinkronkan metadata worker
   lewat API Citus setiap 5 detik bila diperlukan. Ini komponen runtime yang sudah
   berjalan sebelum fault, bukan tindakan runner selama pemulihan.
