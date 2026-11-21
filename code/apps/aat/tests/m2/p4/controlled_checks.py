@@ -172,13 +172,21 @@ def verify_crash(run, session):
     session.feed("/admin/publish", {"count": 2})
     def checkpoint():
         return session.sql(f'''SELECT row_to_json(a) FROM (
- SELECT l.pid, a.client_addr::text AS address FROM pg_locks l JOIN pg_stat_activity a USING(pid)
+ SELECT l.pid, host(a.client_addr) AS address FROM pg_locks l JOIN pg_stat_activity a USING(pid)
  JOIN "{session.schema}".poll_owners p ON p.backend_pid=l.pid AND p.source='SATELIT'
  WHERE l.locktype='advisory' AND l.objid={session.lock_key} AND NOT l.granted LIMIT 1) a;''')
     blocked = run.wait("consumer after HazardEvent writes, before offset commit", checkpoint, 30)
     session.feed("/admin/pause", {})  # Stop new owners taking more fixture input after the kill.
-    owners = [p for p in session.pods() if p.get("status", {}).get("podIP") == blocked["address"]]
-    require(len(owners) == 1, "cannot identify the blocked consumer Pod safely")
+    # PostgreSQL inet::text includes a /32 or /128 mask; host() above returns
+    # the bare address used by Kubernetes. Check all addresses for dual-stack Pods.
+    pods = session.pods()
+    owners = [p for p in pods if blocked["address"] in
+              {p.get("status", {}).get("podIP"),
+               *(entry.get("ip") for entry in p.get("status", {}).get("podIPs", []))}]
+    run.save("controlled-crash-owner.json", {"backend_pid": blocked["pid"], "address": blocked["address"],
+             "pods": [{"name": p["metadata"]["name"], "addresses": p.get("status", {}).get("podIPs", [])}
+                      for p in pods], "matched_pods": [p["metadata"]["name"] for p in owners]})
+    require(len(owners) == 1, f"cannot identify the blocked consumer Pod safely: address={blocked['address']}, matches={len(owners)}")
     pod = owners[0]["metadata"]["name"]
     prior_id = next(c.get("containerID") for c in owners[0]["status"]["containerStatuses"] if c["name"] == "aggregator")
     # Invoke the fault endpoint on the identified owner Pod, never through a load-balanced Service.
