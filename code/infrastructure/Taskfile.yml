@@ -44,6 +44,10 @@ tasks:
     interactive: true
     cmds:
       - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p2/test-problem-2.py"'
+  m2:p2:fencing:
+    desc: Verify P2 storage fencing and a paused process in temporary database schemas; needs Go
+    cmds:
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p2/verify-fencing.py"'
   m2:p3:
     desc: Run guided M2 P3 schema, poison, replay and durable field-report checks on an isolated lab
     interactive: true

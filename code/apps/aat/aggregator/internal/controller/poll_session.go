@@ -153,23 +153,42 @@ func (ctrl *Controller) ValidatePollOwner(ctx context.Context, source string) er
 	if ctrl.PollOwner == nil {
 		return ErrPollFenced
 	}
-	return ctrl.fencePoll(ctrl.DB.WithContext(ctx), source, false)
+	err := ctrl.fencePoll(ctrl.DB.WithContext(ctx), source, false)
+	if err != nil {
+		ctrl.logPollRejection(ctx, source, "validate_owner", err)
+	}
+	return err
 }
 
 func (ctrl *Controller) fencePoll(tx *gorm.DB, source string, lock bool) error {
+	return ctrl.checkPollFence(tx, source, lock, nil)
+}
+
+func (ctrl *Controller) checkPollFence(tx *gorm.DB, source string, lock bool, proof *pollWriteEvidence) error {
 	fence := ctrl.PollOwner
 	if fence == nil || fence.Source != source {
 		return ErrPollFenced
 	}
-	query := `SELECT epoch FROM poll_owners WHERE source = ? AND epoch = ?
+	columns := "epoch"
+	if proof != nil {
+		columns += ", owner, backend_pid, clock_timestamp() AS db_observed_at, pg_current_xact_id()::text AS transaction_id"
+	}
+	query := `SELECT ` + columns + ` FROM poll_owners WHERE source = ? AND epoch = ?
 		AND owner = ? AND backend_pid = pg_backend_pid()`
 	if lock {
 		query += " FOR UPDATE"
 	}
 	var epoch int64
-	result := tx.Raw(query, source, fence.Epoch, fence.Owner).Scan(&epoch)
+	var target any = &epoch
+	if proof != nil {
+		target = proof
+	}
+	result := tx.Raw(query, source, fence.Epoch, fence.Owner).Scan(target)
 	if result.Error != nil {
 		return result.Error
+	}
+	if proof != nil {
+		epoch = proof.Epoch
 	}
 	if result.RowsAffected != 1 || epoch != fence.Epoch {
 		return ErrPollFenced

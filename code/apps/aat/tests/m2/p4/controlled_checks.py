@@ -169,6 +169,37 @@ def verify_burst(run, session):
     return result
 
 
+def container_status(run, pod):
+    body = run.cluster.kubectl("get", "pod", pod, "-o", "json", json_output=True)
+    return next((c for c in body.get("status", {}).get("containerStatuses", [])
+                 if c.get("name") == "aggregator"), {})
+
+
+def capture_crash_exit(run, pod, prior):
+    """Capture the original container's exit before startup crashes overwrite lastState."""
+    prior_id = prior["containerID"]
+    def terminated():
+        current = container_status(run, pod)
+        for state in (current.get("state", {}), current.get("lastState", {})):
+            exit_state = state.get("terminated", {})
+            if exit_state.get("containerID") == prior_id:
+                return {"termination": exit_state, "container_status": current}
+        if current.get("ready") and current.get("containerID") != prior_id:
+            # A ready replacement cannot recreate lost history by waiting longer.
+            return {"termination": None, "container_status": current}
+        return None
+    evidence = run.wait("original Aggregator container termination", terminated, run.config.resume_timeout)
+    run.save("controlled-crash-exit.json", {"pod": pod, "original_container": prior, **evidence})
+    # Check outside wait(): ValueError inside its callback is treated as transient.
+    exit_state = evidence["termination"]
+    require(exit_state is not None,
+            "original consumer exit evidence was overwritten or missing; see controlled-crash-exit.json")
+    require(exit_state.get("exitCode") == 137,
+            f"owner exited with code {exit_state.get('exitCode')}, expected 137 from the verification checkpoint; "
+            "see controlled-crash-exit.json")
+    return evidence
+
+
 def verify_crash(run, session):
     session.activate("crash")
     session.feed("/admin/publish", {"count": 1})
@@ -194,7 +225,9 @@ def verify_crash(run, session):
                       for p in pods], "matched_pods": [p["metadata"]["name"] for p in owners]})
     require(len(owners) == 1, f"cannot identify the blocked consumer Pod safely: address={blocked['address']}, matches={len(owners)}")
     pod = owners[0]["metadata"]["name"]
-    prior_id = next(c.get("containerID") for c in owners[0]["status"]["containerStatuses"] if c["name"] == "aggregator")
+    prior = next(c for c in owners[0]["status"]["containerStatuses"] if c["name"] == "aggregator")
+    prior_id = prior.get("containerID")
+    require(prior_id, "cannot crash an owner without its original container ID")
     # Invoke the fault endpoint on the identified owner Pod, never through a load-balanced Service.
     script = ('exec wget -qO- --timeout=10 --post-data="" '
               '--header="Authorization: Bearer ${AGGREGATOR_TOKEN}" '
@@ -203,24 +236,24 @@ def verify_crash(run, session):
         run.cluster.kubectl("exec", pod, "-c", "aggregator", "--", "sh", "-c", script)
     except ValueError:
         pass  # The owner exits before sending a response; verify DB and container state below.
+    exit_evidence = capture_crash_exit(run, pod, prior)
     run.wait("killed consumer database backend to exit",
              lambda: session.sql(f"SELECT to_json(NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid={int(blocked['pid'])}));"), 30)
     require(session.snapshot() == before, "partial detection/HazardEvent/offset survived the crash")
     session.release_lock()
     session.sql(f'DROP TRIGGER p4_checkpoint ON "{session.schema}".satellite_feeds; SELECT to_json(true);')
     def restarted():
-        p = run.cluster.kubectl("get", "pod", pod, "-o", "json", json_output=True)
-        for c in p.get("status", {}).get("containerStatuses", []):
-            if c.get("name") == "aggregator" and c.get("ready") and c.get("containerID") != prior_id:
-                require(c.get("lastState", {}).get("terminated", {}).get("exitCode") == 137,
-                        "owner did not exit through the abrupt verification checkpoint")
-                return True
-        return False
+        current = container_status(run, pod)
+        return current if current.get("ready") and current.get("containerID") != prior_id else None
     def restart_status():
-        p = run.cluster.kubectl("get", "pod", pod, "-o", "json", json_output=True)
-        c = next((c for c in p.get("status", {}).get("containerStatuses", []) if c.get("name") == "aggregator"), {})
-        return f"pod {pod}: ready={c.get('ready')}, restarts={c.get('restartCount')}, state={list((c.get('state') or {}).keys())}"
-    run.wait("killed Aggregator container restart", restarted, run.config.resume_timeout, status=restart_status)
+        current = container_status(run, pod)
+        last_exit = current.get("lastState", {}).get("terminated", {})
+        return (f"pod {pod}: ready={current.get('ready')}, restarts={current.get('restartCount')}, "
+                f"state={list((current.get('state') or {}).keys())}, last_exit={last_exit.get('exitCode')}, "
+                f"reason={last_exit.get('reason')}")
+    replacement = run.wait("killed Aggregator container restart", restarted, run.config.resume_timeout, status=restart_status)
+    run.save("controlled-crash-restart.json", {"pod": pod, "original_container": prior,
+             "verified_termination": exit_evidence["termination"], "replacement_container": replacement})
     run.forwards.close("aggregator"); run.forwards.urls.pop("aggregator", None)
     session.feed("/admin/resume-all", {"count": run.p4_total})
     wait_offset(run, run.p4_total - 1)

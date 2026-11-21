@@ -31,8 +31,9 @@ func (ctrl *Controller) CaptureRawPoll(ctx context.Context, source string, paylo
 			return Invalid{fmt.Errorf("invalid batch key or capture limit exceeded")}
 		}
 	}
-	return ctrl.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := ctrl.fencePoll(tx, source, true); err != nil {
+	var proof pollWriteEvidence
+	err := ctrl.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := ctrl.checkPollFence(tx, source, true, &proof); err != nil {
 			return err
 		}
 		for _, payload := range payloads {
@@ -45,6 +46,8 @@ func (ctrl *Controller) CaptureRawPoll(ctx context.Context, source string, paylo
 			VALUES (?, true, clock_timestamp()) ON CONFLICT (source) DO UPDATE
 			SET healthy = true, last_success_at = excluded.last_success_at, last_error_at = NULL, last_error = NULL`, source).Error
 	})
+	ctrl.logPollWrite(ctx, source, "raw_capture", proof, err)
+	return err
 }
 
 func newInboxMessage(ctx context.Context, source, key, kind string, raw []byte) model.InboxMessage {
@@ -66,8 +69,11 @@ func (ctrl *Controller) ProcessInbox(ctx context.Context, source string, limit i
 	for range limit {
 		found := false
 		delta := 0
+		var proof pollWriteEvidence
+		operation := "inbox_process"
+		writeCtx := ctx
 		err := ctrl.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if err := ctrl.fencePoll(tx, source, true); err != nil {
+			if err := ctrl.checkPollFence(tx, source, true, &proof); err != nil {
 				return err
 			}
 			var message model.InboxMessage
@@ -86,6 +92,8 @@ func (ctrl *Controller) ProcessInbox(ctx context.Context, source string, limit i
 			found = true
 			messageCtx := telemetry.Propagation.Extract(ctx, propagation.MapCarrier{"traceparent": message.TraceParent, "tracestate": message.TraceState})
 			messageCtx = httpkit.WithCorrelationID(messageCtx, message.CorrelationID)
+			writeCtx = messageCtx
+			operation = "inbox_" + message.Kind
 			name := "ingest " + message.Source
 			if message.Kind == "envelope" {
 				name = "inbox expand " + message.Source
@@ -142,6 +150,9 @@ func (ctrl *Controller) ProcessInbox(ctx context.Context, source string, limit i
 			delta = count
 			return nil
 		})
+		if found || err != nil {
+			ctrl.logPollWrite(writeCtx, source, operation, proof, err)
+		}
 		if err != nil {
 			return changed, err
 		}
