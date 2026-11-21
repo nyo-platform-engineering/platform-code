@@ -18,6 +18,11 @@ credential analyst, dan akses `kubectl exec` ke Aggregator serta coordinator Cit
 | 7 | Observasi feed live pada deployment selama 180 detik. |
 | 8 | Putus koneksi SSE secara sengaja, replay offset inklusif, pastikan state tidak berubah/ganda. |
 
+Seluruh skenario acceptance P4 dijalankan dari folder ini. Dukungan runtime di
+Aggregator (`p4_verification.go` dan route internal) mengisolasi schema dan
+menyediakan fault injection; itu bukan suite tes tambahan. Route Client
+`/satellite/stats` menyediakan data untuk dashboard yang ter-deploy.
+
 **Target tetap deployment Aggregator, Client, dan Citus yang sama.** Hanya sumber
 SSE fixture yang ditambahkan. Data terkontrol memakai schema kosong sementara pada
 database Citus yang sama, dengan tabel HazardEvent tetap didistribusikan ke worker.

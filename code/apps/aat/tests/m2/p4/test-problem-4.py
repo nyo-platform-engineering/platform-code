@@ -27,7 +27,7 @@ class TestConfig:
     max_lag_events: int = 500
     catch_up_timeout: float = 300  # Only waits for the first committed offset.
 
-    # Criteria 5 and 8: kill every Aggregator mid-stream and wait for the resume.
+    # Criteria 5 and 8: crash the active consumer owner and wait for recovery.
     resume_timeout: float = 300
 
     # Consumer statistics (group 1, from the Aggregator logs, see consumer_stats.py).
@@ -51,7 +51,7 @@ class TestConfig:
     verification_normal_rate: int = 20
     verification_burst_seconds: int = 10
 
-    # Criterion 6 (partial): compare the Audit API count/checksum with the store.
+    # Internal consistency smoke check; not the official criterion 6 reference.
     compare_audit_checksum: bool = True
 
     # No alternate application or database is started.
