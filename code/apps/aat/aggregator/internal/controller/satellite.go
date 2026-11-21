@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"sort"
 	"time"
@@ -320,18 +321,37 @@ type SatelliteStats struct {
 	NewestDetection  *time.Time `json:"newest_detection_at"`
 }
 
+// satelliteStatsTimeout bounds the stats request. The counts scan every stored
+// detection (millions over a long feed), so they get this budget instead of the
+// cluster's 2 s statement_timeout, which is meant for the request paths.
+const satelliteStatsTimeout = 5 * time.Second
+
 // SatelliteCounts reports what the spec requires to be counted rather than dropped.
 func (ctrl *Controller) SatelliteCounts(ctx context.Context) (SatelliteStats, error) {
 	var stats SatelliteStats
-	err := ctrl.DB.WithContext(ctx).Raw(`
-		SELECT
-			(SELECT count(*) FROM (SELECT 1 FROM satellite_detections WHERE fire_ref IS NOT NULL GROUP BY fire_ref HAVING count(*) >= 2) f) AS fires,
-			(SELECT count(*) FROM (SELECT 1 FROM satellite_detections WHERE fire_ref IS NOT NULL GROUP BY fire_ref HAVING count(*) = 1) s) AS single_detections,
-			count(*) FILTER (WHERE late) AS late_detections,
-			count(*) FILTER (WHERE confidence = 'l') AS low_confidence,
-			count(*) FILTER (WHERE retracted) AS retracted,
-			max(detected_at) AS newest_detection
-		FROM satellite_detections`).Scan(&stats).Error
+	err := ctrl.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// SET LOCAL lasts until the end of this read-only transaction. The satellite
+		// tables live on the coordinator, so nothing needs propagating to workers.
+		if err := tx.Exec(fmt.Sprintf("SET LOCAL statement_timeout = %d", satelliteStatsTimeout.Milliseconds())).Error; err != nil {
+			return err
+		}
+		// Serial on purpose: measured on the lab at 1.7M detections, the plan ran in
+		// 1.0 s serial vs 1.8–2.6 s with parallel workers, and parallel workers were
+		// still cancelled at the cluster's 2 s default despite the SET LOCAL above.
+		if err := tx.Exec("SET LOCAL max_parallel_workers_per_gather = 0").Error; err != nil {
+			return err
+		}
+		// One pass over the fires gives both counts; grouping twice doubled the cost.
+		return tx.Raw(`
+			SELECT f.fires, f.single_detections, d.late_detections, d.low_confidence, d.retracted, d.newest_detection
+			FROM (SELECT count(*) FILTER (WHERE n >= 2) AS fires, count(*) FILTER (WHERE n = 1) AS single_detections
+			      FROM (SELECT count(*) AS n FROM satellite_detections WHERE fire_ref IS NOT NULL GROUP BY fire_ref) g) f,
+			     (SELECT count(*) FILTER (WHERE late) AS late_detections,
+			             count(*) FILTER (WHERE confidence = 'l') AS low_confidence,
+			             count(*) FILTER (WHERE retracted) AS retracted,
+			             max(detected_at) AS newest_detection
+			      FROM satellite_detections) d`).Scan(&stats).Error
+	}, &sql.TxOptions{ReadOnly: true})
 	if stats.NewestDetection != nil {
 		utc := stats.NewestDetection.UTC()
 		stats.NewestDetection = &utc
@@ -340,7 +360,7 @@ func (ctrl *Controller) SatelliteCounts(ctx context.Context) (SatelliteStats, er
 }
 
 func (ctrl *Controller) SatelliteStatsHandler(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), satelliteStatsTimeout)
 	defer cancel()
 	stats, err := ctrl.SatelliteCounts(ctx)
 	if err != nil {

@@ -27,7 +27,8 @@ RESET_STEPS = [
     ("sensor_states_deleted", "DELETE FROM sensor_states WHERE source = 'SENSOR_PANTAI'"),
     ("poll_states_deleted", "DELETE FROM poll_states WHERE source = 'SENSOR_PANTAI'"),
     ("other_sources_after", "SELECT source, count(*) FROM hazard_events WHERE source <> 'SENSOR_PANTAI' GROUP BY source ORDER BY source"),
-    ("reset_at", "SELECT clock_timestamp()::text"),
+    # ISO 8601 in UTC: Python < 3.11 cannot parse PostgreSQL's text form ("+00").
+    ("reset_at", """SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"')"""),
 ]
 
 # Use individual commands inside one transaction. Citus does not support wrapping

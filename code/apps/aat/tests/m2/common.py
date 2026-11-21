@@ -43,12 +43,18 @@ def require(condition, message):
 
 
 def parse_time(text):
-    """RFC 3339 from Go (nanoseconds allowed) to an aware datetime."""
-    text = text.replace("Z", "+00:00")
+    """RFC 3339 from Go (nanoseconds allowed) or PostgreSQL to an aware datetime.
+
+    Python 3.10's fromisoformat needs exactly 3 or 6 fraction digits and a +HH:MM
+    offset, so pad or cut the fraction and expand PostgreSQL's short "+00".
+    """
+    text = text.strip().replace("Z", "+00:00")
+    if len(text) > 10 and text[-3] in "+-" and text[-2:].isdigit():
+        text += ":00"
     if "." in text:
         head, rest = text.split(".", 1)
         cut = next((i for i, ch in enumerate(rest) if ch in "+-"), len(rest))
-        text = f"{head}.{rest[:cut][:6]}{rest[cut:]}"
+        text = f"{head}.{rest[:cut][:6].ljust(6, '0')}{rest[cut:]}"
     return dt.datetime.fromisoformat(text)
 
 
