@@ -23,7 +23,10 @@ type Controller struct {
 	PollOwner     *model.PollOwner
 	AcceptPVMBGV2 bool
 	// SatelliteLateness overrides DefaultSatelliteLateness when positive.
-	SatelliteLateness time.Duration
+	SatelliteLateness           time.Duration
+	DatabaseRole                string
+	VerificationCrash           func()
+	SatelliteVerificationSchema string
 }
 
 func (ctrl *Controller) Ping(ctx context.Context) error {

@@ -50,7 +50,9 @@ def parse(pod, record, batches, progress):
     if record.get("msg") == BATCH:
         batches.append({"pod": pod, "time": record["time"], "offset": record.get("offset"),
                         "events": record.get("events", 0), "commit_ms": record.get("commit_ms", 0),
-                        "ingest_latency_ms": record.get("ingest_latency_ms")})
+                        "ingest_latency_ms": record.get("ingest_latency_ms"),
+                        "ingest_latency_samples_ms": record.get("ingest_latency_samples_ms"),
+                        "verification_schema": record.get("verification_schema", "")})
     elif record.get("msg") == PROGRESS and isinstance(record.get("lag_events"), int):
         progress.append({"pod": pod, "time": record["time"], "lag_events": record["lag_events"]})
 
@@ -281,7 +283,15 @@ def measure(run):
     peak = max(peak, average)
 
     def latencies(indexes):
-        return [b["ingest_latency_ms"] for i in indexes for b in by_window[i] if b["ingest_latency_ms"] is not None]
+        selected = [b for i in indexes for b in by_window[i]]
+        # Older deployments only log batch maxima: do not label those as event p95.
+        if any(not isinstance(b.get("ingest_latency_samples_ms"), list) for b in selected):
+            return []
+        return [sample for b in selected for sample in b["ingest_latency_samples_ms"]]
+
+    def batch_maxima(indexes):
+        return [b["ingest_latency_ms"] for i in indexes for b in by_window[i]
+                if b["ingest_latency_ms"] is not None]
 
     result = {
         "log_source": source, "batches_logged": len(batches), "progress_samples": len(progress),
@@ -303,6 +313,9 @@ def measure(run):
         "live_seconds_observed": live_seconds,
         "live_average_events_per_second": round(average, 2),
         f"live_peak_{config.peak_window_seconds:.0f}s_events_per_second": round(peak, 2),
+        "latency_definition": "per-event SSE receipt to durable batch/HazardEvent commit; unavailable for old logs",
+        "live_batch_max_p95_estimate_ms": p95(batch_maxima(current)),
+        "backlog_batch_max_p95_estimate_ms": p95(batch_maxima(behind)),
         "live_p95_ingest_latency_ms": p95(latencies(current)),
         "backlog_p95_ingest_latency_ms": p95(latencies(behind)),
     }

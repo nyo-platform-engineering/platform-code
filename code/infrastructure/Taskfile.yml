@@ -53,7 +53,7 @@ tasks:
     desc: Run the guided M2 P4 test (Feed Satelit); needs SATELLITE_GROUP_TOKEN in .env.runtime
     interactive: true
     cmds:
-      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p4/test-problem-4.py"'
+      - 'python3 "{{.TASKFILE_DIR}}/../apps/aat/tests/m2/p4/test-problem-4.py" {{.CLI_ARGS}}'
   m2:p5:
     desc: Reset Sensor Pantai practice data, verify critical alerts, then test outage and client overload
     interactive: true

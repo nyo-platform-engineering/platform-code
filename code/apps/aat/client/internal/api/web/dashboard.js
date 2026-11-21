@@ -388,6 +388,8 @@ function status(text, cls = "") {
 }
 function showLogin(message = "") {
   state.authVersion++;
+  satelliteSamples = [];
+  $("satellite-history").replaceChildren();
   state.sequence++;
   state.refreshing = null;
   state.active = false;
@@ -443,6 +445,62 @@ async function access(force = false) {
   if (!state.pair) throw new DOMException("Sesi dibatalkan", "AbortError");
   return state.pair.access_token;
 }
+
+let satelliteBusy = false;
+let satelliteSamples = [];
+async function loadSatellite() {
+  if (!state.active || satelliteBusy || document.hidden) return;
+  satelliteBusy = true;
+  const version = state.authVersion;
+  try {
+    let token = await access();
+    let response = await fetch("/satellite/stats", {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(6000),
+    });
+    if (response.status === 401) {
+      token = await access(true);
+      response = await fetch("/satellite/stats", {
+        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(6000),
+      });
+    }
+    if (!response.ok) throw new Error("Status consumer belum tersedia");
+    const data = await response.json();
+    if (version !== state.authVersion || !state.active) return;
+    const feed = data.feed || {};
+    const value = (id, n) => { $(id).textContent = Number.isSafeInteger(n) && n >= 0 ? number.format(n) : "—"; };
+    value("satellite-lag", feed.lag_events);
+    value("satellite-offset", feed.offset);
+    value("satellite-latest", feed.latest_offset);
+    value("satellite-late", data.late_detections);
+    value("satellite-rejected", feed.rejected_events);
+    const checked = Date.parse(feed.checked_at);
+    const stale = !Number.isFinite(checked) || Date.now() - checked > 30000;
+    $("satellite-state").textContent = stale ? "Status feed belum diperbarui; angka ini belum membuktikan consumer mutakhir."
+      : feed.offset == null ? "Consumer belum menyimpan offset pertama."
+      : feed.lag_events == null ? "Consumer aktif; ketertinggalan belum diketahui."
+      : feed.lag_events === 0 ? "Consumer mutakhir pada pemeriksaan terakhir."
+      : "Consumer tertinggal; pantau perubahan offset dan backlog.";
+    if (data.verification_schema) $("satellite-state").textContent = "Verifikasi P4 terkontrol · " + $("satellite-state").textContent;
+    $("satellite-updated").textContent = `Diperiksa ${timeLabel.format(new Date())}; posisi feed ${stale ? "belum terkonfirmasi" : timeLabel.format(new Date(checked))}. Diperbarui tiap 5 detik.`;
+    if (!stale && Number.isSafeInteger(feed.lag_events) && feed.lag_events >= 0) {
+      satelliteSamples.push({ at: Date.now(), lag: feed.lag_events });
+      satelliteSamples = satelliteSamples.filter((s) => Date.now() - s.at <= 300000);
+      const graph = svg("svg", { viewBox: "0 0 800 150", role: "img", "aria-label": "Lag event selama lima menit terakhir" });
+      const max = Math.max(1, ...satelliteSamples.map((s) => s.lag));
+      const start = satelliteSamples[0].at;
+      const span = Math.max(5000, Date.now() - start);
+      const points = satelliteSamples.map((s) => `${50 + (s.at-start)/span*730},${115-s.lag/max*90}`).join(" ");
+      graph.append(svg("path", { d: "M50 20V115H780", fill: "none", stroke: "#cbd1da" }),
+        svg("polyline", { points, fill: "none", stroke: "currentColor", "stroke-width": 2 }));
+      $("satellite-history-caption").textContent = `Riwayat sesi ini · maksimal 5 menit · skala ${number.format(max)} event`;
+      $("satellite-history").replaceChildren(graph);
+    }
+  } catch (error) {
+    if (version === state.authVersion && state.active)
+      $("satellite-state").textContent = "Status consumer tidak tersedia. Angka terakhir belum terkonfirmasi; mencoba lagi.";
+  } finally { satelliteBusy = false; }
+}
+setInterval(loadSatellite, 5000);
 
 function query() {
   let to = new Date(),
@@ -565,7 +623,7 @@ $("login-form").addEventListener("submit", async (event) => {
     $("dashboard").hidden = false;
     $("logout").hidden = false;
     paint(null);
-    await load(true);
+    await Promise.all([load(true), loadSatellite()]);
   } catch (error) {
     $("login-error").textContent = error.message;
   } finally {

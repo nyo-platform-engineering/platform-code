@@ -24,18 +24,13 @@ files, and the step runner.
 
 ## Problem 4 — `task m2:p4`
 
-Needs `SATELLITE_GROUP_TOKEN` in `.env.runtime` and the Aggregators restarted after
-adding it. The feed accepts **one connection per group token**: if another stack
-holds it, the run stops with `429 too_many_connections`.
+Tes memakai deployment Aggregator, Client, dan Citus yang sedang berjalan:
+180 detik feed live, lalu input SSE terkontrol untuk event time/late arrival,
+update/retract, burst nyata 60×, crash sebelum commit, dan reconnect.
+Data live dipertahankan; env dan Argo dipulihkan pada exit. Jangan jalankan
+bersamaan dengan tes lain. Referensi asisten tetap pending sampai tersedia.
 
-| Group | Steps | Criteria |
-| --- | --- | --- |
-| [group1_feed.py](p4/group1_feed.py) | offset advances while watched; lag falls to `CONFIG.max_lag_events`; 0 rejected events; consumer statistics ([consumer_stats.py](p4/consumer_stats.py)) from the Aggregator's batch and lag log lines in **Loki** (last `CONFIG.loki_lookback_hours`, 6; falls back to the pod logs): capacity = median events/s in 10 s windows with the lag ≥ `CONFIG.catch_up_min_lag` (p10/p90 too), live average and busiest minute, p95 ingest latency; saved to `consumer-batches.jsonl` and `consumer-progress.jsonl` | 7, 4, payload format |
-| [group2_fires.py](p4/group2_fires.py) | every WILDFIRE: ≥ 2 detections, valid keys, satellites, no low confidence, severity rules, `occurred_at` = earliest detection, each detection in one fire, unique `source_ref_id`; NORMAL events carry `dissolved`/`merged`; excluded detections counted; Audit API checksum vs store | 1, 2, 3, 6 (partial) |
-| [group3_recovery.py](p4/group3_recovery.py) | delete every Aggregator pod; the offset resumes past the pre-crash point, no fire lost or duplicated | 5, 8 |
-| [group4_burst.py](p4/group4_burst.py) | runs last: simulates `CONFIG.burst_factor`× (60) the live average (realistic) and the busiest minute (worst case: satellite passes back to back) for 60–600 s with the measured capacity; fails if the realistic `CONFIG.verdict_burst_seconds` (120) case is not current within 60 s; table in `burst-simulation.json` | 4 (forecast only) |
-
-The capacity is only measured when Loki holds a catch-up from the last 6 hours (at least `CONFIG.min_catch_up_windows` windows of 10 s with the feed lag at 2,000+ events): a fresh `task up` or a lab that was off for a while both replay a backlog. Otherwise it is estimated from commit times (optimistic), or the forecast is skipped. The practice feed arrives in satellite passes (about 900 events in 10 s, every few minutes), so the busiest minute is several times the average. The forecast is a model: the real burst runs only in the exam session and is shown on the Grafana panels.
+Lihat [cara menjalankan, cakupan, dan pemulihan P4](p4/README.md).
 
 ## Problem 5 — `task m2:p5`
 

@@ -148,7 +148,7 @@ def forecast(run):
 
 def run_group(run):
     if not run.config.simulate_burst:
-        run.skip("burst-simulation", "CONFIG.simulate_burst is False")
+        output("INFO", "Diagnostic burst forecast disabled; actual burst evidence is checked separately")
         return
     input("Enter → simulate the 60x burst with this cluster's measured consumer speed: ")
     result = run.stage("burst-simulation", forecast, run)

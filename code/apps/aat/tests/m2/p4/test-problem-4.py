@@ -10,8 +10,8 @@ from common import INFRA, main, require  # noqa: E402
 
 import group1_feed  # noqa: E402
 import group2_fires  # noqa: E402
-import group3_recovery  # noqa: E402
-import group4_burst  # noqa: E402
+import controlled_checks  # noqa: E402
+import deployment_checks  # noqa: E402
 
 
 @dataclass
@@ -21,13 +21,13 @@ class TestConfig:
     env_file: Path = INFRA / ".env.runtime"
     kubeconfig: Path = INFRA / ".state/kubeconfig"
 
-    # Criteria 7 and 4: watch the offset move, then wait until the lag is small.
-    observe_seconds: float = 15
+    # Criterion 7: observe activity; initial backlog is reported without blocking the suite.
+    observe_seconds: float = 180
+    lag_observe_seconds: float = 30
     max_lag_events: int = 500
-    catch_up_timeout: float = 300
+    catch_up_timeout: float = 300  # Only waits for the first committed offset.
 
-    # Criteria 5 and 8: kill every Aggregator mid-stream and wait for the resume.
-    restart_aggregators: bool = True
+    # Criteria 5 and 8: crash the active consumer owner and wait for recovery.
     resume_timeout: float = 300
 
     # Consumer statistics (group 1, from the Aggregator logs, see consumer_stats.py).
@@ -47,18 +47,20 @@ class TestConfig:
     peak_window_seconds: float = 60
     satellite_batch_size: int = 200
 
-    # Criterion 4 forecast (group 4, run last): simulate a burst of burst_factor x the
-    # live average (realistic) and burst_factor x the busiest peak_window_seconds (worst
-    # case: satellite passes back to back) for each burst_seconds, with the measured
-    # capacity. The verdict: the realistic case for verdict_burst_seconds is current
-    # (lag <= max_lag_events) within 60 s. A model, not the exam burst.
-    simulate_burst: bool = True
-    burst_factor: float = 60
-    burst_seconds: tuple = (60, 120, 300, 600)
-    verdict_burst_seconds: float = 120
+    # Controlled source served in cluster; existing Aggregator/Client/Citus are the test targets.
+    verification_normal_rate: int = 20
+    verification_burst_seconds: int = 10
 
-    # Criterion 6 (partial): compare the Audit API count/checksum with the store.
+    # Internal consistency smoke check; not the official criterion 6 reference.
     compare_audit_checksum: bool = True
+
+    # No alternate application or database is started.
+    reference_file: Path | None = None
+    reference_difference_explanation: str = ""
+    observe_external_burst: bool = False
+    burst_start_timeout: float = 60
+    burst_observation_timeout: float = 900
+    burst_sample_seconds: float = 5
 
     # Per-request bound.
     request_timeout: float = 15
@@ -70,16 +72,15 @@ class TestConfig:
 CONFIG = TestConfig()
 
 MANUAL_EVIDENCE = [
-    "Criterion 4: 60x burst in the exam session; Grafana 'P4 Feed Satelit' lag and p95 panels "
-    "(group 4 only forecasts it from measured numbers)",
-    "Criterion 6: comparison with the assistants' reference results and an explanation of differences",
-    "Criterion 7: the live feed processed on screen during the demo recording",
+    "Criterion 6: assistants reference comparison when their results become available",
+    "Criterion 7: record the deployed Client dashboard during the live demo",
     "Report: event time vs processing time, allowed lateness, exactly-once evidence",
 ]
 
 
 def validate_config(config):
-    for name in ("observe_seconds", "catch_up_timeout", "resume_timeout", "request_timeout"):
+    for name in ("observe_seconds", "lag_observe_seconds", "catch_up_timeout", "resume_timeout", "request_timeout",
+                 "burst_start_timeout", "burst_observation_timeout", "burst_sample_seconds"):
         value = getattr(config, name)
         require(math.isfinite(value) and value > 0, f"CONFIG.{name} must be finite and positive")
     require(config.max_lag_events >= 0, "CONFIG.max_lag_events must not be negative")
@@ -87,13 +88,32 @@ def validate_config(config):
     require(config.min_catch_up_windows >= 1, "CONFIG.min_catch_up_windows must be at least 1")
     require(config.min_catch_up_batches >= 2, "CONFIG.min_catch_up_batches must be at least 2")
     require(config.catch_up_min_lag > config.max_lag_events, "CONFIG.catch_up_min_lag must be above max_lag_events")
-    for name in ("peak_window_seconds", "burst_factor", "loki_lookback_hours", "window_seconds"):
+    for name in ("peak_window_seconds", "loki_lookback_hours", "window_seconds"):
         value = getattr(config, name)
         require(math.isfinite(value) and value > 0, f"CONFIG.{name} must be finite and positive")
-    require(config.burst_seconds and all(s > 0 for s in config.burst_seconds), "CONFIG.burst_seconds must be positive")
-    require(config.verdict_burst_seconds in config.burst_seconds, "CONFIG.verdict_burst_seconds must be in burst_seconds")
+    require(type(config.verification_normal_rate) is int and config.verification_normal_rate > 0,
+            "CONFIG.verification_normal_rate must be a positive integer")
+    require(type(config.verification_burst_seconds) is int and config.verification_burst_seconds > 0,
+            "CONFIG.verification_burst_seconds must be a positive integer")
+    require(config.verification_normal_rate * config.verification_burst_seconds * 60 <= 1000000,
+            "controlled burst is too large for the fixture source")
+
 
 
 if __name__ == "__main__":
-    sys.exit(main(4, replace(CONFIG), [group1_feed, group2_fires, group3_recovery, group4_burst],
-                  ("AGGREGATOR_TOKEN", "SATELLITE_GROUP_TOKEN"), MANUAL_EVIDENCE, validate_config))
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--restore", type=Path, help="restore a saved controlled-run journal")
+    args = parser.parse_args()
+    if args.restore:
+        import json
+        from common import Run
+        from verification_session import Verification
+        baseline = json.loads(args.restore.read_text())
+        run = Run(4, replace(CONFIG), [], folder=args.restore.resolve().parent)
+        verification = Verification(run, baseline=baseline)
+        verification.restore()
+        print("P4 deployment restored; see restore-result.json")
+        sys.exit(0)
+    sys.exit(main(4, replace(CONFIG), [deployment_checks.PREFLIGHT, group1_feed, group2_fires, controlled_checks, deployment_checks.FINAL],
+                  ("AGGREGATOR_TOKEN", "SATELLITE_GROUP_TOKEN", "ANALYST_CLIENT_SECRET"), MANUAL_EVIDENCE, validate_config))

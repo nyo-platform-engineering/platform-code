@@ -1135,3 +1135,14 @@ td {
     max-width: 100%;
   }
 }
+
+.satellite-panel { margin-bottom: 20px; }
+.satellite-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 20px; margin: 16px 0; }
+.satellite-metrics dt { font-size: 13px; color: var(--muted); }
+.satellite-metrics dd { margin: 6px 0 0; font-size: 23px; font-weight: 650; overflow-wrap: anywhere; }
+
+#satellite-state, .satellite-metrics, #satellite-history { margin-left: 23px; margin-right: 23px; }
+#satellite-history svg { width: 100%; height: 130px; display: block; color: var(--accent-dark); }
+@media (max-width: 450px) {
+  #satellite-state, .satellite-metrics, #satellite-history { margin-left: 16px; margin-right: 16px; }
+}

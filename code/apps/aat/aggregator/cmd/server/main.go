@@ -41,6 +41,10 @@ func main() {
 	if err != nil {
 		panic("invalid DATABASE_URL")
 	}
+	verificationSchema := os.Getenv("P4_TEST_SCHEMA")
+	if err := configureP4Verification(config, verificationSchema); err != nil {
+		panic(err)
+	}
 	config.Tracer = dbtrace.New()
 	sqlDB := stdlib.OpenDB(*config)
 	defer sqlDB.Close()
@@ -69,6 +73,11 @@ func main() {
 	ctrl := &controller.Controller{DB: db, PageCache: &controller.HazardPageCache{}, Store: storage.NewPostgres(db, storage.Identity{
 		Node: os.Getenv("STORE_NODE_NAME"), Unit: httpkit.Env("STORE_UNIT", "postgres"),
 	})}
+	ctrl.DatabaseRole = config.User
+	ctrl.SatelliteVerificationSchema = verificationSchema
+	if verificationSchema != "" {
+		ctrl.VerificationCrash = func() { os.Exit(137) }
+	}
 	ctrl.ReadRPSLimit = httpkit.Integer("READ_RPS_LIMIT", 0)
 	ctrl.ReadRPSBurst = httpkit.Integer("READ_RPS_BURST", 5)
 	if ctrl.ReadRPSLimit < 0 || ctrl.ReadRPSBurst < 1 {
@@ -86,6 +95,9 @@ func main() {
 	}
 	ctrl.SatelliteLateness = time.Duration(lateness) * time.Minute
 	if err := waitForDatabase(startupCtx, ctrl.Ping); err != nil {
+		panic(err)
+	}
+	if err := validateP4Verification(startupCtx, db, verificationSchema); err != nil {
 		panic(err)
 	}
 	if err := model.Migrate(startupCtx, db); err != nil {
@@ -166,8 +178,10 @@ func main() {
 
 	natsURL := httpkit.Env("NATS_URL", "nats://nats:4222")
 	var workers sync.WaitGroup
-	workers.Go(func() { bmkgPoller.Run(workerCtx, pollInterval) })
-	workers.Go(func() { pvmbgPoller.Run(workerCtx, pollInterval) })
+	if verificationSchema == "" {
+		workers.Go(func() { bmkgPoller.Run(workerCtx, pollInterval) })
+		workers.Go(func() { pvmbgPoller.Run(workerCtx, pollInterval) })
+	}
 	if satelliteToken != "" {
 		consumer := newSatelliteConsumer(httpkit.Env("SATELLITE_FEED_URL", "https://satellite.naufarrel.dev"), satelliteToken, ctrl)
 		consumer.batchSize = httpkit.Integer("SATELLITE_BATCH_SIZE", consumer.batchSize)
@@ -179,7 +193,7 @@ func main() {
 		slog.Warn("satellite feed disabled: SATELLITE_GROUP_TOKEN is empty")
 	}
 	// Sensor Pantai runs only when its token is configured.
-	if sensorToken != "" {
+	if sensorToken != "" && verificationSchema == "" {
 		sensor := newSensorPoller(httpkit.Env("SENSOR_PANTAI_URL", "http://sensor-pantai:8080"), sensorToken, ctrl,
 			time.Duration(httpkit.Integer("SENSOR_TIMEOUT_MS", 2000))*time.Millisecond)
 		sensor.interval = time.Duration(httpkit.Integer("SENSOR_POLL_INTERVAL_MS", 1000)) * time.Millisecond
@@ -191,12 +205,14 @@ func main() {
 	} else {
 		slog.Warn("sensor pantai disabled: PANTAI_AUTH_TOKEN is empty")
 	}
-	workers.Go(func() { runOutboxRelay(workerCtx, ctrl, natsURL) })
+	if verificationSchema == "" {
+		workers.Go(func() { runOutboxRelay(workerCtx, ctrl, natsURL) })
+	}
 	processReports, err := strconv.ParseBool(httpkit.Env("FIELD_REPORT_PROCESSOR_ENABLED", "true"))
 	if err != nil {
 		panic("FIELD_REPORT_PROCESSOR_ENABLED must be true or false")
 	}
-	if processReports {
+	if processReports && verificationSchema == "" {
 		workers.Go(func() { runFieldReportProcessor(workerCtx, ctrl) })
 	}
 

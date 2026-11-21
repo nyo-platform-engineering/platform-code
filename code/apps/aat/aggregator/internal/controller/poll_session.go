@@ -68,11 +68,15 @@ func (ctrl *Controller) AcquirePollSession(ctx context.Context, source string) (
 			session.Close()
 		}
 	}()
+	statementTimeout := "5000ms"
+	if ctrl.SatelliteVerificationSchema != "" {
+		statementTimeout = "120000ms"
+	}
 	// Let PostgreSQL release ownership if the polling process freezes.
 	for key, value := range map[string]string{
 		"idle_session_timeout":                "20000ms",
 		"idle_in_transaction_session_timeout": "5000ms",
-		"statement_timeout":                   "5000ms",
+		"statement_timeout":                   statementTimeout,
 	} {
 		if _, err := conn.ExecContext(ctx, "SELECT set_config($1, $2, false)", key, value); err != nil {
 			return nil, err
@@ -94,7 +98,11 @@ func (ctrl *Controller) AcquirePollSession(ctx context.Context, source string) (
 		return nil, err
 	}
 	if version >= 170000 {
-		if _, err := conn.ExecContext(ctx, "SELECT set_config('transaction_timeout', '10000ms', false)"); err != nil {
+		transactionTimeout := "10000ms"
+		if ctrl.SatelliteVerificationSchema != "" {
+			transactionTimeout = "120000ms"
+		}
+		if _, err := conn.ExecContext(ctx, "SELECT set_config('transaction_timeout', $1, false)", transactionTimeout); err != nil {
 			return nil, err
 		}
 	}
