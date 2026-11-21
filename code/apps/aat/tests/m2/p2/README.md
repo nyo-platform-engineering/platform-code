@@ -206,6 +206,7 @@ do not run the P1 polling-freeze task at the same time.
 Evidence is written to `tests/m2/p2/evidence/m2-p2-<timestamp>-<id>/` (ignored by Git):
 
 - `result.json`: individual pass/fail/skip, measurements, cleanup errors, limits.
+- `console.log`: terminal messages, stderr, progress, Enter prompts and final cleanup/summary, starting after evidence-folder selection.
 - `deployment-baseline.json`: original image, resources, strategy and node kernels.
 - `throughput-*-deployment.json`: image IDs and pod-template fingerprints around each sample.
 - `polling.jsonl`: filtered source/upstream logs with pod UID and runner observation time.

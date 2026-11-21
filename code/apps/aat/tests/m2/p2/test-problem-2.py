@@ -14,6 +14,7 @@ import group1_coordination
 import group2_clock_freeze
 import group3_load
 from helper import INFRA, ROOT, Run, output, require, utc
+from common import console_log
 
 
 @dataclass
@@ -122,6 +123,11 @@ def main():
     config = replace(CONFIG)
     name = "m2-p2-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S").lower() + "-" + uuid.uuid4().hex[:8]
     folder = create_evidence_folder(config, name)
+    with console_log(folder):
+        return execute(config, folder, name)
+
+
+def execute(config, folder, name):
     run = Run(config, folder, name)
     code = 1
     try:

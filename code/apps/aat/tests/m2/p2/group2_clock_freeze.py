@@ -162,8 +162,20 @@ def freeze(run):
     started, wall = time.monotonic(), time.time()
     def action(command):
         with run.phase(command + ": " + run.config.worker, 90):
-            subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker],
-                           cwd=INFRA, stdin=subprocess.DEVNULL, check=True, timeout=90)
+            try:
+                result = subprocess.run(["bash", "scripts/vm/main.sh", command, run.config.worker],
+                                        cwd=INFRA, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, text=True, timeout=90)
+            except subprocess.TimeoutExpired as error:
+                captured = error.stdout or ""
+                if isinstance(captured, bytes):
+                    captured = captured.decode(errors="replace")
+                if captured:
+                    print(captured, end="", flush=True)
+                raise
+            if result.stdout:
+                print(result.stdout, end="", flush=True)
+            result.check_returncode()
     run.logs.begin_freeze(old["pod_uid"])
     def resume():
         run.logs.resume_freeze(old["pod_uid"])

@@ -1,4 +1,4 @@
-"""Shared M2 utilities and setup for the guided P4 and P5 tests.
+"""Shared M2 cluster, evidence and console helpers.
 
 P1 also reuses the paths, validation, timestamps, and console output here.
 The tests run against the Kubernetes lab (VM cluster, or `task up -- --novm` for
@@ -428,6 +428,20 @@ class Tee:
         return answer
 
 
+@contextmanager
+def console_log(folder):
+    """Copy stdout, stderr and prompts to console.log."""
+    with ExitStack() as console:
+        log = console.enter_context((Path(folder) / "console.log").open("a", buffering=1))
+        lock = threading.RLock()
+        stdout = Tee(sys.stdout, log, lock)
+        console.enter_context(redirect_stdout(stdout))
+        console.enter_context(redirect_stderr(Tee(sys.stderr, log, lock)))
+        console.callback(setattr, builtins, "input", builtins.input)
+        builtins.input = stdout.read_input
+        yield
+
+
 def ask_save_evidence(problem, config):
     """Asks whether to keep this run's evidence; Enter keeps it. A fixed
     CONFIG.output_dir is always kept."""
@@ -480,14 +494,7 @@ def main(problem, config, groups, required_keys, manual_evidence, validate=None)
 
 
 def _console_run(problem, config, groups, required_keys, manual_evidence, validate, folder, save, console):
-    # Everything shown in the terminal (prompts included) also goes to console.log.
-    log = console.enter_context((folder / "console.log").open("a", buffering=1))
-    lock = threading.RLock()
-    stdout = Tee(sys.stdout, log, lock)
-    console.enter_context(redirect_stdout(stdout))
-    console.enter_context(redirect_stderr(Tee(sys.stderr, log, lock)))
-    console.callback(setattr, builtins, "input", builtins.input)
-    builtins.input = stdout.read_input
+    console.enter_context(console_log(folder))
     return _run(problem, config, groups, required_keys, manual_evidence, validate, folder, save)
 
 

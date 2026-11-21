@@ -40,12 +40,12 @@ def validate_raw(detail, raw, kind, status="parked"):
 
 
 class Run(CommonRun):
-    def __init__(self, config):
+    def __init__(self, config, folder=None):
         super().__init__(3, config, [
             "Official Tester Agent and exam inputs",
             "Report: schema policy, retry/parking, per-key ordering and delivery semantics",
             "Recorded demo and physical storage durability beyond this bounded crash scenario",
-        ], evidence_root=Path(__file__).resolve().parent / "evidence")
+        ], folder, evidence_root=Path(__file__).resolve().parent / "evidence")
         self.name = "m2-p3-" + uuid.uuid4().hex[:10]
         self.report["full_demo_certified"] = False
         self.report["selected_groups"] = list(config.groups)
