@@ -45,7 +45,6 @@ resources:
     cpu: 100m
     memory: 256Mi
   limits:
-    cpu: "1"
     memory: 512Mi
 image:
   repository: ghcr.io/yonatan-nyo/aat-apps/aggregator

@@ -1,0 +1,255 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod
+  namespace: kube-system
+spec:
+  containers:
+  - name: app
+    image: nginx:1.27
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  - name: sidecar
+    image: busybox:1.37
+    resources:
+      limits: {}
+  - name: unsized
+    image: busybox:1.37
+  initContainers:
+  - name: init
+    image: busybox:1.37
+    resources:
+      requests:
+        cpu: 10m
+      limits:
+        memory: 32Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      - name: sidecar
+        image: busybox:1.37
+        resources:
+          limits: {}
+      - name: unsized
+        image: busybox:1.37
+      initContainers:
+      - name: init
+        image: busybox:1.37
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            memory: 32Mi
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: daemonset
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      - name: sidecar
+        image: busybox:1.37
+        resources:
+          limits: {}
+      - name: unsized
+        image: busybox:1.37
+      initContainers:
+      - name: init
+        image: busybox:1.37
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            memory: 32Mi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: statefulset
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      - name: sidecar
+        image: busybox:1.37
+        resources:
+          limits: {}
+      - name: unsized
+        image: busybox:1.37
+      initContainers:
+      - name: init
+        image: busybox:1.37
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            memory: 32Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      - name: sidecar
+        image: busybox:1.37
+        resources:
+          limits: {}
+      - name: unsized
+        image: busybox:1.37
+      initContainers:
+      - name: init
+        image: busybox:1.37
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            memory: 32Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cronjob
+  namespace: kube-system
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: app
+            image: nginx:1.27
+            resources:
+              requests:
+                cpu: 100m
+                memory: 64Mi
+              limits:
+                memory: 128Mi
+          - name: sidecar
+            image: busybox:1.37
+            resources:
+              limits: {}
+          - name: unsized
+            image: busybox:1.37
+          initContainers:
+          - name: init
+            image: busybox:1.37
+            resources:
+              requests:
+                cpu: 10m
+              limits:
+                memory: 32Mi
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: replicaset
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      - name: sidecar
+        image: busybox:1.37
+        resources:
+          limits: {}
+      - name: unsized
+        image: busybox:1.37
+      initContainers:
+      - name: init
+        image: busybox:1.37
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            memory: 32Mi
+---
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: replicationcontroller
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      - name: sidecar
+        image: busybox:1.37
+        resources:
+          limits: {}
+      - name: unsized
+        image: busybox:1.37
+      initContainers:
+      - name: init
+        image: busybox:1.37
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            memory: 32Mi

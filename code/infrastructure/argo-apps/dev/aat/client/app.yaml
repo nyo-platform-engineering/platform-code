@@ -4,6 +4,7 @@ metadata:
   name: aat-client-dev
   namespace: argocd
   annotations:
+    argocd.argoproj.io/compare-options: ServerSideDiff=true,IncludeMutationWebhook=true
     argocd.argoproj.io/sync-wave: '0'
 spec:
   project: default
