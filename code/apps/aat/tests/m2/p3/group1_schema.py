@@ -1,4 +1,4 @@
-"""Criteria 1, 2 and 5: declared schema policy, raw retention and access."""
+"""P3.1, 2 and 5: schema policy, raw retention and Ops access."""
 import time
 import urllib.parse
 

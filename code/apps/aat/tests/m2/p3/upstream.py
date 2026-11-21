@@ -1,4 +1,4 @@
-"""Temporary PVMBG substitute, using the Python already in the Citus image."""
+"""Temporary PVMBG fixture using the Citus image's Python."""
 import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json

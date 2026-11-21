@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure the guided P3 run here; Enter confirms isolated fault scenarios."""
+"""Guided P3 tests; edit CONFIG below."""
 from __future__ import annotations
 from dataclasses import dataclass, replace
 import math
@@ -23,7 +23,7 @@ class TestConfig:
     retry_observe_seconds: float = 30
     report_count: int = 10
     duplicate_requests: int = 4
-    # Local acceptance budget; the specification says "quickly" without a number.
+    # Local latency budget; the specification gives no numeric limit.
     max_accept_ms: float = 2000
     max_pages: int = 1000
     output_dir: Path | None = None

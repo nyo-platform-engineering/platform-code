@@ -32,6 +32,10 @@ class TestConfig:
     outage_seconds: float = 30
     max_requests_per_second_during_outage: float = 0.5
     client_p95_ms_during_outage: float = 1000
+    # Criterion 3 uses M1's latency target: single-source requests for BMKG, PVMBG and
+    # SATELIT stay under this p95 while the sensor is down. Samples are per source.
+    other_source_p95_ms: float = 300
+    outage_samples: int = 20
     recovery_timeout: float = 240
 
     # Criterion 5: concurrent Media clients (above CLIENT_MAX_CONCURRENT) and the
@@ -59,9 +63,11 @@ MANUAL_EVIDENCE = [
 
 def validate_config(config):
     for name in ("wait_critical_seconds", "alert_p95_ms", "outage_seconds", "client_p95_ms_during_outage",
-                 "recovery_timeout", "request_timeout", "startup_timeout", "max_requests_per_second_during_outage"):
+                 "recovery_timeout", "request_timeout", "startup_timeout", "max_requests_per_second_during_outage",
+                 "other_source_p95_ms"):
         value = getattr(config, name)
         require(math.isfinite(value) and value > 0, f"CONFIG.{name} must be finite and positive")
+    require(config.outage_samples >= 10, "CONFIG.outage_samples must be at least 10 for a p95")
     require(config.media_workers >= 2 and config.field_requests >= 1, "CONFIG.media_workers/field_requests too small")
     require(config.wait_critical_seconds >= 180, "wait_critical_seconds must cover all 150s of the practice scenario plus recovery margin")
 

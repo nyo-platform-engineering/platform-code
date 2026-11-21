@@ -1,4 +1,4 @@
-"""Deterministic upstream bytes and expected durable inbox identities."""
+"""P3 payloads and expected inbox IDs."""
 import copy
 import hashlib
 import json
