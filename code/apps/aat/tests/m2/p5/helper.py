@@ -18,6 +18,11 @@ PRACTICE_APPS = ("platform", "dev-apps", "aat-dependencies-dev", "aat-auth-dev",
 
 def wait_rollouts(run):
     """Observe existing rollouts only; never restart workloads to make setup pass."""
+    client = run.cluster.kubectl("get", "deployment", "client", "-o", "json", json_output=True)
+    replicas = client["spec"].get("replicas", 1)
+    require(replicas >= 3,
+            f"Client is configured for {replicas} replica(s), but P5 needs the deployed three-node Client setup; "
+            "sync aat-client-dev with replica management enabled before starting P5")
     for name in dict.fromkeys((*run.config.deployments, "auth")):
         run.cluster.kubectl("rollout", "status", "deployment/" + name, "--timeout=180s", timeout=190)
     stores = run.cluster.kubectl("get", "statefulsets", "-o", "json", json_output=True)["items"]
