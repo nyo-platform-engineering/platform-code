@@ -48,6 +48,7 @@ class Fault:
 
 
 class PvmbgOutage(Fault):
+    """Legacy admin-flag cleanup for older runs; not used for combined injection."""
     name = "pvmbg-outage"
 
     def inject(self, run):
@@ -190,12 +191,15 @@ def scenario(config):
     """One combined scenario, short enough for the regular P5 run: load, an upstream
     outage, a hung sensor, the notifier cut off from NATS, and a node losing power
     (which also leaves part of the data unavailable until its replicas take over)."""
-    steps = [Step(0, MediaFlood(config.media_workers)), Step(5, PvmbgOutage()),
+    # Fault control must survive the target node: removing this policy only needs
+    # the control-plane API, not a port-forward to the recovering worker's kubelet.
+    steps = [Step(0, MediaFlood(config.media_workers)),
+             Step(5, NetworkDrop("pvmbg-outage", {"app.kubernetes.io/instance": "pvmbg"})),
              Step(10, NetworkDrop("sensor-unreachable", {"role": "sensor"})),
              Step(15, NetworkDrop("notifier-partition", {"role": "consumer"}, "egress"))]
     if config.gameday_node_loss:
         steps.append(Step(20, WorkerDown(config.worker)))
-    return Scenario("combined", "Media spike, PVMBG outage, Sensor Pantai unreachable (calls hang), "
+    return Scenario("combined", "Media spike, PVMBG network outage, Sensor Pantai unreachable (calls hang), "
                     "notifier cut off from NATS" + (", a worker node loses power" if config.gameday_node_loss else ""),
                     config.fault_window, steps)
 

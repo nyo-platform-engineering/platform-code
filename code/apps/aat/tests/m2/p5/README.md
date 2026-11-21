@@ -64,3 +64,11 @@ Angka probe tetap disimpan untuk diagnosis, tetapi bukan hasil SLO game day sah.
 | 6 | Semua fault diakhiri; setelah `hands-off` runner hanya membaca. Recovery harus terbukti lewat endpoint publik. Rehearsal tidak menggantikan profil ujian/Tester Agent. |
 | 7 | Rekaman dan penjelasan dashboard, metrik, serta trace tetap wajib sebagai evidence manual. |
 | 8 | Laporkan SLO/error budget dari run yang valid. Availability HTTP 99% terpisah dari SLI pengiriman alert; receipt/p95 alert game day tetap harus dilaporkan, bukan digantikan angka HTTP. |
+
+Pada skenario gabungan, outage PVMBG disimulasikan dengan NetworkPolicy ingress
+yang memutus akses ke Pod PVMBG. Pencabutan fault memakai API control-plane,
+tidak memerlukan port-forward ke kubelet pada node yang baru dinyalakan.
+Boot node dan pulihnya PVMBG tetap diamati setelah `hands-off`; runner tidak
+menunggu Pod sehat sebagai syarat pencabutan fault. Ini menguji PVMBG tidak
+terjangkau, bukan respons HTTP 503 dari flag admin mock. Cleanup flag admin tetap
+tersedia pada `--restore` untuk run lama yang memakai flag tersebut.
