@@ -142,12 +142,70 @@ availability, not compatibility of an arbitrary business-logic change. Do not
 use a same-image restart or a release with the known bug as a substitute. The
 manual workflow's default `service=all` retains its existing full-build behavior.
 
+## Local storage fencing verification
+
+```bash
+cd code/infrastructure
+task m2:p2:fencing
+```
+
+This requires Go, kubectl, the running three-worker Citus formation, and
+`.env.runtime`. It executes nine database integration tests in temporary schemas.
+The default verifier distributes canonical events across Citus workers in the
+process-freeze scenario. It stops only its own child process with SIGSTOP for
+23 seconds, beyond the production 20-second idle-session timeout, then resumes it.
+The test verifies takeover, rejection of stale raw/canonical/status writes, no
+extra hazard/outbox/inbox rows, and a successful write only after fresh ownership.
+It also rejects reuse of an old fence on a different database connection and
+checks that a failed COMMIT never produces a successful commit receipt.
+
+Evidence is saved under `evidence/m2-p2-fencing-*/`: `console.log`,
+`go-test.jsonl`, and `result.json` (including old/new epochs, backend PIDs,
+freeze duration, transaction receipts and rejection reasons). No load test is
+started and the normal application image, replica count and RPS cap are preserved.
+The child process, temporary schemas and database port-forward are cleaned up.
+This verifies storage mechanisms against k3d; it does not shift a node clock or
+suspend a VM. Those faults remain part of the VM Group 2 run.
+
+## Storage evidence in VM Group 2
+
+Deploy the latest Aggregator image before running Group 2. To run only P2.4–5,
+set `CONFIG = TestConfig(groups=(2,))`, then run `task m2:p2`. Restore the normal
+CONFIG afterward when running the full suite. The runner requires fresh storage
+commit evidence from both mocks before injecting clock faults.
+
+`poll storage committed` is emitted after a successful database COMMIT. It carries
+`source`, `operation`, `epoch`, `owner`, `backend_pid`, `transaction_id`,
+`db_observed_at` and `correlation_id`. The database supplies `db_observed_at` during
+the fenced transaction; it is the fence-check time, **not the commit timestamp**.
+The owner row stays locked until the write transaction ends, so an ownership
+update must wait for that transaction. Worker log timestamps are not used to
+order these storage receipts. Receipt counts
+are transaction counts (capture/expansion/record processing), not hazard counts.
+
+P2.4 saves `clock-storage-+45.json` and `clock-storage--30.json` (using the configured
+offsets). It checks a single instance/session per source epoch and rejects an
+older epoch appearing after a newer epoch in database-time order.
+
+P2.5 saves `freeze-storage.json` and `freeze-fencing.json`. After resume, the old
+instance must produce a direct rejection for its old epoch (`session_unavailable`
+or `fence_mismatch`). Any later successful write by that instance must follow a
+matching new ownership acquisition with a larger epoch and matching owner/PID.
+Pre-freeze receipts delivered late are checked using database time, so delayed
+log delivery is not mistaken for a stale write. A generic transaction failure is
+not accepted as direct fencing proof.
+
+Receipts cover acknowledged polling transactions in the observed run. Missing
+logs or ambiguous commit acknowledgements do not establish a complete storage
+history. Keep the accompanying Audit, upstream and log-continuity evidence; these
+checks do not claim a proof of every possible transaction interleaving.
+
 ## Groups and evidence
 
 | Group | Criteria | Checks |
 | --- | --- | --- |
 | 1: coordination | P2.1–3 | Three Ready replicas on distinct nodes, ready EndpointSlices, actual routed responses from three pod UIDs, upstream/caller correlation joins, single-owner epochs, overlapping upstream requests, polling request-rate bound, logical event uniqueness, instance deletion and takeover within 60 seconds |
-| 2: clock/freeze | P2.4–5 | Measured +45/-30 offsets, continued polling/audit reconciliation, worker freeze longer than owner timeout, successor epoch, no old-epoch successful poll observed after resume |
+| 2: clock/freeze | P2.4–5 | Measured offsets, post-commit session/transaction receipts ordered by database time, polling/Audit, worker freeze beyond owner timeout, direct old-session rejection after resume, fresh acquisition before renewed writes |
 | 3: load | P2.6–8 | k6 5-second traffic/VU windows, 3→5→2 replicas observed Ready during load, <1% unexpected errors excluding validated 429 responses, successful throughput ratio ≥2.0, different actual image IDs after rolling update with zero failed/rejected requests |
 
 The earlier unpaced 10,000-VU run overloaded Traefik's 256 MiB memory limit and

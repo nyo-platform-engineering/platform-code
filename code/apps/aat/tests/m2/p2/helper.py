@@ -19,6 +19,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from run_progress import Progress
+from common import parse_time
 
 ROOT = Path(__file__).resolve().parents[3]
 INFRA = ROOT.parents[1] / "infrastructure"
@@ -55,7 +56,7 @@ def utc():
 
 
 def timestamp(value):
-    return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    return parse_time(value).timestamp()
 
 
 def require(condition, message):
@@ -300,13 +301,15 @@ class Logs:
                 with self.lock:
                     self.traffic[pod["metadata"]["uid"]] += 1
                 continue
-            if log.get("msg") not in ("request", "outbound_request", "poll succeeded", "poll ownership acquired", "poll ownership lost"):
+            if log.get("msg") not in ("request", "outbound_request", "poll succeeded", "poll ownership acquired", "poll ownership lost",
+                                      "poll storage committed", "poll storage rejected"):
                 continue
             if role == "aggregator" and log.get("msg") == "request":
                 continue
             fingerprint = (pod["metadata"]["uid"], hashlib.sha256(line.encode()).hexdigest())
             log = {k: v for k, v in log.items() if k in ("time", "msg", "source", "path", "status", "latency_ms",
-                   "correlation_id", "poll_owner", "poll_epoch", "epoch", "owner")}
+                   "correlation_id", "poll_owner", "poll_epoch", "epoch", "owner", "backend_pid",
+                   "operation", "db_observed_at", "transaction_id", "reason")}
             item = {"observed": time.monotonic(), "at": utc(), "initial": time.monotonic() - attached < 1,
                     "pod": pod["metadata"]["name"], "pod_uid": pod["metadata"]["uid"],
                     "node": pod["spec"].get("nodeName"), "role": role, "log": log}

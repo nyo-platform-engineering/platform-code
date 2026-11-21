@@ -5,6 +5,7 @@ import subprocess
 import time
 
 from helper import INFRA, NAMESPACE, output, ready, require
+from fencing_evidence import freeze_evidence, storage_evidence
 
 
 def vm_python(run, source):
@@ -81,6 +82,9 @@ def clock_offset(run, pod):
 
 
 def clock(run):
+    run.wait(lambda: all(any(r["log"].get("msg") == "poll storage committed" and r["log"].get("source") == source
+                            for r in run.logs.snapshot()) for source in ("BMKG", "PVMBG")),
+             timeout=30, description="storage commit evidence from both sources; deploy latest Aggregator if missing")
     run.prompt(f"P2.4: prepare the actual {run.config.source} owner on {run.config.worker} before the clock test. Owner pods may be restarted.")
     owner, moves = prepare_owner(run)
     pod = worker_pod(run)
@@ -110,16 +114,19 @@ def clock(run):
             require(abs(delta - offset) <= 5, f"clock injection failed: measured {delta:+.1f}s, requested {offset:+g}s")
             output("RESULT", f"P2.4 — {run.config.worker}\n"
                    f"    Requested skew: {offset:+g}s; measured change: {delta:+.1f}s; time sync stopped")
+            started = time.monotonic()
             polling = run.observe()
-            results.append({"requested_offset": offset, "measurement": measured, "polling": polling})
+            storage = storage_evidence(run.logs.snapshot(), started, time.monotonic())
+            run.save(f"clock-storage-{offset:+g}.json", storage)
+            results.append({"requested_offset": offset, "measurement": measured, "polling": polling, "storage": storage})
             run.save("clock-skew-observations.json", results)
-            output("RESULT", "P2.4 — no competing successful polling owners observed; Audit reconciliation passed")
+            output("RESULT", f"P2.4 — storage commits {storage['commits_per_source']}; single session per epoch; no epoch regression in database time; Audit passed")
     finally:
         restored = restore()
         run.cleanup.remove(restore)
     return {"owner_preparation": moves, "owner_pod": pod,
             "baseline": baseline, "offsets": results, "clock_restored": restored,
-            "stale_write_fencing": "log observations only; retain official fault/storage evidence"}
+            "stale_write_fencing": "post-commit receipts include locked DB fence time, transaction ID and session identity; bounded observation"}
 
 
 def prepare_owner(run):
@@ -204,14 +211,21 @@ def freeze(run):
     run.wait(lambda: run.logs.freeze_recovered(old["pod_uid"]),
              description="owner log continuity and fresh records after resume")
     log_recovery = run.logs.finish_freeze(old["pod_uid"])
+    run.wait(lambda: any(r["observed"] >= resumed and r["pod_uid"] == old["pod_uid"]
+                        and r["log"].get("msg") == "poll storage rejected"
+                        and r["log"].get("source") == run.config.source
+                        and int(r["log"].get("epoch", 0)) == epoch
+                        and r["log"].get("reason") in ("session_unavailable", "fence_mismatch")
+                        for r in run.logs.snapshot()), description="old session rejected after resume; requires latest Aggregator")
     run.checkpoint("freeze-recovered")
     result = run.observe()
-    stale = [r for r in run.logs.snapshot() if r["observed"] >= resumed and r["pod_uid"] == old["pod_uid"]
-             and r["log"].get("msg") == "poll succeeded" and r["log"].get("source") == run.config.source
-             and int(r["log"].get("epoch", 0)) <= epoch]
-    require(not stale, "resumed instance logged a successful poll using the old epoch")
+    storage = storage_evidence(run.logs.snapshot(), started, time.monotonic())
+    fencing = freeze_evidence(run.logs.snapshot(), old, run.config.source, epoch, int(new["log"]["epoch"]), resumed)
+    run.save("freeze-storage.json", storage)
+    run.save("freeze-fencing.json", fencing)
     result.update(log_recovery=log_recovery, owner_preparation=moves, old_epoch=epoch, takeover_epoch=new["log"]["epoch"], audit=run.checkpoint("freeze", wall, time.time()),
-                  limitation="No stale successful poll observed; this does not inject a pause exactly inside a storage commit.")
+                  storage=storage, fencing=fencing,
+                  limitation="Commit acknowledgements and stale-session rejection observed; pause is not injected inside a storage commit.")
     return result
 
 

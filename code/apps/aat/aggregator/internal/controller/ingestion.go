@@ -41,6 +41,10 @@ func (ctrl *Controller) IngestPollBatch(ctx context.Context, source string, batc
 type pollCompletion struct{ cursor *time.Time }
 
 func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch map[string][]model.Record, completion *pollCompletion) (items []model.HazardEvent, err error) {
+	var proof pollWriteEvidence
+	if ctrl.PollOwner != nil {
+		defer func() { ctrl.logPollWrite(ctx, source, "ingest_batch", proof, err) }()
+	}
 	ctx, span := telemetry.Start(ctx, "ingest "+source, trace.SpanKindInternal)
 	defer func() {
 		telemetry.Fail(span, err)
@@ -78,7 +82,7 @@ func (ctrl *Controller) ingestBatch(ctx context.Context, source string, batch ma
 
 	defer tx.Rollback()
 	if ctrl.PollOwner != nil {
-		if err := ctrl.fencePoll(tx, source, true); err != nil {
+		if err := ctrl.checkPollFence(tx, source, true, &proof); err != nil {
 			return nil, err
 		}
 	}

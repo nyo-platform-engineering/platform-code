@@ -81,7 +81,8 @@ func (p sourcePoller) Run(ctx context.Context, interval time.Duration) {
 			}
 			if session != nil {
 				slog.Info("poll ownership acquired", "source", p.source,
-					"epoch", session.Fence.Epoch, "owner", session.Fence.Owner)
+					"epoch", session.Fence.Epoch, "owner", session.Fence.Owner,
+					"backend_pid", session.Fence.BackendPID)
 			}
 		}
 		if session != nil {
