@@ -100,7 +100,7 @@ func main() {
 	if err := validateP4Verification(startupCtx, db, verificationSchema); err != nil {
 		panic(err)
 	}
-	if err := model.Migrate(startupCtx, db); err != nil {
+	if err := waitForSchema(startupCtx, "migrations", func(ctx context.Context) error { return model.Migrate(ctx, db) }); err != nil {
 		panic(err)
 	}
 
@@ -109,7 +109,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		if err := storage.EnableCitus(startupCtx, db); err != nil {
+		if err := waitForSchema(startupCtx, "Citus", func(ctx context.Context) error { return storage.EnableCitus(ctx, db) }); err != nil {
 			panic(err)
 		}
 		ctrl.Store = storage.NewCitus(db, members)

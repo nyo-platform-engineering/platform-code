@@ -118,6 +118,7 @@ def practice_run(run):
             'disable Aggregator/Sensor Pantai autoscaling before the P5 practice reset')
     run.cluster.kubectl('rollout', 'status', 'deployment/field-notifier', '--timeout=180s', timeout=200)
     apps, errors = [], []
+    failure = None
     try:
         for name in ('platform', 'dev-apps', 'aat-aggregator-dev',
                      'aat-sensor-pantai-dev', 'aat-field-notifier-dev'):
@@ -135,6 +136,9 @@ def practice_run(run):
             run.wait('Argo sync to finish: ' + name, idle, 180)
             argo(run, 'annotate', 'application', name, 'argocd.argoproj.io/skip-reconcile=true', '--overwrite')
         yield deployments
+    except BaseException as error:
+        failure = error
+        raise
     finally:
         # Restore workloads before enabling reconciliation, even after setup failure.
         for name, count in deployments.items():
@@ -149,8 +153,12 @@ def practice_run(run):
                     'spec': {'syncPolicy': {'automated': app['automated']}}}))
             except Exception as error:
                 errors.append(f"{app['name']}: {error}")
-        run.save('cleanup.json', {'restored': not errors, 'errors': errors})
-        require(not errors, 'P5 cleanup incomplete: ' + '; '.join(errors))
+        run.save('cleanup.json', {'restored': not errors, 'errors': errors,
+                                  'scenario_error': run.clean(str(failure)) if failure else None})
+        if errors and failure is not None:
+            output('WARN', 'P5 cleanup incomplete', *errors)
+        else:
+            require(not errors, 'P5 cleanup incomplete: ' + '; '.join(errors))
 
 
 def reset_sensor(run, replicas):

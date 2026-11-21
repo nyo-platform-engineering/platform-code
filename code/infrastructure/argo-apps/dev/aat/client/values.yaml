@@ -1,6 +1,6 @@
 # Runtime AAT lokal; batas memori mengikuti Lampiran B M2.
 fullnameOverride: client
-replicaCount: 1
+replicaCount: 3
 containerPorts:
 - name: http
   containerPort: 8080
@@ -14,6 +14,8 @@ service:
     protocol: TCP
     nodePort: 30080
   type: NodePort
+  # A node's public entrypoint serves its local replica, avoiding a dead remote node.
+  externalTrafficPolicy: Local
 readinessProbe:
   httpGet:
     path: /health
@@ -52,7 +54,7 @@ volumeMounts:
   mountPath: /tmp
 autoscaling:
   enabled: false
-  minReplicas: 1
+  minReplicas: 3
   maxReplicas: 5
   targetCPUUtilizationPercentage: 60
 podLabels:
@@ -81,3 +83,18 @@ env:
     secretKeyRef:
       name: aat-runtime
       key: AGGREGATOR_TOKEN
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    nodeTaintsPolicy: Honor
+    matchLabelKeys: [pod-template-hash]
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/instance: client

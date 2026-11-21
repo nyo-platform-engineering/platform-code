@@ -54,7 +54,18 @@ class PvmbgOutage(Fault):
         run.call("pvmbg", "/admin/outage", token=run.env["PVMBG_TOKEN"], body={"enabled": True})
 
     def revert(self, run):
-        run.call("pvmbg", "/admin/outage", token=run.env["PVMBG_TOKEN"], body={"enabled": False})
+        # The original tunnel can still target the Pod sandbox lost with the node.
+        # Setting enabled=False is idempotent, so a lost response can be retried.
+        for attempt in range(3):
+            run.forwards.close("pvmbg")
+            run.forwards.urls.pop("pvmbg", None)
+            try:
+                run.call("pvmbg", "/admin/outage", token=run.env["PVMBG_TOKEN"], body={"enabled": False})
+                return
+            except RuntimeError:
+                if attempt == 2:
+                    raise
+                time.sleep(1)
 
 
 
@@ -284,7 +295,7 @@ def verdict(scenario, samples, recovered_after, config):
     budget = slo([s for s in samples if s["phase"] in ("faults", "recovery")], config.field_availability_slo)
     failures = []
     if during["unanswered"] or after["unanswered"]:
-        failures.append(f"{during['unanswered'] + after['unanswered']} Field Team requests got no answer "
+        failures.append(f"{during['unanswered'] + after['unanswered']} probe requests got no answer "
                         f"(statuses {sorted(set(during['unanswered_statuses'] + after['unanswered_statuses']))})")
     if recovered_after is None:
         failures.append(f"not fully healthy within {config.recovery_timeout:.0f}s after the faults ended")
@@ -304,14 +315,24 @@ def verdict(scenario, samples, recovered_after, config):
 
 def health(run, config):
     """Every condition that "recovered" means. Returns (healthy, details)."""
-    checks = {}
+    checks, deployments = {}, {}
     nodes = run.cluster.kubectl("get", "nodes", "-o", "json", json_output=True)["items"]
     checks["nodes_ready"] = all(any(c["type"] == "Ready" and c["status"] == "True" for c in n["status"]["conditions"])
                                 for n in nodes)
     for name in config.deployments:
         dep = run.cluster.kubectl("get", "deployment", name, "-o", "json", json_output=True)
         want = dep["spec"].get("replicas", 1)
-        checks[f"{name}_ready"] = dep.get("status", {}).get("readyReplicas", 0) >= want
+        actual = dep.get("status", {}).get("readyReplicas", 0)
+        checks[f"{name}_ready"] = actual >= want
+        if actual < want:
+            pods = run.cluster.kubectl("get", "pods", "-l", f"app.kubernetes.io/instance={name}",
+                                        "-o", "json", json_output=True)["items"]
+            deployments[name] = {"ready": actual, "desired": want, "pods": [
+                {"name": p["metadata"]["name"], "node": p["spec"].get("nodeName"),
+                 "containers": [{"name": c["name"], "ready": c.get("ready"),
+                                  "restarts": c.get("restartCount"), "state": c.get("state")}
+                                 for c in p.get("status", {}).get("containerStatuses", [])]}
+                for p in pods]}
     sensor = run.aggregator("/internal/sensor/status")
     checks["sensor_available"] = bool(sensor.get("available")) and sensor["sensor"].get("breaker") == "closed"
     token = run.login("responder")
@@ -323,6 +344,9 @@ def health(run, config):
     pending = sql(run, "SELECT to_json(count(*)) FROM hazard_outboxes "
                        "WHERE published_at IS NULL AND lane IN ('critical','critical_only');")
     checks["critical_outbox_drained"] = pending == [0]
+    metadata_pending = sql(run, "SELECT to_json(count(*)) FROM pg_dist_node WHERE groupid > 0 "
+                                "AND noderole = 'primary' AND isactive AND hasmetadata AND NOT metadatasynced;")
+    checks["storage_metadata_synced"] = metadata_pending == [0]
     address = urllib.parse.urlsplit(run.url("nats"))
     consumers = {}
     for consumer in CRITICAL_CONSUMERS:
@@ -331,7 +355,7 @@ def health(run, config):
         consumers[consumer] = {key: info.get(key) for key in ("num_pending", "num_ack_pending", "error")}
         checks[f"{consumer.replace('-', '_')}_drained"] = ("error" not in info and info.get("num_pending", 1) == 0
                                                         and info.get("num_ack_pending", 1) == 0)
-    return all(checks.values()), {"checks": checks, "stale_sources": stale, "critical_consumers": consumers}
+    return all(checks.values()), {"checks": checks, "stale_sources": stale, "critical_consumers": consumers, "unready_deployments": deployments}
 
 
 def wait_healthy(run, config, timeout, label):
@@ -346,11 +370,17 @@ def wait_healthy(run, config, timeout, label):
             for service in ("aggregator", "nats"):
                 run.forwards.close(service)
                 run.forwards.urls.pop(service, None)
+        history = getattr(run, "gameday_health", [])
+        history.append({"at": utc(), "phase": label, "healthy": ok, **last})
+        run.gameday_health = history
+        run.save("gameday-health.json", history)
         if ok:
             return round(time.monotonic() - started, 1), last
         detail = ", ".join(k for k, v in (last.get("checks") or {}).items() if not v) or last.get("error", "")
         if last.get("critical_consumers"):
             detail += "; critical consumers=" + json.dumps(last["critical_consumers"], sort_keys=True)
+        if last.get("unready_deployments"):
+            detail += "; deployments=" + json.dumps(last["unready_deployments"], sort_keys=True)
         output("WAIT", label, detail)
         time.sleep(config.health_interval)
     return None, last
