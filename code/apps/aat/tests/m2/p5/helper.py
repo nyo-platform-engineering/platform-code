@@ -156,8 +156,11 @@ def practice_run(run):
             argo(run, 'annotate', 'application', name, 'argocd.argoproj.io/skip-reconcile=true', '--overwrite')
         output('WAIT', 'Practice setup', 'Waiting for application and storage rollouts before resetting sensor data')
         wait_rollouts(run)
+        endpoint = run.url('client')
+        require('client' not in run.forwards.processes,
+                'P5 requires the public Client endpoint before resetting data or measuring availability')
         run.save('setup-ready.json', {'applications_held': [a['name'] for a in apps],
-                                     'rollouts_complete': True})
+                                     'rollouts_complete': True, 'client_endpoint': endpoint})
         yield deployments
     except BaseException as error:
         failure = error

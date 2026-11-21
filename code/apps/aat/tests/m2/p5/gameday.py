@@ -62,7 +62,11 @@ class PvmbgOutage(Fault):
             try:
                 run.call("pvmbg", "/admin/outage", token=run.env["PVMBG_TOKEN"], body={"enabled": False})
                 return
-            except RuntimeError:
+            except (RuntimeError, ValueError) as error:
+                # A failed tunnel setup is a transport failure too. HTTP/auth errors
+                # remain terminal; only the idempotent fault-removal command retries.
+                if isinstance(error, ValueError) and not str(error).startswith("port-forward to "):
+                    raise
                 if attempt == 2:
                     raise
                 time.sleep(1)
@@ -422,6 +426,11 @@ def revert_all(run, faults, log):
 
 def play(run, scenario, config):
     scenario.validate()
+    # Record exactly which path the availability/SLO probes exercise.
+    endpoint = run.url("client")
+    require("client" not in run.forwards.processes,
+            "game day requires the public Client endpoint; a Pod port-forward cannot measure service failover")
+    run.save("gameday-endpoint.json", {"client": endpoint, "transport": "public_nodeport"})
     log = []
     output("INFO", scenario.name, scenario.story)
     baseline, details = wait_healthy(run, config, config.recovery_timeout, f"{scenario.name}: waiting for a healthy start")

@@ -146,6 +146,8 @@ class Forwards:
         self.config, self.folder = config, folder
         self.processes = {}
         self.urls = {}
+        self.registry_lock = threading.Lock()
+        self.service_locks = {}
 
     def node_address(self):
         mode = INFRA / ".state/mode"
@@ -153,7 +155,32 @@ class Forwards:
             return "127.0.0.1"
         return "192.168.56.10"
 
+    def _lock_for(self, service):
+        with self.registry_lock:
+            return self.service_locks.setdefault(service, threading.RLock())
+
+    def url(self, service):
+        with self._lock_for(service):
+            cached = self.urls.get(service)
+            process = self.processes.get(service)
+            if cached and (process is None or process.poll() is None):
+                return cached
+            return self.open(service)
+
+    def reopen(self, service, failed_url):
+        # Concurrent failed requests must reuse a tunnel another caller replaced.
+        with self._lock_for(service):
+            cached = self.urls.get(service)
+            process = self.processes.get(service)
+            if cached and cached != failed_url and (process is None or process.poll() is None):
+                return cached
+            return self.open(service)
+
     def open(self, service):
+        with self._lock_for(service):
+            return self._open(service)
+
+    def _open(self, service):
         self.close(service)
         if service in NODE_PORTS:
             url = f"http://{self.node_address()}:{NODE_PORTS[service]}"
@@ -163,37 +190,51 @@ class Forwards:
                         self.urls[service] = url
                         return url
             except (urllib.error.URLError, OSError):
-                pass  # not reachable from here: fall back to a port-forward
+                pass
+            require(service not in getattr(self.config, "require_nodeports", ()),
+                    f"{service} public NodePort unavailable at {url}; refusing a Pod port-forward for availability measurements")
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
-        log = (self.folder / f"port-forward-{service}.log").open("a")
-        process = subprocess.Popen(
-            ["kubectl", "--kubeconfig", str(self.config.kubeconfig), "-n", NAMESPACE, "port-forward",
-             f"svc/{service}", f"{port}:{SERVICE_PORTS[service]}", "--address=127.0.0.1"],
-            stdout=log, stderr=log)
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            require(process.poll() is None, f"port-forward to {service} exited; see port-forward-{service}.log")
-            try:
-                with socket.create_connection(("127.0.0.1", port), timeout=0.3):
-                    self.processes[service] = process
-                    self.urls[service] = f"http://127.0.0.1:{port}"
-                    return self.urls[service]
-            except OSError:
-                time.sleep(0.2)
+        with (self.folder / f"port-forward-{service}.log").open("a") as log:
+            process = subprocess.Popen(
+                ["kubectl", "--kubeconfig", str(self.config.kubeconfig), "-n", NAMESPACE, "port-forward",
+                 f"svc/{service}", f"{port}:{SERVICE_PORTS[service]}", "--address=127.0.0.1"],
+                stdout=log, stderr=log)
+        try:
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                require(process.poll() is None, f"port-forward to {service} exited; see port-forward-{service}.log")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+                        self.processes[service] = process
+                        self.urls[service] = f"http://127.0.0.1:{port}"
+                        return self.urls[service]
+                except OSError:
+                    time.sleep(0.2)
+            raise ValueError(f"port-forward to {service} did not become ready")
+        except BaseException:
+            self._stop(process)
+            raise
+
+    @staticmethod
+    def _stop(process):
         process.terminate()
-        raise ValueError(f"port-forward to {service} did not become ready")
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
 
     def close(self, service=None):
-        for name in [service] if service else list(self.processes):
-            process = self.processes.pop(name, None)
-            if process:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+        names = [service] if service else list(set(self.processes) | set(self.urls))
+        for name in names:
+            with self._lock_for(name):
+                # A URL without its process is stale, not a usable cached endpoint.
+                self.urls.pop(name, None)
+                process = self.processes.pop(name, None)
+                if process:
+                    self._stop(process)
 
 
 class Run:
@@ -260,7 +301,7 @@ class Run:
 
     # --- HTTP -----------------------------------------------------------
     def url(self, service):
-        return self.forwards.urls.get(service) or self.forwards.open(service)
+        return self.forwards.url(service)
 
     def call(self, service, path, token=None, body=None, expected=(200,), timeout=None, record=True):
         """Returns (status, payload, elapsed_ms); network errors raise RuntimeError."""
@@ -279,7 +320,8 @@ class Run:
         # Writes are never resent. The reconnect is kept in http.jsonl and result.json.
         reconnected = False
         for attempt in (1, 2):
-            request = urllib.request.Request(self.url(service) + path, data=data, headers=headers)
+            endpoint = self.url(service)
+            request = urllib.request.Request(endpoint + path, data=data, headers=headers)
             started = time.perf_counter()
             retry_after = None
             try:
@@ -305,7 +347,7 @@ class Run:
                     with self.lock:
                         self.report.setdefault("tunnel_reconnects", []).append(
                             {"at": utc(), "service": service, "path": path, "error": type(error).__name__})
-                    self.forwards.open(service)
+                    self.forwards.reopen(service, endpoint)
                     continue
                 raise RuntimeError(failure) from None
             elapsed = (time.perf_counter() - started) * 1000

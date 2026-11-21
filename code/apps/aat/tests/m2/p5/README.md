@@ -42,3 +42,10 @@ Target tetap 99% availability request Tim Lapangan dan p95 alert ≤5 detik.
 Availability request dan latensi pengiriman alert adalah ukuran berbeda;
 kelulusan probe HTTP tidak menggantikan bukti penerimaan semua event kritis.
 Run practice merupakan rehearsal, bukan sertifikasi profil ujian/Tester Agent.
+
+P5 mengukur availability melalui NodePort publik Client. Jika `/health` pada
+entrypoint itu tidak dapat dijangkau, setup gagal sebelum fault; runner tidak
+menggantinya dengan port-forward yang terikat ke satu Pod. Endpoint pengukuran
+tersimpan di `gameday-endpoint.json`. Penggantian tunnel internal diserialkan agar
+thread Media tidak saling mematikan koneksi tester. Kegagalan request tetap
+dicatat dan tidak dihapus dari hasil SLO.
