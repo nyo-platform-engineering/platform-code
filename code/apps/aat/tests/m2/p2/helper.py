@@ -1,4 +1,4 @@
-"""P2 cluster access, evidence, polling observations, and cleanup."""
+"""P2 cluster access, evidence and cleanup."""
 from collections import Counter, defaultdict
 from contextlib import contextmanager, nullcontext
 import datetime as dt
@@ -77,7 +77,7 @@ def safe_error(text, credentials):
 
 
 def previous_rolling_image(current, running_digests=(), preferred=None):
-    """Both published releases must contain the write-safe cache fill policy."""
+    """Select a different release with the required cache policy."""
     repo = ROOT.parents[2]
     pin = "code/infrastructure/argo-apps/dev/aat/aggregator/image.yaml"
     history = subprocess.run(["git", "log", "-20", "--format=%H", "origin/main", "--", pin],
@@ -120,10 +120,8 @@ def polling_evidence(records, start, end, poll_interval):
         log = item["log"]
         if log.get("msg") == "outbound_request" and log.get("source") in ("BMKG", "PVMBG"):
             key = (log["source"], log.get("path"), log.get("correlation_id"))
-            # status 0 means Do returned without a response (for example,
-            # cancellation during scale-down). The upstream can still have
-            # received and answered this exact request. This proves the caller,
-            # not a successful fetch or commit; those are checked separately.
+            # A cancelled request (status 0) may still reach upstream.
+            # Correlate the caller here; check successful polls separately.
             if log.get("status") in (0, 200):
                 callers[key] = item
         if not item.get("initial") and start + 2 <= item["observed"] <= end - 2:
@@ -248,7 +246,7 @@ class Logs:
         if previous is None and not ready(pod):
             return False
         if previous is not None:
-            # The pod may start terminating after the discovery snapshot.
+            # Recheck deletion after the discovery snapshot.
             current = next((p for p in self.run.pods()
                             if p["metadata"]["uid"] == pod["metadata"]["uid"]), None)
             if current is None or current["metadata"].get("deletionTimestamp"):
@@ -278,9 +276,7 @@ class Logs:
                                                   if k in ("exitCode", "reason", "startedAt", "finishedAt")}}
                             for s in pod.get("status", {}).get("containerStatuses", [])]}
                         self.run.save("log-pods.json", self.pod_states)
-                        # A busy poller can emit >1000 DB trace lines around a
-                        # freeze. Replay the retained file and discard records
-                        # before our exact anchor instead of losing continuity.
+                        # Replay from the anchor; a 1,000-line tail can lose it.
                         tail = -1 if uid in self.freeze_streams else 1000
                         process = subprocess.Popen(self.run.command("logs", "-f", name, "-n", NAMESPACE, f"--tail={tail}", "--request-timeout=0"),
                                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
@@ -293,7 +289,7 @@ class Logs:
             self.stop.wait(2)
 
     def read(self, process, pod, role):
-        # The initial tail seeds ownership; only live observations count as test traffic.
+        # Initial logs seed ownership; fresh records count as live traffic.
         attached = time.monotonic()
         for line in process.stdout:
             try:
@@ -470,7 +466,7 @@ class Run:
         self.wait(settled, timeout=timeout, description=f"Aggregator rollout to {count} Ready replicas")
 
     def configure_cluster(self, nodes):
-        # task up -- --novm records its mode; API metadata also covers copied kubeconfigs.
+        # Node metadata also covers copied kubeconfigs.
         mode = INFRA / ".state/mode"
         local_config = self.config.kubeconfig.resolve() == (INFRA / ".state/kubeconfig").resolve()
         self.container_nodes = (local_config and mode.is_file() and mode.read_text().strip() == "k3d") or any(
@@ -510,7 +506,7 @@ class Run:
             return False
 
         try:
-            # Route propagation is short; a wrong address should not cost the full recovery budget.
+            # Fail wrong gateway addresses without waiting for full recovery.
             self.wait(routed, timeout=min(30, self.config.recovery_seconds),
                       description=f"Traefik route {self.host} via {self.config.url}")
         except ValueError as error:
@@ -596,8 +592,7 @@ class Run:
                           json.dumps({"metadata": {"annotations": {"argocd.argoproj.io/skip-reconcile": previous}},
                                       "spec": {"syncPolicy": {"automated": automated}}}), json_output=False)
             self.cleanup.append(restore)
-            # Disable self-heal before waiting. Skip-reconcile alone freezes
-            # status and does not reliably drain an already queued sync.
+            # Disable self-heal too; skip-reconcile can leave queued syncs active.
             self.kube("patch", "application", name, "-n", "argocd", "--type=merge", "-p",
                       json.dumps({"spec": {"syncPolicy": {"automated": None}}}), json_output=False)
             def sync_stopped(name=name):
@@ -674,7 +669,7 @@ class Run:
         container = next(c for c in template["spec"]["containers"] if c["name"] == "aggregator")
         read_limits = set()
         for pod in pods:
-            # Only these public settings are exported; never dump the pod environment.
+            # Keep secrets out of deployment evidence.
             values = self.kube("exec", pod["metadata"]["name"], "-n", NAMESPACE, "-c", "aggregator", "--",
                                "sh", "-c", 'printf "%s\\n%s\\n" "${READ_RPS_LIMIT:-0}" "${READ_RPS_BURST:-5}"',
                                json_output=False).splitlines()
@@ -702,8 +697,7 @@ class Run:
             params = {"limit": 1000}
             if cursor:
                 params["cursor"] = cursor
-            # Retry only read-only exports, at the same cursor. Load/fault
-            # probes keep their original failures and never use this retry.
+            # Retry Audit exports at the same cursor, never load/fault probes.
             deadline = time.monotonic() + min(30, self.config.recovery_seconds)
             while True:
                 try:

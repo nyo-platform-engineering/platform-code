@@ -1,4 +1,4 @@
-"""Criteria 6–8: measured load, scale transitions, throughput and rolling update."""
+"""P2.6–8: scaling, throughput and rolling updates under load."""
 import json
 import os
 from pathlib import Path
@@ -75,7 +75,7 @@ def load(run, name, action=None, strict=False, seconds=None, target_rps=None):
                P2_WARMUP=str(config.warmup_seconds), P2_TARGET_RPS=str(target_rps), P2_LIMIT=str(config.load_limit), P2_URL=config.url.rstrip("/"),
                P2_HOST=run.host, P2_TOKEN=run.credentials["AGGREGATOR_TOKEN"], P2_RUN_ID=run.run_id,
                P2_SUMMARY=str(summary_path), K6_NO_USAGE_REPORT="true")
-    # Keep credentials in the child environment; never in argv, logs or evidence.
+    # Pass credentials through the environment, not command arguments.
     process = subprocess.Popen([config.k6, "run", "--quiet", str(Path(__file__).with_name("load.js"))],
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     started = threading.Event()
@@ -88,7 +88,6 @@ def load(run, name, action=None, strict=False, seconds=None, target_rps=None):
                 if written >= 2 << 20:
                     suppressed += 1
                     continue
-                # k6 does not print request headers; redact the token defensively.
                 line = line.replace(run.credentials["AGGREGATOR_TOKEN"], "[REDACTED]")
                 log.write(line)
                 written += len(line.encode())

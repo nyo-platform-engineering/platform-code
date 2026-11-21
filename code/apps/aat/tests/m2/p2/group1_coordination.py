@@ -1,4 +1,4 @@
-"""Criteria 1–3: placement, real load balancing, upstream ownership and takeover."""
+"""P2.1–3: placement, polling ownership and failover."""
 import time
 
 from helper import NAMESPACE, ready, require
@@ -18,7 +18,7 @@ def topology(run):
         run.status(f"load-balancer probe {_ + 1}/60")
         page = run.request("/internal/hazards", params={"limit": 1})
         require(isinstance(page.get("items"), list), "invalid routed response")
-        # This probes routing; keep it below the unchanged read admission limit.
+        # Keep routing probes below the read rate limit.
         time.sleep(0.1)
     run.wait(lambda: len([uid for uid, count in run.logs.traffic.items() if count > before.get(uid, 0)]) >= 3,
              timeout=15, description="requests observed on three Aggregator backends")

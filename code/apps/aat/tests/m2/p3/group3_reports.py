@@ -1,4 +1,4 @@
-"""Criterion 6: durable 202 receipts across paused processing and receiver crash."""
+"""P3.6: durable field reports across receiver crashes."""
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import hashlib
@@ -31,7 +31,6 @@ def counts(run, identities):
 def check(run):
     run.set_env(FIELD_REPORT_PROCESSOR_ENABLED="false")
     receipts, bodies, latencies = {}, {}, []
-    # Verify the public role gate before testing valid submissions.
     observed = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     base = {"area_name": "P3 test area", "description": "Durable field report", "observed_at": observed}
     for role in ("analyst", "public"):
@@ -44,7 +43,7 @@ def check(run):
         receipts[key], bodies[key] = receipt, body
         latencies.append(elapsed)
         run.status(f"durable receipts accepted={i + 1}/{run.config.report_count}; last 202={elapsed:.0f}ms")
-        # Save each successful receipt immediately, before any receiver crash.
+        # Persist each receipt before crashing receivers.
         run.save("accepted-receipts.json", {"receipts": receipts, "latencies_ms": latencies})
     key = next(iter(receipts))
     with ThreadPoolExecutor(max_workers=run.config.duplicate_requests) as pool:
