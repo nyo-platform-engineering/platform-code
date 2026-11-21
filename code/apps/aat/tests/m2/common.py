@@ -288,17 +288,23 @@ class Run:
             except urllib.error.HTTPError as error:
                 status, raw, retry_after = error.code, error.read(), error.headers.get("Retry-After")
             except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
-                failure = f"{service} {path}: network failure ({type(error).__name__})"
+                reason = error.reason if isinstance(error, urllib.error.URLError) else error
+                reason_text = self.clean(str(reason))[:500]
+                failure = f"{service} {path}: network failure ({type(error).__name__}): {reason_text}"
                 tunnelled = service in self.forwards.processes
-                if attempt == 1 and data is None and tunnelled and not reconnected:
+                reopen = attempt == 1 and data is None and tunnelled and not reconnected
+                if record:
+                    with self.lock, (self.folder / "http.jsonl").open("a") as stream:
+                        stream.write(json.dumps({"at": utc(), "service": service, "path": path,
+                                                 "endpoint": self.clean(request.full_url), "status": 0,
+                                                 "ms": round((time.perf_counter() - started) * 1000, 2),
+                                                 "error": type(error).__name__, "reason": reason_text,
+                                                 "tunnel_reopened": reopen}) + "\n")
+                if reopen:
                     reconnected = True
                     with self.lock:
                         self.report.setdefault("tunnel_reconnects", []).append(
                             {"at": utc(), "service": service, "path": path, "error": type(error).__name__})
-                        if record:
-                            with (self.folder / "http.jsonl").open("a") as stream:
-                                stream.write(json.dumps({"at": utc(), "service": service, "path": path, "status": 0,
-                                                         "error": type(error).__name__, "tunnel_reopened": True}) + "\n")
                     self.forwards.open(service)
                     continue
                 raise RuntimeError(failure) from None
