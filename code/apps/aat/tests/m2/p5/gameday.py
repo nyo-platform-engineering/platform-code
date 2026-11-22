@@ -48,6 +48,7 @@ class Fault:
 
 
 class PvmbgOutage(Fault):
+    """Legacy admin-flag cleanup for older runs; not used for combined injection."""
     name = "pvmbg-outage"
 
     def inject(self, run):
@@ -62,7 +63,11 @@ class PvmbgOutage(Fault):
             try:
                 run.call("pvmbg", "/admin/outage", token=run.env["PVMBG_TOKEN"], body={"enabled": False})
                 return
-            except RuntimeError:
+            except (RuntimeError, ValueError) as error:
+                # A failed tunnel setup is a transport failure too. HTTP/auth errors
+                # remain terminal; only the idempotent fault-removal command retries.
+                if isinstance(error, ValueError) and not str(error).startswith("port-forward to "):
+                    raise
                 if attempt == 2:
                     raise
                 time.sleep(1)
@@ -186,12 +191,15 @@ def scenario(config):
     """One combined scenario, short enough for the regular P5 run: load, an upstream
     outage, a hung sensor, the notifier cut off from NATS, and a node losing power
     (which also leaves part of the data unavailable until its replicas take over)."""
-    steps = [Step(0, MediaFlood(config.media_workers)), Step(5, PvmbgOutage()),
+    # Fault control must survive the target node: removing this policy only needs
+    # the control-plane API, not a port-forward to the recovering worker's kubelet.
+    steps = [Step(0, MediaFlood(config.media_workers)),
+             Step(5, NetworkDrop("pvmbg-outage", {"app.kubernetes.io/instance": "pvmbg"})),
              Step(10, NetworkDrop("sensor-unreachable", {"role": "sensor"})),
              Step(15, NetworkDrop("notifier-partition", {"role": "consumer"}, "egress"))]
     if config.gameday_node_loss:
         steps.append(Step(20, WorkerDown(config.worker)))
-    return Scenario("combined", "Media spike, PVMBG outage, Sensor Pantai unreachable (calls hang), "
+    return Scenario("combined", "Media spike, PVMBG network outage, Sensor Pantai unreachable (calls hang), "
                     "notifier cut off from NATS" + (", a worker node loses power" if config.gameday_node_loss else ""),
                     config.fault_window, steps)
 
@@ -294,6 +302,8 @@ def verdict(scenario, samples, recovered_after, config):
     after = summarize(samples, "recovery")
     budget = slo([s for s in samples if s["phase"] in ("faults", "recovery")], config.field_availability_slo)
     failures = []
+    if not budget["requests"]:
+        failures.append("no Field Team probe requests during faults/recovery; availability was not measured")
     if during["unanswered"] or after["unanswered"]:
         failures.append(f"{during['unanswered'] + after['unanswered']} probe requests got no answer "
                         f"(statuses {sorted(set(during['unanswered_statuses'] + after['unanswered_statuses']))})")
@@ -422,6 +432,11 @@ def revert_all(run, faults, log):
 
 def play(run, scenario, config):
     scenario.validate()
+    # Record exactly which path the availability/SLO probes exercise.
+    endpoint = run.url("client")
+    require("client" not in run.forwards.processes,
+            "game day requires the public Client endpoint; a Pod port-forward cannot measure service failover")
+    run.save("gameday-endpoint.json", {"client": endpoint, "transport": "public_nodeport"})
     log = []
     output("INFO", scenario.name, scenario.story)
     baseline, details = wait_healthy(run, config, config.recovery_timeout, f"{scenario.name}: waiting for a healthy start")
@@ -440,12 +455,27 @@ def play(run, scenario, config):
     finally:
         # The faults end; from here on the test does nothing but observe.
         revert_errors = revert_all(run, active, log)
-        probe.set_phase("recovery")
-        log.append({"at": utc(), "action": "hands-off", "note": "no further actions until the verdict"})
-    recovered_after, last = wait_healthy(run, config, config.recovery_timeout, f"{scenario.name}: recovering on its own")
-    time.sleep(config.after_recovery_seconds)
+        if revert_errors:
+            probe.set_phase("fault_removal_failed")
+            log.append({"at": utc(), "action": "fault-removal-incomplete",
+                        "note": "recovery window did not start; scenario invalid"})
+        else:
+            probe.set_phase("recovery")
+            log.append({"at": utc(), "action": "hands-off", "note": "no further actions until the verdict"})
+    if revert_errors:
+        recovered_after, last = None, {"fault_removal_errors": revert_errors}
+    else:
+        recovered_after, last = wait_healthy(run, config, config.recovery_timeout, f"{scenario.name}: recovering on its own")
+        time.sleep(config.after_recovery_seconds)
     samples = probe.finish()
     result = verdict(scenario, samples, recovered_after, config)
+    result["recovery_window_started"] = not revert_errors
+    result["measurement_valid"] = not inject_error and not revert_errors
+    result["slo"]["valid_for_gameday"] = result["measurement_valid"]
+    if revert_errors:
+        # Do not report a 150s recovery timeout for a window that never started.
+        result["failures"] = [reason for reason in result["failures"]
+                              if not reason.startswith("not fully healthy within ")]
     flood = next((s.fault for s in scenario.steps if isinstance(s.fault, MediaFlood)), None)
     if flood is not None:
         result["media"] = {"requests": len(flood.codes), "shed_429": flood.codes.count(429)}

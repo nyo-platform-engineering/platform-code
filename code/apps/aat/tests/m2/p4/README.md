@@ -44,7 +44,8 @@ task m2:p4 -- --restore /path/evidence/restore-p4.json
 Evidence utama: `deployment.json`, `controlled-event-time-corrections.json`,
 `controlled-burst.json`, `controlled-burst-progress.json`,
 `controlled-burst-latencies.json`, `uninterrupted-state.json`,
-`recovered-state.json`, `controlled-crash-equivalence.json`,
+`recovered-state.json`, `controlled-crash-exit.json`, `controlled-crash-restart.json`,
+`controlled-crash-equivalence.json`,
 `controlled-reconnect.json`, dan `restore-result.json`.
 P95 memakai receipt SSE → commit durable setiap event, termasuk hasil HazardEvent
 dalam batch tersebut. Nilai maksimum per batch dari image lama hanya estimasi.
@@ -54,3 +55,8 @@ Untuk kriteria 6, isi `CONFIG.reference_file` dengan adapter dari data asisten:
 `canonicalization=aggregator-audit-checksum-v1`. Gunakan deklarasi canonicalization
 itu hanya jika format hash benar-benar sama. Runner membandingkan pada offset
 identik dan menyimpan selisih; tanpa referensi, status tetap incomplete/pending.
+
+Crash test merekam exit container owner asli segera setelah fault. Restart startup
+berikutnya tidak menghapus bukti yang sudah direkam. Exit selain 137 atau bukti
+exit asli yang sudah hilang menggagalkan tes langsung; menunggu Pod Ready tidak
+mengubah kegagalan tersebut menjadi kondisi yang akan pulih sendiri.

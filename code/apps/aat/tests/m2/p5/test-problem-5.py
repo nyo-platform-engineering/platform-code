@@ -24,6 +24,9 @@ class TestConfig:
     env_file: Path = INFRA / ".env.runtime"
     kubeconfig: Path = INFRA / ".state/kubeconfig"
 
+    # Availability probes must use the public service path, never a tunnel pinned to one Pod.
+    require_nodeports: tuple = ("client",)
+
     # Criterion 1 runs first after resetting only SENSOR_PANTAI test data.
     # All three practice critical readings arrive around 30/90/150 s at speed 60.
     wait_critical_seconds: float = 300

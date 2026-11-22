@@ -1,0 +1,40 @@
+# Explicit operational toggle, outside the Argo app-of-apps discovery tree.
+# Argo ignores Aggregator /spec/replicas, so it does not fight this scaler.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: aggregator-cpu
+  namespace: sistem-informasi-kebencanaan-bnpb
+  labels:
+    platform.local/owner: platform-team
+    aat.platform.local/managed-by: autoscaling-task
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aggregator
+  minReplicaCount: 3
+  maxReplicaCount: 5
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      name: keda-hpa-aggregator-cpu
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 30
+        scaleDown:
+          stabilizationWindowSeconds: 120
+          policies:
+          - type: Pods
+            value: 1
+            periodSeconds: 30
+  triggers:
+  - type: cpu
+    metricType: Utilization
+    metadata:
+      value: '60'
+      containerName: aggregator

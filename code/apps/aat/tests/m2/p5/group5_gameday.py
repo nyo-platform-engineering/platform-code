@@ -11,8 +11,10 @@ import gameday
 def combined(run):
     result = gameday.play(run, gameday.scenario(run.config), run.config)
     output("RESULT", "Game day rehearsal",
-           f"Recovered on its own after {result['recovered_after_s']}s" if result["recovered_after_s"] is not None
-           else f"Did not recover within {run.config.recovery_timeout:.0f}s",
+           ("Recovery window did not start: fault removal failed" if not result["recovery_window_started"] else
+            f"Recovered on its own after {result['recovered_after_s']}s" if result["recovered_after_s"] is not None else
+            f"Did not recover within {run.config.recovery_timeout:.0f}s"),
+           "Valid game day measurement" if result["measurement_valid"] else "Scenario invalid; SLO numbers are diagnostic only",
            f"Field Team availability {result['slo']['availability']} (target {run.config.field_availability_slo}, "
            f"error budget used {result['slo']['error_budget_used']})",
            f"Unanswered requests: {result['during_faults']['unanswered']} during, {result['after_faults']['unanswered']} after; "

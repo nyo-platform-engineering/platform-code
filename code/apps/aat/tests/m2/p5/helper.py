@@ -9,6 +9,28 @@ import base64
 
 from common import kubectl, output, parse_time, require
 
+# Parent Applications do not suspend reconciliation of existing child Applications.
+PRACTICE_APPS = ("platform", "dev-apps", "aat-dependencies-dev", "aat-auth-dev",
+                 "aat-client-dev", "aat-bmkg-dev", "aat-pvmbg-dev",
+                 "aat-dashboard-updater-dev", "aat-field-notifier-dev",
+                 "aat-aggregator-dev", "aat-sensor-pantai-dev")
+
+
+def wait_rollouts(run):
+    """Observe existing rollouts only; never restart workloads to make setup pass."""
+    client = run.cluster.kubectl("get", "deployment", "client", "-o", "json", json_output=True)
+    replicas = client["spec"].get("replicas", 1)
+    require(replicas >= 3,
+            f"Client is configured for {replicas} replica(s), but P5 needs the deployed three-node Client setup; "
+            "sync aat-client-dev with replica management enabled before starting P5")
+    for name in dict.fromkeys((*run.config.deployments, "auth")):
+        run.cluster.kubectl("rollout", "status", "deployment/" + name, "--timeout=180s", timeout=190)
+    stores = run.cluster.kubectl("get", "statefulsets", "-o", "json", json_output=True)["items"]
+    for store in stores:
+        run.cluster.kubectl("rollout", "status", "statefulset/" + store["metadata"]["name"],
+                            "--timeout=180s", timeout=190)
+
+
 # Every deletion is source scoped. Do not reset owners/epochs or any NATS stream:
 # a newly ingested valid reading has a new outbox delivery ID (ID + ingested_at).
 RESET_STEPS = [
@@ -104,6 +126,9 @@ def scale(run, name, count):
 @contextmanager
 def practice_run(run):
     """Hold reconciliation for the suite and restore replicas/policies on all exits."""
+    capability = run.aggregator("/internal/satellite/capabilities")
+    require(not capability.get("verification_schema"),
+            "P4 controlled verification is active; finish/restore P4 before starting P5")
     config = run.cluster.kubectl('get', 'configmap', 'sensor-pantai', '-o', 'json', json_output=True)['data']
     require(config.get('PANTAI_PROFILE') == 'practice' and config.get('PANTAI_SEED') == '42'
             and config.get('PANTAI_SPEED') == '60',
@@ -120,8 +145,7 @@ def practice_run(run):
     apps, errors = [], []
     failure = None
     try:
-        for name in ('platform', 'dev-apps', 'aat-aggregator-dev',
-                     'aat-sensor-pantai-dev', 'aat-field-notifier-dev'):
+        for name in PRACTICE_APPS:
             app = argo(run, 'get', 'application', name, '-o', 'json', json_output=True)
             baseline = {'name': name, 'automated': app.get('spec', {}).get('syncPolicy', {}).get('automated'),
                         'skip': app['metadata'].get('annotations', {}).get('argocd.argoproj.io/skip-reconcile')}
@@ -135,6 +159,13 @@ def practice_run(run):
                     'operationState', {}).get('phase') not in ('Running', 'Terminating')
             run.wait('Argo sync to finish: ' + name, idle, 180)
             argo(run, 'annotate', 'application', name, 'argocd.argoproj.io/skip-reconcile=true', '--overwrite')
+        output('WAIT', 'Practice setup', 'Waiting for application and storage rollouts before resetting sensor data')
+        wait_rollouts(run)
+        endpoint = run.url('client')
+        require('client' not in run.forwards.processes,
+                'P5 requires the public Client endpoint before resetting data or measuring availability')
+        run.save('setup-ready.json', {'applications_held': [a['name'] for a in apps],
+                                     'rollouts_complete': True, 'client_endpoint': endpoint})
         yield deployments
     except BaseException as error:
         failure = error

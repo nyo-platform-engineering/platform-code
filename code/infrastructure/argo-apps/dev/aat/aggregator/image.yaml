@@ -1,5 +1,5 @@
-# Published from AAT source commit a717a36ae6bebb5248bc1bc476a24ba080be1d45.
+# Published from AAT source commit 2525b90c571375d8fb7812dc2b1fcdf834f38164.
 image:
   repository: ghcr.io/nyo-platform-engineering/aat-apps/aggregator
-  tag: sha-a717a36ae6bebb5248bc1bc476a24ba080be1d45
-  digest: sha256:833dd7736470c04ac287bfc7977e5bf994e78460d66d42430a3eb9bd4bfbd2e0
+  tag: sha-2525b90c571375d8fb7812dc2b1fcdf834f38164
+  digest: sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7

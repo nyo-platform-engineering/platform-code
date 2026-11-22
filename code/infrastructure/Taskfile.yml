@@ -34,6 +34,18 @@ tasks:
   clock:sync:
     desc: Configure chrony and wait for clock synchronization on existing VMs
     cmds: [bash scripts/vm/clock.sh sync]
+  autoscaling:on:
+    desc: Enable Aggregator KEDA CPU autoscaling (3–5 replicas); finish M2 tests first
+    cmds: [python3 scripts/autoscaling/main.py on]
+  autoscaling:off:
+    desc: Remove Aggregator KEDA autoscaling and restore 3 fixed replicas before M2 tests
+    cmds: [python3 scripts/autoscaling/main.py off]
+  autoscaling:status:
+    desc: Show Aggregator desired/ready replicas and HPA metrics
+    cmds: [python3 scripts/autoscaling/main.py status]
+  autoscaling:test:
+    desc: Prove CPU scale-up/down using public Client load, save evidence, then turn scaling OFF
+    cmds: ['python3 scripts/autoscaling/verify.py {{.CLI_ARGS}}']
   m2:p1:
     desc: Run the guided M2 P1 test; press Enter between steps
     interactive: true
