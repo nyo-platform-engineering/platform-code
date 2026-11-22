@@ -13,6 +13,24 @@ import time
 import main as scaling
 
 
+
+def cpu_utilizations(state):
+    """An HPA can report null metrics while its first CPU sample is pending."""
+    values = []
+    for hpa in state['hpas']:
+        for metric in (hpa.get('status') or {}).get('currentMetrics') or []:
+            resource = metric.get('containerResource') or metric.get('resource') or {}
+            if resource.get('name') == 'cpu':
+                values.append((resource.get('current') or {}).get('averageUtilization'))
+    return values
+
+
+def idle_baseline(state):
+    cpu = cpu_utilizations(state)
+    return (state['desired'] == 3 and state['ready'] == 3 and bool(cpu)
+            and all(value is not None and value < 60 for value in cpu))
+
+
 def run(args):
     scaling.require(shutil.which('k6'), 'Install k6 before running this test')
     env = os.environ.copy()
@@ -37,15 +55,12 @@ def run(args):
         deadline = time.monotonic() + 120
         while True:
             state = scaling.status()
-            metrics = [m.get('containerResource', {}) for h in state['hpas']
-                       for m in h['status'].get('currentMetrics', [])]
-            cpu = [m['current'].get('averageUtilization') for m in metrics if m.get('name') == 'cpu']
-            if state['desired'] == 3 and state['ready'] == 3 and cpu and all(
-                    value is not None and value < 60 for value in cpu):
+            if idle_baseline(state):
                 break
             scaling.require(time.monotonic() < deadline,
                             'No idle baseline at 3 replicas with CPU below 60%; stop background load first')
-            print('[WAIT] Waiting for idle HPA baseline (3 Ready, CPU below 60%)', flush=True)
+            print(f'[WAIT] Waiting for idle HPA baseline: desired={state["desired"]} '
+                  f'ready={state["ready"]} CPU={cpu_utilizations(state) or "pending"}', flush=True)
             time.sleep(5)
         # Enable happens before the observation clock; no manual replica mutations
         # happen until after the verdict and evidence have been written.
@@ -64,7 +79,7 @@ def run(args):
                 if running and desired > 3 and ready > 3:
                     result['scaled_up'] = True
                 print(f'[WAIT] {elapsed}s load={running} desired={desired} ready={ready} '
-                      f'CPU={[h["status"].get("currentMetrics", []) for h in state["hpas"]]}', flush=True)
+                      f'CPU={cpu_utilizations(state) or "pending"}', flush=True)
                 if not running:
                     if recovery_started is None:
                         recovery_started = time.monotonic()
