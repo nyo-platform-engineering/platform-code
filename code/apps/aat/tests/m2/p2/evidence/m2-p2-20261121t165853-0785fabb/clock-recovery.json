@@ -1,0 +1,7 @@
+{
+  "worker": "aat-worker-1",
+  "services": [
+    "chrony.service"
+  ],
+  "restored": true
+}

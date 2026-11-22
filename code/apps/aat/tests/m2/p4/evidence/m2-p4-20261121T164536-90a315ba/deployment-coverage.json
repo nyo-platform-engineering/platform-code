@@ -1,0 +1,176 @@
+{
+  "origin": "running_cluster",
+  "full_p4_certified": false,
+  "checks": {
+    "running-deployment": {
+      "status": "pass",
+      "result": {
+        "origin": "running_cluster",
+        "kubeconfig": "/home/yonatan/Documents/kuliah/platform-code/code/infrastructure/.state/kubeconfig",
+        "deployment": "aggregator",
+        "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:833dd7736470c04ac287bfc7977e5bf994e78460d66d42430a3eb9bd4bfbd2e0",
+        "feed_url": "https://satellite.naufarrel.dev",
+        "ready_replicas": 3,
+        "allowed_lateness_minutes": "360",
+        "official_reference_verified": false
+      }
+    },
+    "live-feed-consumed": {
+      "status": "pass",
+      "result": {
+        "offset_before": 2154722,
+        "offset_after": 2156327,
+        "seconds": 180.2,
+        "events_per_second": 8.9
+      }
+    },
+    "feed-backlog-observation": {
+      "status": "pass",
+      "result": {
+        "offset_before": 2156345,
+        "offset_after": 2156490,
+        "latest_offset": 2156445,
+        "lag_before": 0,
+        "lag_after": 0,
+        "seconds": 29.4,
+        "events_per_second": 4.9,
+        "caught_up": true,
+        "burst_recovery_verified": false
+      }
+    },
+    "no-rejected-feed-events": {
+      "status": "pass",
+      "result": {
+        "rejected_events": 0
+      }
+    },
+    "consumer-stats": {
+      "status": "pass",
+      "result": {
+        "log_source": "current pod logs",
+        "batches_logged": 22,
+        "progress_samples": 2,
+        "pods": 1,
+        "batch_size": 200,
+        "first_log": "2026-11-21T16:51:09.787462735Z",
+        "last_log": "2026-11-21T16:51:20.302403001Z",
+        "capacity_events_per_second": null,
+        "capacity_source": null,
+        "capacity_measured_from": null,
+        "capacity_measured_to": null,
+        "capacity_p10_events_per_second": null,
+        "capacity_p90_events_per_second": null,
+        "catch_up_seconds": 0,
+        "catch_up_events": 0,
+        "earlier_catch_ups": 0,
+        "commit_fixed_ms": null,
+        "commit_per_event_ms": null,
+        "capacity_from_commit_times": null,
+        "live_seconds_observed": 40,
+        "live_average_events_per_second": 1.38,
+        "live_peak_60s_events_per_second": 1.38,
+        "latency_definition": "per-event SSE receipt to durable batch/HazardEvent commit; unavailable for old logs",
+        "live_batch_max_p95_estimate_ms": 505,
+        "backlog_batch_max_p95_estimate_ms": null,
+        "live_p95_ingest_latency_ms": 504.204,
+        "backlog_p95_ingest_latency_ms": null
+      }
+    },
+    "wildfire-mapping": {
+      "status": "pass",
+      "result": {
+        "events": 34991,
+        "active_fires": 33886,
+        "retired_fires": 1105,
+        "fires_seen_by_several_satellites": 33840,
+        "detections_in_fires": 1388184
+      }
+    },
+    "excluded-detections-counted": {
+      "status": "pass",
+      "result": {
+        "fires": 33887,
+        "single_detections": 215286,
+        "late_detections": 0,
+        "low_confidence_detections": 234088,
+        "retracted_detections": 43007
+      }
+    },
+    "internal-audit-consistency": {
+      "status": "pass",
+      "result": {
+        "audit_count": 34992,
+        "stored_events": 34993,
+        "checksum": "584a6c7d8fce0fadec868c112643b473236c85223cc0ef64dd2333a335c711ca"
+      }
+    },
+    "controlled-event-time-update-retract": {
+      "status": "pass",
+      "result": {
+        "origin": "controlled_input_on_running_deployment",
+        "criteria": [
+          1,
+          2,
+          3
+        ],
+        "allowed_lateness_minutes": 360,
+        "late_retained": 1,
+        "same_hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+        "update_shrink_retract_dissolve_revive_verified": true
+      }
+    },
+    "deployed-60x-burst-no-loss-latency": {
+      "status": "pass",
+      "result": {
+        "origin": "controlled_input_on_running_deployment",
+        "normal_events_per_second": 20,
+        "burst_events_per_second": 1200,
+        "burst_seconds": 10,
+        "recovery_seconds": 3.3517485890006355,
+        "recovery_limit_seconds": 60,
+        "published_events": 12092,
+        "committed_offset": 12091,
+        "unique_detections": 12087,
+        "oracle_differences": 0,
+        "latency_samples": 12080,
+        "p95_ingest_to_commit_ms": 1115.833,
+        "deployed_client_lag_verified": true,
+        "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+      }
+    },
+    "deployed-hard-crash-same-prefix-reconnect": {
+      "status": "pass",
+      "result": {
+        "origin": "running_deployment",
+        "hard_crash_before_commit": true,
+        "same_prefix": 12091,
+        "full_state_equal": true,
+        "inclusive_replay_unchanged": true,
+        "reconnect_from": 12091,
+        "stream_connections": 6
+      }
+    },
+    "deployed-client-satellite-dashboard": {
+      "status": "pass",
+      "result": {
+        "origin": "running_cluster",
+        "panel_present": true,
+        "lag_events": 0,
+        "visual_demo_pending": true
+      }
+    },
+    "assistants-reference-comparison": {
+      "status": "skipped",
+      "reason": "assistants reference unavailable; internal Audit checksum is not an independent reference",
+      "result": {
+        "skipped": true,
+        "reason": "assistants reference unavailable; internal Audit checksum is not an independent reference"
+      }
+    }
+  },
+  "pending": [
+    "Criterion 6: assistants reference comparison when their results become available",
+    "Criterion 7: record the deployed Client dashboard during the live demo",
+    "Report: event time vs processing time, allowed lateness, exactly-once evidence"
+  ]
+}

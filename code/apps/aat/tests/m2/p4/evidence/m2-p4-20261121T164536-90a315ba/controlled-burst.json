@@ -1,0 +1,16 @@
+{
+  "origin": "controlled_input_on_running_deployment",
+  "normal_events_per_second": 20,
+  "burst_events_per_second": 1200,
+  "burst_seconds": 10,
+  "recovery_seconds": 3.3517485890006355,
+  "recovery_limit_seconds": 60,
+  "published_events": 12092,
+  "committed_offset": 12091,
+  "unique_detections": 12087,
+  "oracle_differences": 0,
+  "latency_samples": 12080,
+  "p95_ingest_to_commit_ms": 1115.833,
+  "deployed_client_lag_verified": true,
+  "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+}

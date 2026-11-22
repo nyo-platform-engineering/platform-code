@@ -1,0 +1,41 @@
+{
+  "first": {
+    "attempts": 2,
+    "batch_key": "volcanic_reports",
+    "correlation_id": "88099fcf029f671aaf150e8021aaccdf",
+    "kind": "record",
+    "message_id": "9fb6f8ab2235c0798ee83b5a01d25c22edf191629d047ff7400a71d8671ad53b",
+    "raw_base64": "eyJyZXBvcnRfaWQiOiJtMi1wMy1kNjM0ZDk4OWZkLW9yZGVyZWQiLCJ2b2xjYW5vX2lkIjoiTUVSQVBJIiwiZXJ1cHRpb25fY291bnRfMjRoIjozLCJhc2hfY29sdW1uX2hlaWdodF9tIjoxMDAsInJlcG9ydGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJsZXZlbCI6IlNpYWdhIn0=",
+    "reason": "processing_unavailable",
+    "received_at": "2026-11-21T15:01:26.776176Z",
+    "source": "PVMBG",
+    "source_ref_id": "m2-p3-d634d989fd-ordered",
+    "status": "retrying"
+  },
+  "later_attempt": {
+    "attempts": 3,
+    "batch_key": "volcanic_reports",
+    "correlation_id": "88099fcf029f671aaf150e8021aaccdf",
+    "kind": "record",
+    "message_id": "9fb6f8ab2235c0798ee83b5a01d25c22edf191629d047ff7400a71d8671ad53b",
+    "raw_base64": "eyJyZXBvcnRfaWQiOiJtMi1wMy1kNjM0ZDk4OWZkLW9yZGVyZWQiLCJ2b2xjYW5vX2lkIjoiTUVSQVBJIiwiZXJ1cHRpb25fY291bnRfMjRoIjozLCJhc2hfY29sdW1uX2hlaWdodF9tIjoxMDAsInJlcG9ydGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJsZXZlbCI6IlNpYWdhIn0=",
+    "reason": "processing_unavailable",
+    "received_at": "2026-11-21T15:01:26.776176Z",
+    "source": "PVMBG",
+    "source_ref_id": "m2-p3-d634d989fd-ordered",
+    "status": "retrying"
+  },
+  "blocked_successor": {
+    "attempts": 0,
+    "batch_key": "volcanic_reports",
+    "correlation_id": "3b7e7f2da87b812301b9da66b7194cc7",
+    "kind": "record",
+    "message_id": "92fb574463edc463ca35d00d6e61366ba68f324b0569e6d4465abbae24fb1a74",
+    "raw_base64": "eyJyZXBvcnRfaWQiOiJtMi1wMy1kNjM0ZDk4OWZkLW9yZGVyZWQiLCJ2b2xjYW5vX2lkIjoiTUVSQVBJIiwiYWxlcnRfbGV2ZWwiOiJBd2FzIiwiZXJ1cHRpb25fY291bnRfMjRoIjoiNCIsImFzaF9jb2x1bW5faGVpZ2h0X20iOjEwMCwicmVwb3J0ZWRfYXQiOiIyMDI2LTAxLTAxVDAwOjAwOjAwWiJ9",
+    "reason": "",
+    "received_at": "2026-11-21T15:01:29.803452Z",
+    "source": "PVMBG",
+    "source_ref_id": "m2-p3-d634d989fd-ordered",
+    "status": "retrying"
+  }
+}

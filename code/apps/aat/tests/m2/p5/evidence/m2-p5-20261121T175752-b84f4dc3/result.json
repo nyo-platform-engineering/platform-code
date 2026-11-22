@@ -1,0 +1,133 @@
+{
+  "problem": "M2 P5",
+  "started_at": "2026-11-21T17:57:52.808803+00:00",
+  "mode": "guided",
+  "automated_checks": {
+    "sensor-practice-reset": {
+      "status": "pass",
+      "result": {
+        "other_sources_before": [
+          [
+            "BMKG",
+            10148
+          ],
+          [
+            "PVMBG",
+            10155
+          ],
+          [
+            "SATELIT",
+            35491
+          ]
+        ],
+        "pending_outboxes_deleted": 0,
+        "outboxes_deleted": 1426,
+        "hazard_events_deleted": 1426,
+        "inbox_messages_deleted": 1887,
+        "sensor_states_deleted": 1,
+        "poll_states_deleted": 0,
+        "other_sources_after": [
+          [
+            "BMKG",
+            10148
+          ],
+          [
+            "PVMBG",
+            10155
+          ],
+          [
+            "SATELIT",
+            35491
+          ]
+        ],
+        "reset_at": "2026-11-21T17:58:11.532119+00:00",
+        "other_sources_preserved": true
+      }
+    },
+    "critical-alerts-delivered": {
+      "status": "pass",
+      "result": {
+        "critical_readings": 3,
+        "alerted": 3,
+        "lost": 0,
+        "p95_ms": 487.06,
+        "max_ms": 487.06,
+        "evidence": "durable critical_field_alert effects; original NATS persistence timestamps"
+      }
+    },
+    "sensor-poller-live": {
+      "status": "pass",
+      "result": {
+        "stations": 4,
+        "breaker": "closed",
+        "requests_so_far": 139
+      }
+    },
+    "coastal-mapping": {
+      "status": "pass",
+      "result": {
+        "events": 617,
+        "critical": 3,
+        "suspect": 6
+      }
+    },
+    "parked-data-visible-to-ops-only": {
+      "status": "pass",
+      "result": {
+        "parked_or_retrying": 0,
+        "statuses": []
+      }
+    },
+    "sensor-outage-and-recovery": {
+      "status": "pass",
+      "result": {
+        "breaker_opened_after_s": 5.0,
+        "last_error": "Get \"http://sensor-pantai:8080/v1/observations?limit=500&cursor=eyJvIjo2NzR9\": dial tcp 10.43.125.174:8080: connect: connection refused",
+        "outage_s": 35,
+        "requests_during_outage": 6,
+        "requests_per_s": 0.17,
+        "client_p95_ms_sensor": 54.9,
+        "client_p95_ms_all_sources": 67.2,
+        "client_p95_ms_bmkg_only": 52.7,
+        "client_p95_ms_pvmbg_only": 63.3,
+        "client_p95_ms_satelit_only": 65.6,
+        "client_sensor_status": "stale",
+        "recovered_after_s": 12.1,
+        "recovered_breaker": "closed"
+      }
+    },
+    "media-shed-field-team-served": {
+      "status": "pass",
+      "result": {
+        "media_requests": 13589,
+        "media_shed_429": 13570,
+        "field_requests": 20,
+        "field_served": 20
+      }
+    },
+    "gameday-combined": {
+      "status": "pass",
+      "result": {
+        "recovered_after_s": 19.9,
+        "availability": 1.0,
+        "error_budget_used": 0.0,
+        "field_p95_ms_during_faults": 480.1
+      }
+    }
+  },
+  "manual_evidence_required": [
+    "Criterion 2: contract violations and broken critical readings (unit/integration tests; the image cannot be changed)",
+    "Criterion 6: the real game day (exam profile + Tester Agent); group 5 is a rehearsal on the practice lab",
+    "Criterion 7: Grafana P5 panels (breaker, requests to sensor, critical alert p95, shed requests) explained on screen",
+    "Criterion 8: SLO and error budget used during the game day; post-mortem in the report"
+  ],
+  "lab_mode": "vm",
+  "nodes": [
+    "aat-control",
+    "aat-worker-1",
+    "aat-worker-2"
+  ],
+  "retried_429": 17,
+  "finished_at": "2026-11-21T18:03:37.951013+00:00",
+  "status": "automated_checks_passed_manual_evidence_pending"
+}

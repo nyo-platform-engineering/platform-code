@@ -1,0 +1,13 @@
+{
+  "attempts": 1,
+  "batch_key": "volcanic_reports",
+  "correlation_id": "48012d67c31b1cb9311b790a4ed49b00",
+  "kind": "envelope",
+  "message_id": "4a3b763a5340ed1d5dc00b5a9e807144b7f634c028c16e13b495c1b5a743d158",
+  "raw_base64": "W3sicmVwb3J0X2lkIjo=",
+  "reason": "schema_incompatible: invalid_json",
+  "received_at": "2026-11-21T15:00:59.408725Z",
+  "source": "PVMBG",
+  "source_ref_id": "",
+  "status": "parked"
+}

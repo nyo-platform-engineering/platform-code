@@ -1,0 +1,13 @@
+{
+  "attempts": 1,
+  "batch_key": "volcanic_reports",
+  "correlation_id": "1d5f6d7ce007f237c5e7e72a2b2fff70",
+  "kind": "envelope",
+  "message_id": "7c66501a188f89ff815f496e24a7d019c2626d0c712445998a42b39f39d1d8c9",
+  "raw_base64": "W1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbMF1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXQ==",
+  "reason": "schema_incompatible: nesting_too_deep",
+  "received_at": "2026-11-21T15:01:05.468438Z",
+  "source": "PVMBG",
+  "source_ref_id": "",
+  "status": "parked"
+}

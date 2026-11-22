@@ -1,0 +1,134 @@
+{
+  "scenario": "combined",
+  "story": "Media spike, PVMBG network outage, Sensor Pantai unreachable (calls hang), notifier cut off from NATS, a worker node loses power",
+  "storage_faults": true,
+  "during_faults": {
+    "requests": 104,
+    "unanswered": 0,
+    "unanswered_statuses": [],
+    "field_p95_ms": 480.1,
+    "bmkg_only_p95_ms": 381.3,
+    "partial_answers": 0,
+    "stale_sources_seen": [
+      "PVMBG"
+    ]
+  },
+  "after_faults": {
+    "requests": 93,
+    "unanswered": 0,
+    "unanswered_statuses": [],
+    "field_p95_ms": 72.2,
+    "bmkg_only_p95_ms": 20.8,
+    "partial_answers": 0,
+    "stale_sources_seen": [
+      "PVMBG",
+      "SENSOR_PANTAI"
+    ]
+  },
+  "slo": {
+    "requests": 98,
+    "good": 98,
+    "availability": 1.0,
+    "target": 0.99,
+    "error_budget_used": 0.0,
+    "valid_for_gameday": true
+  },
+  "recovered_after_s": 19.9,
+  "passed": true,
+  "failures": [],
+  "recovery_window_started": true,
+  "measurement_valid": true,
+  "media": {
+    "requests": 131474,
+    "shed_429": 131294
+  },
+  "faults": [
+    {
+      "at": "2026-11-21T18:02:25.750237+00:00",
+      "fault": "media-flood",
+      "action": "inject",
+      "after_s": 0.0
+    },
+    {
+      "at": "2026-11-21T18:02:30.824024+00:00",
+      "fault": "pvmbg-outage",
+      "action": "inject",
+      "after_s": 5.1
+    },
+    {
+      "at": "2026-11-21T18:02:35.825225+00:00",
+      "fault": "sensor-unreachable",
+      "action": "inject",
+      "after_s": 10.1
+    },
+    {
+      "at": "2026-11-21T18:02:40.809919+00:00",
+      "fault": "notifier-partition",
+      "action": "inject",
+      "after_s": 15.1
+    },
+    {
+      "at": "2026-11-21T18:02:46.174704+00:00",
+      "fault": "node-down-aat-worker-2",
+      "action": "inject",
+      "after_s": 20.5
+    },
+    {
+      "at": "2026-11-21T18:03:11.710004+00:00",
+      "fault": "node-down-aat-worker-2",
+      "action": "revert"
+    },
+    {
+      "at": "2026-11-21T18:03:11.785981+00:00",
+      "fault": "notifier-partition",
+      "action": "revert"
+    },
+    {
+      "at": "2026-11-21T18:03:11.869251+00:00",
+      "fault": "sensor-unreachable",
+      "action": "revert"
+    },
+    {
+      "at": "2026-11-21T18:03:11.956341+00:00",
+      "fault": "pvmbg-outage",
+      "action": "revert"
+    },
+    {
+      "at": "2026-11-21T18:03:12.302197+00:00",
+      "fault": "media-flood",
+      "action": "revert"
+    },
+    {
+      "at": "2026-11-21T18:03:12.302218+00:00",
+      "action": "hands-off",
+      "note": "no further actions until the verdict"
+    }
+  ],
+  "last_health": {
+    "checks": {
+      "nodes_ready": true,
+      "aggregator_ready": true,
+      "client_ready": true,
+      "sensor-pantai_ready": true,
+      "field-notifier_ready": true,
+      "dashboard-updater_ready": true,
+      "bmkg_ready": true,
+      "pvmbg_ready": true,
+      "sensor_available": true,
+      "no_stale_sources": true,
+      "complete_answers": true,
+      "critical_outbox_drained": true,
+      "storage_metadata_synced": true,
+      "field_notifier_critical_drained": true
+    },
+    "stale_sources": [],
+    "critical_consumers": {
+      "field-notifier-critical": {
+        "num_pending": 0,
+        "num_ack_pending": 0,
+        "error": null
+      }
+    },
+    "unready_deployments": {}
+  }
+}

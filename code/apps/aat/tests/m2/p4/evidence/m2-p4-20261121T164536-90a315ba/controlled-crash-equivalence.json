@@ -1,0 +1,8 @@
+{
+  "same_prefix": 12091,
+  "equal": true,
+  "fault": "abrupt deployed owner exit 137, bypassing defers after HazardEvent writes before offset commit",
+  "pod": "aggregator-7f66cbdb65-dkmmp",
+  "database_backend_pid": 7813,
+  "old_container_id": "containerd://9de45c426e97d8f7f227533993bc5537b5480a46bf1243975d8ffa4648793367"
+}

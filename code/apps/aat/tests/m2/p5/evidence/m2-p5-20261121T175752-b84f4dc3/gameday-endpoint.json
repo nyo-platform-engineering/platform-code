@@ -1,0 +1,4 @@
+{
+  "client": "http://192.168.56.10:30080",
+  "transport": "public_nodeport"
+}

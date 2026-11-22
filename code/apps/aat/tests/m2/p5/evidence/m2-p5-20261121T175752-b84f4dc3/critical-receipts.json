@@ -1,0 +1,20 @@
+[
+  {
+    "delivery_id": "b6d4fb77cc0709230596cbb5da99c983e2f0d0f21ee40ca98cc3998f71486b45",
+    "hazard_id": "haz-20261112T023015.000000000Z-c99af4b85985106dc981e97d641820c6",
+    "ingested_at": "2026-11-21T18:00:49.820201+00:00",
+    "received_at": "2026-11-21T18:00:50.098100185Z"
+  },
+  {
+    "delivery_id": "102ada52858ab09b585708e264f92e2d629bba891b757a2ba610c00994f3d469",
+    "hazard_id": "haz-20261112T003000.000000000Z-90ac5e9186d2ff67af7d42017f7a06a0",
+    "ingested_at": "2026-11-21T17:58:49.864016+00:00",
+    "received_at": "2026-11-21T17:58:50.351077906Z"
+  },
+  {
+    "delivery_id": "dc1ef188dca9ab07d7bad8fcf8999fae4f2782d1cb4ab128f04d48c8a38f8092",
+    "hazard_id": "haz-20261112T013030.000000000Z-ea8aa9d8f6d43d0dee5e703177f07755",
+    "ingested_at": "2026-11-21T17:59:50.187905+00:00",
+    "received_at": "2026-11-21T17:59:50.415427855Z"
+  }
+]

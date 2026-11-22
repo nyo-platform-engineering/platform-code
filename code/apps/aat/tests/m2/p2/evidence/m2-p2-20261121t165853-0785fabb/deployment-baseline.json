@@ -1,0 +1,50 @@
+{
+  "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+  "replicas": 3,
+  "resources": {
+    "limits": {
+      "memory": "512Mi"
+    },
+    "requests": {
+      "cpu": "100m",
+      "memory": "256Mi"
+    }
+  },
+  "strategy": {
+    "rollingUpdate": {
+      "maxSurge": 1,
+      "maxUnavailable": 0
+    },
+    "type": "RollingUpdate"
+  },
+  "topology_spread": [
+    {
+      "labelSelector": {
+        "matchLabels": {
+          "app.kubernetes.io/instance": "aggregator"
+        }
+      },
+      "matchLabelKeys": [
+        "pod-template-hash"
+      ],
+      "maxSkew": 1,
+      "nodeTaintsPolicy": "Honor",
+      "topologyKey": "kubernetes.io/hostname",
+      "whenUnsatisfiable": "DoNotSchedule"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "aat-control",
+      "kernel": "6.8.0-64-generic"
+    },
+    {
+      "name": "aat-worker-1",
+      "kernel": "6.8.0-64-generic"
+    },
+    {
+      "name": "aat-worker-2",
+      "kernel": "6.8.0-64-generic"
+    }
+  ]
+}

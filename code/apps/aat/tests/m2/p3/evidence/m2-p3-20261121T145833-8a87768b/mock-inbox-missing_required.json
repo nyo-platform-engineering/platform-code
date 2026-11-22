@@ -1,0 +1,13 @@
+{
+  "attempts": 1,
+  "batch_key": "volcanic_reports",
+  "correlation_id": "f5245090506bb0cb2ba5f390bc0e7c37",
+  "kind": "record",
+  "message_id": "c46de7fac57ffdd3f24400a3675ef01605b20f3b98e373cf0c006a917bea62c9",
+  "raw_base64": "eyJhbGVydF9sZXZlbCI6Ildhc3BhZGEiLCJhc2hfY29sdW1uX2hlaWdodF9tIjoxMDAsInJlcG9ydF9pZCI6InB2bWJnLTE3OTUyNzMyMTAwMDAwMDAwMDAiLCJyZXBvcnRlZF9hdCI6IjIwMjYtMTEtMjFUMTU6MDA6MTBaIiwidm9sY2Fub19pZCI6IlNFTUVSVSJ9",
+  "reason": "schema_incompatible: invalid eruption_count_24h",
+  "received_at": "2026-11-21T15:00:16.43962Z",
+  "source": "PVMBG",
+  "source_ref_id": "pvmbg-1795273210000000000",
+  "status": "parked"
+}

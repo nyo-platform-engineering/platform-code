@@ -1,0 +1,12 @@
+{
+  "logical_events": 67133,
+  "previous_identities_preserved": true,
+  "mock_window": [
+    1795280852.3999622,
+    1795281014.8334866
+  ],
+  "expected_mock_events_checked": {
+    "BMKG": 14,
+    "PVMBG": 14
+  }
+}

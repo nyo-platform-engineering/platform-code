@@ -1,0 +1,9 @@
+{
+  "origin": "running_deployment",
+  "hard_crash_before_commit": true,
+  "same_prefix": 12091,
+  "full_state_equal": true,
+  "inclusive_replay_unchanged": true,
+  "reconnect_from": 12091,
+  "stream_connections": 6
+}

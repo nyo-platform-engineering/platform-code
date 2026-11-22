@@ -1,0 +1,46 @@
+{
+  "requests": 10800,
+  "successes": 10800,
+  "controlled_rejections": 0,
+  "failures": 0,
+  "unexpected_error_denominator": 10800,
+  "successes_per_second": 30.0,
+  "seconds": 360,
+  "vus": 10000,
+  "pdf_load_minimum_met": true,
+  "cache_results": {
+    "p2_cache_results{result:limited}": 0,
+    "p2_cache_results{result:miss}": 2338,
+    "p2_cache_results{result:hit}": 7741,
+    "p2_cache_results{result:uncached}": 721
+  },
+  "http_status_counts": {
+    "p2_http_status{status:503}": 0,
+    "p2_http_status{status:200}": 10800,
+    "p2_http_status{status:0}": 0,
+    "p2_http_status{status:500}": 0,
+    "p2_http_status{status:502}": 0,
+    "p2_http_status{status:504}": 0,
+    "p2_http_status{status:429}": 0
+  },
+  "latency": {
+    "max": 765.025064,
+    "p(50)": 2.974551,
+    "p(95)": 104.23284209999993,
+    "p(99)": 191.9713067400004,
+    "avg": 20.792735765925872,
+    "min": 1.367437
+  },
+  "actions": {
+    "old_image_ids": [
+      "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+    ],
+    "new_image_ids": [
+      "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:833dd7736470c04ac287bfc7977e5bf994e78460d66d42430a3eb9bd4bfbd2e0"
+    ],
+    "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:833dd7736470c04ac287bfc7977e5bf994e78460d66d42430a3eb9bd4bfbd2e0"
+  },
+  "target_offered_rps": 30,
+  "vus_exercised": 10000,
+  "offered_requests_per_second": 30.0
+}

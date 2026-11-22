@@ -1,0 +1,56 @@
+{
+  "requests": 12000,
+  "successes": 7809,
+  "controlled_rejections": 4191,
+  "failures": 0,
+  "unexpected_error_denominator": 7809,
+  "successes_per_second": 65.075,
+  "seconds": 120,
+  "vus": 10000,
+  "pdf_load_minimum_met": true,
+  "cache_results": {
+    "p2_cache_results{result:hit}": 6427,
+    "p2_cache_results{result:miss}": 764,
+    "p2_cache_results{result:limited}": 4191,
+    "p2_cache_results{result:uncached}": 618
+  },
+  "http_status_counts": {
+    "p2_http_status{status:200}": 7809,
+    "p2_http_status{status:0}": 0,
+    "p2_http_status{status:500}": 0,
+    "p2_http_status{status:504}": 0,
+    "p2_http_status{status:502}": 0,
+    "p2_http_status{status:429}": 4191,
+    "p2_http_status{status:503}": 0
+  },
+  "latency": {
+    "avg": 51.034888335416575,
+    "min": 0.612608,
+    "max": 1073.644025,
+    "p(50)": 2.7171375,
+    "p(95)": 314.8483814999997,
+    "p(99)": 622.3056006400001
+  },
+  "actions": [
+    {
+      "replicas": 3,
+      "seconds": 0,
+      "at": "2026-11-21T17:10:50.648148+00:00"
+    },
+    {
+      "replicas": 5,
+      "requested_seconds": 40.02181260499856,
+      "at": "2026-11-21T17:11:30.669562+00:00",
+      "ready_seconds": 46.55682594400059
+    },
+    {
+      "replicas": 2,
+      "requested_seconds": 80.17744490599944,
+      "at": "2026-11-21T17:12:10.825193+00:00",
+      "ready_seconds": 81.58632626100007
+    }
+  ],
+  "target_offered_rps": 100,
+  "vus_exercised": 10000,
+  "offered_requests_per_second": 100.0
+}

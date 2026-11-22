@@ -1,0 +1,223 @@
+{
+  "one": {
+    "requests": 12000,
+    "successes": 2404,
+    "controlled_rejections": 9596,
+    "failures": 0,
+    "unexpected_error_denominator": 2404,
+    "successes_per_second": 20.033333333333335,
+    "seconds": 120,
+    "vus": 10000,
+    "pdf_load_minimum_met": true,
+    "cache_results": {
+      "p2_cache_results{result:limited}": 9596,
+      "p2_cache_results{result:hit}": 1982,
+      "p2_cache_results{result:uncached}": 125,
+      "p2_cache_results{result:miss}": 297
+    },
+    "http_status_counts": {
+      "p2_http_status{status:429}": 9596,
+      "p2_http_status{status:503}": 0,
+      "p2_http_status{status:504}": 0,
+      "p2_http_status{status:502}": 0,
+      "p2_http_status{status:200}": 2404,
+      "p2_http_status{status:500}": 0,
+      "p2_http_status{status:0}": 0
+    },
+    "latency": {
+      "p(50)": 1.2813255,
+      "p(95)": 4.752484949999988,
+      "p(99)": 26.694073540000034,
+      "avg": 2.4505974380833204,
+      "min": 0.440219,
+      "max": 201.89079
+    },
+    "actions": null,
+    "target_offered_rps": 100,
+    "vus_exercised": 10000,
+    "offered_requests_per_second": 100.0,
+    "polling_during_load": {
+      "upstream_requests": {
+        "BMKG/seismic-events": 36,
+        "BMKG/tsunami-warnings": 36,
+        "PVMBG/volcanic-reports": 25
+      },
+      "epochs": [
+        {
+          "source": "BMKG",
+          "epoch": 69,
+          "owner": "dac673523df668793eb51bb763579e63",
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        },
+        {
+          "source": "PVMBG",
+          "epoch": 60,
+          "owner": "fd477f1215b15bb52665efdff550b2b8",
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        }
+      ],
+      "successful_poll_owners": [
+        {
+          "source": "BMKG",
+          "epoch": 69,
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        },
+        {
+          "source": "PVMBG",
+          "epoch": 60,
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        }
+      ],
+      "poll_successes": {
+        "BMKG": 36,
+        "PVMBG": 25
+      },
+      "unconfirmed_responses": [],
+      "scope": "observed request/commit logs; not a linearizability proof"
+    },
+    "deployment_before": {
+      "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+      "image_ids": [
+        "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+      ],
+      "nodes": [
+        "aat-control"
+      ],
+      "read_admission": {
+        "rps_per_replica": 20,
+        "burst_per_replica": 5
+      },
+      "template_sha256": "9a70ff57650319b26a1c68984fe15d14a7cd3ce8279b012777b763726cb52e97"
+    },
+    "deployment_after": {
+      "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+      "image_ids": [
+        "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+      ],
+      "nodes": [
+        "aat-control"
+      ],
+      "read_admission": {
+        "rps_per_replica": 20,
+        "burst_per_replica": 5
+      },
+      "template_sha256": "9a70ff57650319b26a1c68984fe15d14a7cd3ce8279b012777b763726cb52e97"
+    }
+  },
+  "three": {
+    "requests": 12000,
+    "successes": 7211,
+    "controlled_rejections": 4789,
+    "failures": 0,
+    "unexpected_error_denominator": 7211,
+    "successes_per_second": 60.09166666666667,
+    "seconds": 120,
+    "vus": 10000,
+    "pdf_load_minimum_met": true,
+    "cache_results": {
+      "p2_cache_results{result:hit}": 5968,
+      "p2_cache_results{result:uncached}": 455,
+      "p2_cache_results{result:miss}": 788,
+      "p2_cache_results{result:limited}": 4789
+    },
+    "http_status_counts": {
+      "p2_http_status{status:429}": 4789,
+      "p2_http_status{status:500}": 0,
+      "p2_http_status{status:200}": 7211,
+      "p2_http_status{status:0}": 0,
+      "p2_http_status{status:502}": 0,
+      "p2_http_status{status:503}": 0,
+      "p2_http_status{status:504}": 0
+    },
+    "latency": {
+      "p(50)": 2.2156475,
+      "p(95)": 86.45121764999996,
+      "p(99)": 215.32156378000028,
+      "avg": 14.629657829416642,
+      "min": 0.538887,
+      "max": 516.851165
+    },
+    "actions": null,
+    "target_offered_rps": 100,
+    "vus_exercised": 10000,
+    "offered_requests_per_second": 100.0,
+    "polling_during_load": {
+      "upstream_requests": {
+        "BMKG/seismic-events": 36,
+        "BMKG/tsunami-warnings": 36,
+        "PVMBG/volcanic-reports": 24
+      },
+      "epochs": [
+        {
+          "source": "BMKG",
+          "epoch": 69,
+          "owner": "dac673523df668793eb51bb763579e63",
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        },
+        {
+          "source": "PVMBG",
+          "epoch": 60,
+          "owner": "fd477f1215b15bb52665efdff550b2b8",
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        }
+      ],
+      "successful_poll_owners": [
+        {
+          "source": "BMKG",
+          "epoch": 69,
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        },
+        {
+          "source": "PVMBG",
+          "epoch": 60,
+          "pod_uid": "c2a072b1-f7f7-4c69-a712-f20d58f03e66"
+        }
+      ],
+      "poll_successes": {
+        "BMKG": 36,
+        "PVMBG": 24
+      },
+      "unconfirmed_responses": [],
+      "scope": "observed request/commit logs; not a linearizability proof"
+    },
+    "deployment_before": {
+      "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+      "image_ids": [
+        "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+      ],
+      "nodes": [
+        "aat-control",
+        "aat-worker-1",
+        "aat-worker-2"
+      ],
+      "read_admission": {
+        "rps_per_replica": 20,
+        "burst_per_replica": 5
+      },
+      "template_sha256": "9a70ff57650319b26a1c68984fe15d14a7cd3ce8279b012777b763726cb52e97"
+    },
+    "deployment_after": {
+      "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+      "image_ids": [
+        "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+      ],
+      "nodes": [
+        "aat-control",
+        "aat-worker-1",
+        "aat-worker-2"
+      ],
+      "read_admission": {
+        "rps_per_replica": 20,
+        "burst_per_replica": 5
+      },
+      "template_sha256": "9a70ff57650319b26a1c68984fe15d14a7cd3ce8279b012777b763726cb52e97"
+    }
+  },
+  "ratio": 2.999584026622296,
+  "read_admission": {
+    "rps_per_replica": 20,
+    "burst_per_replica": 5
+  },
+  "capacity_interpretation": "configured admission capacity; not an uncapped capacity measurement",
+  "workload": "same VUs, duration, route, query, gzip negotiation and resource limits; successful JSON responses only"
+}

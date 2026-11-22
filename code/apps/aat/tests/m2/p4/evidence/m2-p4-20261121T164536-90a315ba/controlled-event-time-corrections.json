@@ -1,0 +1,123 @@
+{
+  "origin": "controlled_input_on_running_deployment",
+  "criteria": [
+    1,
+    2,
+    3
+  ],
+  "allowed_lateness_minutes": 360,
+  "late_retained": 1,
+  "same_hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+  "update_shrink_retract_dissolve_revive_verified": true,
+  "checkpoints": [
+    {
+      "offset": 1,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "WASPADA",
+      "detection_count": 2,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N21|2026-11-12|1201|0.00100|110.00000"
+      ]
+    },
+    {
+      "offset": 2,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "WASPADA",
+      "detection_count": 3,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N20|2026-11-12|1202|0.00200|110.00000",
+        "N21|2026-11-12|1201|0.00100|110.00000"
+      ]
+    },
+    {
+      "offset": 3,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "AWAS",
+      "detection_count": 3,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N20|2026-11-12|1202|0.00200|110.00000",
+        "N21|2026-11-12|1201|0.00100|110.00000"
+      ]
+    },
+    {
+      "offset": 4,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "AWAS",
+      "detection_count": 2,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N21|2026-11-12|1201|0.00100|110.00000"
+      ]
+    },
+    {
+      "offset": 5,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "NORMAL",
+      "detection_count": 1,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000"
+      ]
+    },
+    {
+      "offset": 6,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "AWAS",
+      "detection_count": 2,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N20|2026-11-12|1202|0.00200|110.00000"
+      ]
+    },
+    {
+      "offset": 7,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "NORMAL",
+      "detection_count": 1,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000"
+      ]
+    },
+    {
+      "offset": 8,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "NORMAL",
+      "detection_count": 1,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000"
+      ]
+    },
+    {
+      "offset": 9,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "AWAS",
+      "detection_count": 2,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N21|2026-11-12|1200|0.00000|110.00200"
+      ]
+    },
+    {
+      "offset": 10,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "AWAS",
+      "detection_count": 2,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N21|2026-11-12|1200|0.00000|110.00200"
+      ]
+    },
+    {
+      "offset": 11,
+      "hazard_id": "haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87",
+      "severity": "AWAS",
+      "detection_count": 2,
+      "detection_keys": [
+        "N20|2026-11-12|1200|0.00000|110.00000",
+        "N21|2026-11-12|1200|0.00000|110.00200"
+      ]
+    }
+  ]
+}

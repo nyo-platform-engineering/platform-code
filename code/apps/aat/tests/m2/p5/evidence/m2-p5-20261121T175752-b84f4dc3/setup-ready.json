@@ -1,0 +1,17 @@
+{
+  "applications_held": [
+    "platform",
+    "dev-apps",
+    "aat-dependencies-dev",
+    "aat-auth-dev",
+    "aat-client-dev",
+    "aat-bmkg-dev",
+    "aat-pvmbg-dev",
+    "aat-dashboard-updater-dev",
+    "aat-field-notifier-dev",
+    "aat-aggregator-dev",
+    "aat-sensor-pantai-dev"
+  ],
+  "rollouts_complete": true,
+  "client_endpoint": "http://192.168.56.10:30080"
+}

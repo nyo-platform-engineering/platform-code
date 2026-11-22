@@ -1,0 +1,10 @@
+{
+  "origin": "running_cluster",
+  "kubeconfig": "/home/yonatan/Documents/kuliah/platform-code/code/infrastructure/.state/kubeconfig",
+  "deployment": "aggregator",
+  "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:833dd7736470c04ac287bfc7977e5bf994e78460d66d42430a3eb9bd4bfbd2e0",
+  "feed_url": "https://satellite.naufarrel.dev",
+  "ready_replicas": 3,
+  "allowed_lateness_minutes": "360",
+  "official_reference_verified": false
+}

@@ -1,0 +1,12 @@
+{
+  "pod_uid": "0c429419-2079-4905-b47e-2e0b1445112b",
+  "pre_freeze_anchor_replayed": true,
+  "same_stream": false,
+  "interruptions": [
+    {
+      "pod_uid": "0c429419-2079-4905-b47e-2e0b1445112b",
+      "at": "2026-11-21T17:08:40.186469+00:00",
+      "exit": 0
+    }
+  ]
+}

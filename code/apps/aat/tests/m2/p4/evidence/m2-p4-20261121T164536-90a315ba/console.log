@@ -1,0 +1,353 @@
+[INFO] Cluster: 3 nodes (vm)
+  Evidence:
+  /home/yonatan/Documents/kuliah/platform-code/code/apps/aat/tests/m2/p4/evidence/m2-p4-20261121T164536-90a315ba
+
+M2 P4: press Enter to continue between test steps.
+[RUN] running-deployment
+[PASS] running-deployment
+  origin: running_cluster
+  kubeconfig: /home/yonatan/Documents/kuliah/platform-code/code/infrastructure/.state/kubeconfig
+  deployment: aggregator
+  image:
+  ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:833dd7736470c04ac287bfc7977e5bf994e78460d66d42430a3eb9bd4bfbd2e0
+  feed_url: https://satellite.naufarrel.dev
+  ready_replicas: 3
+  allowed_lateness_minutes: 360
+  official_reference_verified: False
+Enter → check the Aggregator is consuming the live satellite feed: 
+[RUN] live-feed-consumed
+[WAIT] live-feed-consumed | the satellite consumer to commit a first offset | 0s / 300s
+[WAIT] live-feed-consumed | the satellite consumer to commit a first offset | 1s / 300s | offset=2154722; latest_offset=2154711; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 0s / 215s
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 5s / 215s | offset=2154722; latest_offset=2154722; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 10s / 215s | offset=2154722; latest_offset=2154722; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 15s / 215s | offset=2154725; latest_offset=2154725; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  15s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 20s / 215s | offset=2154725; latest_offset=2154725; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 25s / 215s | offset=2154725; latest_offset=2154725; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 30s / 215s | offset=2154732; latest_offset=2154725; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  31s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 35s / 215s | offset=2154732; latest_offset=2154732; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 40s / 215s | offset=2154732; latest_offset=2154732; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 45s / 215s | offset=2154748; latest_offset=2154744; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  47s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 50s / 215s | offset=2154750; latest_offset=2154744; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 55s / 215s | offset=2154750; latest_offset=2154750; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 60s / 215s | offset=2154755; latest_offset=2154750; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  63s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 65s / 215s | offset=2154777; latest_offset=2154777; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 70s / 215s | offset=2154802; latest_offset=2154777; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 75s / 215s | offset=2154827; latest_offset=2154827; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  79s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 80s / 215s | offset=2154850; latest_offset=2154827; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 85s / 215s | offset=2154875; latest_offset=2154827; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 90s / 215s | offset=2154902; latest_offset=2154897; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 95s / 215s | offset=2154924; latest_offset=2154897; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  96s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 100s / 215s | offset=2154947; latest_offset=2154950; lag_events=3; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 105s / 215s | offset=2154987; latest_offset=2154950; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 110s / 215s | offset=2155487; latest_offset=2155498; lag_events=11; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  111s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 115s / 215s | offset=2156000; latest_offset=2155498; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 120s / 215s | offset=2156023; latest_offset=2156023; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 125s / 215s | offset=2156048; latest_offset=2156023; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  128s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 130s / 215s | offset=2156073; latest_offset=2156073; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 135s / 215s | offset=2156097; latest_offset=2156080; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 140s / 215s | offset=2156123; latest_offset=2156080; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  144s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 145s / 215s | offset=2156146; latest_offset=2156130; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 150s / 215s | offset=2156171; latest_offset=2156130; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 155s / 215s | offset=2156198; latest_offset=2156180; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  159s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 160s / 215s | offset=2156225; latest_offset=2156180; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 165s / 215s | offset=2156250; latest_offset=2156231; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 170s / 215s | offset=2156275; latest_offset=2156231; lag_events=0; rejected_events=0
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 175s / 215s | offset=2156289; latest_offset=2156282; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe live satellite feed for 180s
+  175s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 180s / 215s | offset=2156320; latest_offset=2156295; lag_events=0; rejected_events=0
+[INFO] Done waiting for observe live satellite feed for 180s
+  after 180s
+[WAIT] live-feed-consumed | observe live satellite feed for 180s | 180s / 215s | offset=2156327; latest_offset=2156295; lag_events=0; rejected_events=0
+[PASS] live-feed-consumed
+  offset_before: 2154722
+  offset_after: 2156327
+  seconds: 180.2
+  events_per_second: 8.9
+Enter → observe feed activity and backlog for 30s: 
+[RUN] feed-backlog-observation
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 0s / 65s
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 5s / 65s | offset=2156362; latest_offset=2156345; lag_events=0; rejected_events=0
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 10s / 65s | offset=2156387; latest_offset=2156345; lag_events=0; rejected_events=0
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 15s / 65s | offset=2156412; latest_offset=2156395; lag_events=0; rejected_events=0
+[WAIT] Still waiting for observe feed activity for 30s
+  16s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 20s / 65s | offset=2156440; latest_offset=2156395; lag_events=0; rejected_events=0
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 25s / 65s | offset=2156465; latest_offset=2156445; lag_events=0; rejected_events=0
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 30s / 65s | offset=2156482; latest_offset=2156445; lag_events=0; rejected_events=0
+[INFO] Done waiting for observe feed activity for 30s
+  after 30s
+[WAIT] feed-backlog-observation | observe feed activity for 30s | 30s / 65s | offset=2156490; latest_offset=2156445; lag_events=0; rejected_events=0
+[PASS] feed-backlog-observation
+  offset_before: 2156345
+  offset_after: 2156490
+  latest_offset: 2156445
+  lag_before: 0
+  lag_after: 0
+  seconds: 29.4
+  events_per_second: 4.9
+  caught_up: True
+  burst_recovery_verified: False
+[RUN] no-rejected-feed-events
+[PASS] no-rejected-feed-events
+  rejected_events: 0
+[RESULT] Feed
+  Offset 2156345 -> 2156490; lag 0 -> 0; rejected events: 0
+  Initial observation only; this does not certify real 60x burst recovery.
+Enter → record the consumer's statistics (capacity, live rate, ingest latency) from the Aggregator logs: 
+[RUN] consumer-stats
+[WARN] Loki not readable; using the current pods' logs
+  timed out
+[WARN] No catch-up in the logs (current pod logs)
+  Neither 6 windows of 10 s with the lag at 2000+ events nor 10 full batches in a row. Capacity is
+  estimated from commit times only (it leaves out reading time), or the forecast is skipped. For a
+  measured number, run P4 within 6 h of a catch-up (a fresh task up replays the feed from offset 0
+  at full speed; so does a lab that was off for a while).
+[PASS] consumer-stats
+  log_source: current pod logs
+  batches_logged: 22
+  progress_samples: 2
+  pods: 1
+  batch_size: 200
+  first_log: 2026-11-21T16:51:09.787462735Z
+  last_log: 2026-11-21T16:51:20.302403001Z
+  capacity_events_per_second: None
+  capacity_source: None
+  capacity_measured_from: None
+  capacity_measured_to: None
+  capacity_p10_events_per_second: None
+  capacity_p90_events_per_second: None
+  catch_up_seconds: 0
+  catch_up_events: 0
+  earlier_catch_ups: 0
+  commit_fixed_ms: None
+  commit_per_event_ms: None
+  capacity_from_commit_times: None
+  live_seconds_observed: 40
+  live_average_events_per_second: 1.38
+  live_peak_60s_events_per_second: 1.38
+  latency_definition: per-event SSE receipt to durable batch/HazardEvent commit; unavailable for old
+  logs
+  live_batch_max_p95_estimate_ms: 505
+  backlog_batch_max_p95_estimate_ms: None
+  live_p95_ingest_latency_ms: 504.204
+  backlog_p95_ingest_latency_ms: None
+[RESULT] Consumer
+  Capacity not measurable from these logs; live 1.38 ev/s
+  p95 ingest latency live 504.204 ms, behind None ms; every batch is in consumer-batches.jsonl
+Enter → verify every WILDFIRE event against the fire definition and mapping rules: 
+[RUN] wildfire-mapping
+[PASS] wildfire-mapping
+  events: 34991
+  active_fires: 33886
+  retired_fires: 1105
+  fires_seen_by_several_satellites: 33840
+  detections_in_fires: 1388184
+[RESULT] Fires
+  Events: 34991 (33886 active, 1105 retired)
+  Seen by several satellites: 33840
+  Detections inside fires: 1388184
+[RUN] excluded-detections-counted
+[PASS] excluded-detections-counted
+  fires: 33887
+  single_detections: 215286
+  late_detections: 0
+  low_confidence_detections: 234088
+  retracted_detections: 43007
+Enter → check internal Audit/store consistency (not the assistants reference): 
+[RUN] internal-audit-consistency
+[PASS] internal-audit-consistency
+  audit_count: 34992
+  stored_events: 34993
+  checksum: 584a6c7d8fce0fadec868c112643b473236c85223cc0ef64dd2333a335c711ca
+Enter → run controlled SSE cases on this Aggregator/Client/Citus deployment; temporary schemas and env are restored on exit: 
+[WAIT] Still waiting for Aggregator rollout and old-pod termination
+  16s elapsed (no time limit; Ctrl+C stops and restores)
+  3/5 Aggregator pods ready; aggregator-987bc65fb-2l9tc=Running, aggregator-987bc65fb-nbwjl=Running,
+  aggregator-b6cc5dc6f-2z4m5=Running, aggregator-b6cc5dc6f-mcwwf=Running,
+  aggregator-b6cc5dc6f-x7zxf=Running
+  not ready yet
+[INFO] Done waiting for Aggregator rollout and old-pod termination
+  after 26s
+[RUN] controlled-event-time-update-retract
+[INFO] Fixture offset 1: WASPADA, 2 detections, same HazardEvent ID
+[INFO] Fixture offset 2: WASPADA, 3 detections, same HazardEvent ID
+[INFO] Fixture offset 3: AWAS, 3 detections, same HazardEvent ID
+[INFO] Fixture offset 4: AWAS, 2 detections, same HazardEvent ID
+[INFO] Fixture offset 5: NORMAL, 1 detections, same HazardEvent ID
+[INFO] Fixture offset 6: AWAS, 2 detections, same HazardEvent ID
+[INFO] Fixture offset 7: NORMAL, 1 detections, same HazardEvent ID
+[INFO] Fixture offset 8: NORMAL, 1 detections, same HazardEvent ID
+[INFO] Fixture offset 9: AWAS, 2 detections, same HazardEvent ID
+[INFO] Fixture offset 10: AWAS, 2 detections, same HazardEvent ID
+[INFO] Fixture offset 11: AWAS, 2 detections, same HazardEvent ID
+[PASS] controlled-event-time-update-retract
+  origin: controlled_input_on_running_deployment
+  allowed_lateness_minutes: 360
+  late_retained: 1
+  same_hazard_id: haz-20261112T120000.000000000Z-d72e68b6f192641d11ebef5d811b0b87
+  update_shrink_retract_dissolve_revive_verified: True
+[RUN] deployed-60x-burst-no-loss-latency
+[WAIT] controlled-60x-burst | actual SSE publication and deployed consumer recovery | 0s / 75s
+[WAIT] controlled-60x-burst | actual SSE publication and deployed consumer recovery | 5s / 75s | speed=60x; offset=2444; latest=3344; lag=900
+[WAIT] controlled-60x-burst | actual SSE publication and deployed consumer recovery | 10s / 75s | speed=60x; offset=7044; latest=9026; lag=1982
+[WAIT] controlled-60x-burst | actual SSE publication and deployed consumer recovery | 15s / 75s | speed=1x; offset=12044; latest=12091; lag=47
+[PASS] deployed-60x-burst-no-loss-latency
+  origin: controlled_input_on_running_deployment
+  normal_events_per_second: 20
+  burst_events_per_second: 1200
+  burst_seconds: 10
+  recovery_seconds: 3.3517485890006355
+  recovery_limit_seconds: 60
+  published_events: 12092
+  committed_offset: 12091
+  unique_detections: 12087
+  oracle_differences: 0
+  latency_samples: 12080
+  p95_ingest_to_commit_ms: 1115.833
+  deployed_client_lag_verified: True
+  image:
+  ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7
+[RUN] deployed-hard-crash-same-prefix-reconnect
+[WAIT] Still waiting for Aggregator rollout and old-pod termination
+  15s elapsed (no time limit; Ctrl+C stops and restores)
+  3/5 Aggregator pods ready; aggregator-7f66cbdb65-2lpjf=Running,
+  aggregator-7f66cbdb65-dkmmp=Running, aggregator-7f66cbdb65-s56vw=Running,
+  aggregator-b6cc5dc6f-2z4m5=Running, aggregator-b6cc5dc6f-x7zxf=Running
+  not ready yet
+[INFO] Done waiting for Aggregator rollout and old-pod termination
+  after 26s
+[WAIT] Still waiting for killed consumer database backend to exit
+  15s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] Still waiting for killed consumer database backend to exit
+  31s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] Still waiting for killed consumer database backend to exit
+  46s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] Still waiting for killed consumer database backend to exit
+  62s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] Still waiting for killed consumer database backend to exit
+  77s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] Still waiting for killed consumer database backend to exit
+  93s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[WAIT] Still waiting for killed consumer database backend to exit
+  108s elapsed (no time limit; Ctrl+C stops and restores)
+  not ready yet
+[INFO] Done waiting for killed consumer database backend to exit
+  after 119s
+[WAIT] Still waiting for killed Aggregator container restart
+  16s elapsed (no time limit; Ctrl+C stops and restores)
+  pod aggregator-7f66cbdb65-dkmmp: ready=False, restarts=4, state=['waiting'], last_exit=2,
+  reason=Error
+  not ready yet
+[WAIT] Still waiting for killed Aggregator container restart
+  31s elapsed (no time limit; Ctrl+C stops and restores)
+  pod aggregator-7f66cbdb65-dkmmp: ready=False, restarts=4, state=['waiting'], last_exit=2,
+  reason=Error
+  not ready yet
+[WAIT] Still waiting for killed Aggregator container restart
+  47s elapsed (no time limit; Ctrl+C stops and restores)
+  pod aggregator-7f66cbdb65-dkmmp: ready=False, restarts=4, state=['waiting'], last_exit=2,
+  reason=Error
+  not ready yet
+[WAIT] Still waiting for killed Aggregator container restart
+  62s elapsed (no time limit; Ctrl+C stops and restores)
+  pod aggregator-7f66cbdb65-dkmmp: ready=False, restarts=4, state=['waiting'], last_exit=2,
+  reason=Error
+  not ready yet
+[INFO] Done waiting for killed Aggregator container restart
+  after 76s
+[WAIT] Still waiting for deployed consumer offset 12091
+  16s elapsed (no time limit; Ctrl+C stops and restores)
+  committed offset 0 of 12091; lag 0; rejected 0
+  not ready yet
+[WAIT] Still waiting for deployed consumer offset 12091
+  31s elapsed (no time limit; Ctrl+C stops and restores)
+  committed offset 9400 of 12091; lag 2691; rejected 0
+  not ready yet
+[INFO] Done waiting for deployed consumer offset 12091
+  after 35s
+[PASS] deployed-hard-crash-same-prefix-reconnect
+  origin: running_deployment
+  hard_crash_before_commit: True
+  same_prefix: 12091
+  full_state_equal: True
+  inclusive_replay_unchanged: True
+  reconnect_from: 12091
+  stream_connections: 6
+[WAIT] Still waiting for Aggregator rollout and old-pod termination
+  16s elapsed (no time limit; Ctrl+C stops and restores)
+  3/5 Aggregator pods ready; aggregator-7f66cbdb65-2lpjf=Running,
+  aggregator-7f66cbdb65-s56vw=Running, aggregator-987bc65fb-9dkkr=Running,
+  aggregator-987bc65fb-g8mn9=Running, aggregator-987bc65fb-rzsbv=Running
+  not ready yet
+[INFO] Done waiting for Aggregator rollout and old-pod termination
+  after 25s
+[RUN] deployed-client-satellite-dashboard
+[PASS] deployed-client-satellite-dashboard
+  origin: running_cluster
+  panel_present: True
+  lag_events: 0
+  visual_demo_pending: True
+[RUN] assistants-reference-comparison
+[SKIP] assistants-reference-comparison
+  reason: assistants reference unavailable; internal Audit checksum is not an independent reference
+[RESULT] Stage summary
+  PASS: running-deployment
+  PASS: live-feed-consumed
+  PASS: feed-backlog-observation
+  PASS: no-rejected-feed-events
+  PASS: consumer-stats
+  PASS: wildfire-mapping
+  PASS: excluded-detections-counted
+  PASS: internal-audit-consistency
+  PASS: controlled-event-time-update-retract
+  PASS: deployed-60x-burst-no-loss-latency
+  PASS: deployed-hard-crash-same-prefix-reconnect
+  PASS: deployed-client-satellite-dashboard
+  SKIPPED: assistants-reference-comparison
+[INFO] P4 incomplete: one or more automated checks were skipped
+[INFO] Evidence
+  /home/yonatan/Documents/kuliah/platform-code/code/apps/aat/tests/m2/p4/evidence/m2-p4-20261121T164536-90a315ba
+[MANUAL] Pending evidence
+  Criterion 6: assistants reference comparison when their results become available
+  Criterion 7: record the deployed Client dashboard during the live demo
+  Report: event time vs processing time, allowed lateness, exactly-once evidence

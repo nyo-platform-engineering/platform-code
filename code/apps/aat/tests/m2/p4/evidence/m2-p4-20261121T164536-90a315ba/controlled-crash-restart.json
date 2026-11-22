@@ -1,0 +1,116 @@
+{
+  "pod": "aggregator-7f66cbdb65-dkmmp",
+  "original_container": {
+    "allocatedResources": {
+      "cpu": "100m",
+      "memory": "256Mi"
+    },
+    "containerID": "containerd://9de45c426e97d8f7f227533993bc5537b5480a46bf1243975d8ffa4648793367",
+    "image": "sha256:f59aa77abb0aa426fdf4b93e5a07c389759cb001e089c50b18f47a7d3687f5da",
+    "imageID": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+    "lastState": {},
+    "name": "aggregator",
+    "ready": true,
+    "resources": {
+      "limits": {
+        "memory": "512Mi"
+      },
+      "requests": {
+        "cpu": "100m",
+        "memory": "256Mi"
+      }
+    },
+    "restartCount": 0,
+    "started": true,
+    "state": {
+      "running": {
+        "startedAt": "2026-11-21T16:53:08Z"
+      }
+    },
+    "user": {
+      "linux": {
+        "gid": 10001,
+        "supplementalGroups": [
+          10001
+        ],
+        "uid": 10001
+      }
+    },
+    "volumeMounts": [
+      {
+        "mountPath": "/tmp",
+        "name": "tmp"
+      },
+      {
+        "mountPath": "/etc/citus",
+        "name": "citus",
+        "readOnly": true,
+        "recursiveReadOnly": "Disabled"
+      }
+    ]
+  },
+  "verified_termination": {
+    "containerID": "containerd://9de45c426e97d8f7f227533993bc5537b5480a46bf1243975d8ffa4648793367",
+    "exitCode": 137,
+    "finishedAt": "2026-11-21T16:53:38Z",
+    "reason": "Error",
+    "startedAt": "2026-11-21T16:53:08Z"
+  },
+  "replacement_container": {
+    "allocatedResources": {
+      "cpu": "100m",
+      "memory": "256Mi"
+    },
+    "containerID": "containerd://0ee9412e1750631a9e8dead4a6a0278603286bcff8f12e5056b5a1ebbbae253b",
+    "image": "sha256:f59aa77abb0aa426fdf4b93e5a07c389759cb001e089c50b18f47a7d3687f5da",
+    "imageID": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+    "lastState": {
+      "terminated": {
+        "containerID": "containerd://6e2fd98866bc96d5a8239a57b4cdc8febd940c76b0bbc60b170570289f4e4557",
+        "exitCode": 2,
+        "finishedAt": "2026-11-21T16:55:21Z",
+        "reason": "Error",
+        "startedAt": "2026-11-21T16:55:19Z"
+      }
+    },
+    "name": "aggregator",
+    "ready": true,
+    "resources": {
+      "limits": {
+        "memory": "512Mi"
+      },
+      "requests": {
+        "cpu": "100m",
+        "memory": "256Mi"
+      }
+    },
+    "restartCount": 5,
+    "started": true,
+    "state": {
+      "running": {
+        "startedAt": "2026-11-21T16:56:51Z"
+      }
+    },
+    "user": {
+      "linux": {
+        "gid": 10001,
+        "supplementalGroups": [
+          10001
+        ],
+        "uid": 10001
+      }
+    },
+    "volumeMounts": [
+      {
+        "mountPath": "/tmp",
+        "name": "tmp"
+      },
+      {
+        "mountPath": "/etc/citus",
+        "name": "citus",
+        "readOnly": true,
+        "recursiveReadOnly": "Disabled"
+      }
+    ]
+  }
+}

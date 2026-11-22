@@ -1,0 +1,157 @@
+{
+  "messages": {
+    "183e8b250375cfb35db9007de0090b5e87389d7bcbb1371e9eaa204cfcacfe6f": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "976c1cf4f01260d06d082ba981f84589",
+      "kind": "record",
+      "message_id": "183e8b250375cfb35db9007de0090b5e87389d7bcbb1371e9eaa204cfcacfe6f",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T14:59:34.064369Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273170000000000",
+      "status": "processed"
+    },
+    "39591b5620a908ded580d76a97bbc5e29a45477867dd1e36f0a97b583517335b": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "976c1cf4f01260d06d082ba981f84589",
+      "kind": "record",
+      "message_id": "39591b5620a908ded580d76a97bbc5e29a45477867dd1e36f0a97b583517335b",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T14:59:34.064369Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273160000000000",
+      "status": "processed"
+    },
+    "3b7ec485700e872be16765913ac8cb58204cfd779096cd3c12f5af180dd6ac47": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "e6931543833ba0e62d673edc62c491cb",
+      "kind": "record",
+      "message_id": "3b7ec485700e872be16765913ac8cb58204cfd779096cd3c12f5af180dd6ac47",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T15:00:02.367036Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273200000000000",
+      "status": "processed"
+    },
+    "78528ab3846fede98ab856ef2809015f0049d3e0d45ca049c81afef52e04db82": {
+      "attempts": 1,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "e6931543833ba0e62d673edc62c491cb",
+      "kind": "record",
+      "message_id": "78528ab3846fede98ab856ef2809015f0049d3e0d45ca049c81afef52e04db82",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T15:00:02.367036Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273190000000000",
+      "status": "processed"
+    },
+    "89472ab72a8b437b89c9bae55a57b7d5038f80e2c67d42c18fb16b03438f0498": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "854484697b8d35d9faf8a39d5ed57019",
+      "kind": "record",
+      "message_id": "89472ab72a8b437b89c9bae55a57b7d5038f80e2c67d42c18fb16b03438f0498",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T14:59:53.283256Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273190000000000",
+      "status": "processed"
+    },
+    "92fb574463edc463ca35d00d6e61366ba68f324b0569e6d4465abbae24fb1a74": {
+      "attempts": 1,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "3b7e7f2da87b812301b9da66b7194cc7",
+      "kind": "record",
+      "message_id": "92fb574463edc463ca35d00d6e61366ba68f324b0569e6d4465abbae24fb1a74",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T15:01:29.803452Z",
+      "source": "PVMBG",
+      "source_ref_id": "m2-p3-d634d989fd-ordered",
+      "status": "processed"
+    },
+    "9fb6f8ab2235c0798ee83b5a01d25c22edf191629d047ff7400a71d8671ad53b": {
+      "attempts": 4,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "88099fcf029f671aaf150e8021aaccdf",
+      "kind": "record",
+      "message_id": "9fb6f8ab2235c0798ee83b5a01d25c22edf191629d047ff7400a71d8671ad53b",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T15:01:26.776176Z",
+      "source": "PVMBG",
+      "source_ref_id": "m2-p3-d634d989fd-ordered",
+      "status": "processed"
+    },
+    "a0f5d6951bc0b8945bfa45e9a1f5d26fcc9a1124b064368c78dea9a5ffb80c1e": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "9da22edd5d859f823cde904d1bc265d6",
+      "kind": "record",
+      "message_id": "a0f5d6951bc0b8945bfa45e9a1f5d26fcc9a1124b064368c78dea9a5ffb80c1e",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T15:01:32.825596Z",
+      "source": "PVMBG",
+      "source_ref_id": "m2-p3-d634d989fd-missing",
+      "status": "processed"
+    },
+    "b87c67b3b1a85220d96d00d58faafa9632dbb63ab2588d1a178a978fc9947e29": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "3f54e1bf23acfb03fbb3af1c169ddcb0",
+      "kind": "record",
+      "message_id": "b87c67b3b1a85220d96d00d58faafa9632dbb63ab2588d1a178a978fc9947e29",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T14:59:43.796241Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273180000000000",
+      "status": "processed"
+    },
+    "c46de7fac57ffdd3f24400a3675ef01605b20f3b98e373cf0c006a917bea62c9": {
+      "attempts": 2,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "f5245090506bb0cb2ba5f390bc0e7c37",
+      "kind": "record",
+      "message_id": "c46de7fac57ffdd3f24400a3675ef01605b20f3b98e373cf0c006a917bea62c9",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T15:00:16.43962Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273210000000000",
+      "status": "processed"
+    },
+    "e06ec042a74b247949b57d823225ed8149031015f51e703017a6cda1d3d7c727": {
+      "attempts": 1,
+      "batch_key": "volcanic_reports",
+      "correlation_id": "9cb00a8b98fbe0c8619c5bd1890600f9",
+      "kind": "record",
+      "message_id": "e06ec042a74b247949b57d823225ed8149031015f51e703017a6cda1d3d7c727",
+      "raw_base64": "",
+      "reason": "",
+      "received_at": "2026-11-21T14:59:47.524679Z",
+      "source": "PVMBG",
+      "source_ref_id": "pvmbg-1795273180000000000",
+      "status": "processed"
+    }
+  },
+  "final_ordered_event": {
+    "id": "haz-20260101T000000.000000000Z-a450b479832c3aa63726ee6eba89d49d",
+    "source_ref_id": "m2-p3-d634d989fd-ordered",
+    "severity": "AWAS",
+    "attributes": {
+      "volcano_id": "MERAPI",
+      "eruption_count_24h": 4,
+      "ash_column_height_m": 100
+    }
+  }
+}

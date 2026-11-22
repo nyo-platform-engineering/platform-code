@@ -1,0 +1,159 @@
+{
+  "problem": "M2 P3",
+  "started_at": "2026-11-21T14:58:33.196066+00:00",
+  "mode": "guided",
+  "automated_checks": {
+    "preflight": {
+      "status": "pass",
+      "result": {
+        "groups": [
+          1,
+          2,
+          3
+        ],
+        "original_mock_mode": "original",
+        "mutations": "isolated test configuration; finally restores env/schema/GitOps"
+      }
+    },
+    "P3.1-schema-original": {
+      "status": "pass",
+      "result": {
+        "mode": "original",
+        "policy": "accepted automatically",
+        "source_ref_id": "pvmbg-1795273150000000000"
+      }
+    },
+    "P3.1-schema-additive": {
+      "status": "pass",
+      "result": {
+        "mode": "additive",
+        "policy": "accepted automatically",
+        "source_ref_id": "pvmbg-1795273160000000000"
+      }
+    },
+    "P3.1-schema-rename_field": {
+      "status": "pass",
+      "result": {
+        "mode": "rename_field",
+        "policy": "parked until explicit v2 policy/replay",
+        "message_id": "183e8b250375cfb35db9007de0090b5e87389d7bcbb1371e9eaa204cfcacfe6f",
+        "raw_bytes": 167,
+        "source_ref_id": "pvmbg-1795273170000000000",
+        "attempts_unchanged": true
+      }
+    },
+    "P3.1-schema-type_change": {
+      "status": "pass",
+      "result": {
+        "mode": "type_change",
+        "policy": "parked until explicit v2 policy/replay",
+        "message_id": "89472ab72a8b437b89c9bae55a57b7d5038f80e2c67d42c18fb16b03438f0498",
+        "raw_bytes": 180,
+        "source_ref_id": "pvmbg-1795273190000000000",
+        "attempts_unchanged": true
+      }
+    },
+    "P3.1-schema-missing_required": {
+      "status": "pass",
+      "result": {
+        "mode": "missing_required",
+        "policy": "parked until explicit v2 policy/replay",
+        "message_id": "c46de7fac57ffdd3f24400a3675ef01605b20f3b98e373cf0c006a917bea62c9",
+        "raw_bytes": 150,
+        "source_ref_id": "pvmbg-1795273210000000000",
+        "attempts_unchanged": true
+      }
+    },
+    "P3.5-ops-access": {
+      "status": "pass",
+      "result": {
+        "public_roles": "analyst allowed; media/responder forbidden; anonymous unauthorized",
+        "audit": "separate trusted Audit credential; no raw detail/replay exposed through Audit"
+      }
+    },
+    "P3.3-poison-isolation": {
+      "status": "pass",
+      "result": {
+        "cases": {
+          "truncated": {
+            "message_id": "4a3b763a5340ed1d5dc00b5a9e807144b7f634c028c16e13b495c1b5a743d158",
+            "raw_bytes": 14,
+            "reason": "schema_incompatible: invalid_json"
+          },
+          "deep": {
+            "message_id": "7c66501a188f89ff815f496e24a7d019c2626d0c712445998a42b39f39d1d8c9",
+            "raw_bytes": 133,
+            "reason": "schema_incompatible: nesting_too_deep"
+          },
+          "utf8": {
+            "message_id": "05378a9978e16d7da2eaec436d516e81031103450de916a69abca985576923d1",
+            "raw_bytes": 17,
+            "reason": "schema_incompatible: invalid_utf8"
+          },
+          "oversized": {
+            "message_id": "74b3dc76459b63aa738198c57ec4357201401bc0b8203beccc0623a34f978992",
+            "raw_bytes": 2097339,
+            "reason": "schema_incompatible: payload_too_large"
+          }
+        },
+        "healthy_PVMBG_and_BMKG_progress": true,
+        "capture_scope": "original bytes <=8 MiB; oversized record >2 MiB; not unlimited payload capture"
+      }
+    },
+    "P3.4-prepare-ordered-replay": {
+      "status": "pass",
+      "result": {
+        "schema_messages": 11,
+        "later_version_blocked": true
+      }
+    },
+    "P3.2-and-P3.4-retry-and-replay": {
+      "status": "pass",
+      "result": {
+        "recovered_messages": 11,
+        "canonical_refs": 8,
+        "duplicate_canonical_rows": 0,
+        "ordering": "second version blocked while first failed; final state matches second; bounded scenario proof"
+      }
+    },
+    "P3.6-durable-field-reports": {
+      "status": "pass",
+      "result": {
+        "accepted": 10,
+        "processed": 10,
+        "duplicate_results": 0,
+        "max_accept_ms": 14.79,
+        "configured_accept_limit_ms": 2000,
+        "scope": "durable database processing; no claim of exactly-once external notification"
+      }
+    }
+  },
+  "manual_evidence_required": [
+    "Official Tester Agent and exam inputs",
+    "Report: schema policy, retry/parking, per-key ordering and delivery semantics",
+    "Recorded demo and physical storage durability beyond this bounded crash scenario"
+  ],
+  "full_demo_certified": false,
+  "selected_groups": [
+    1,
+    2,
+    3
+  ],
+  "configured_limits": {
+    "request_timeout_seconds": 8,
+    "recovery_seconds": 180,
+    "max_accept_ms": 2000,
+    "retry_observe_seconds": 30,
+    "report_count": 10,
+    "duplicate_requests": 4
+  },
+  "lab_mode": "vm",
+  "nodes": [
+    "aat-control",
+    "aat-worker-1",
+    "aat-worker-2"
+  ],
+  "cleanup_errors": [],
+  "finished_at": "2026-11-21T15:04:02.813095+00:00",
+  "status": "automated_checks_passed_manual_evidence_pending"
+}

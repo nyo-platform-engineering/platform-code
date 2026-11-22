@@ -1,0 +1,76 @@
+{
+  "aggregator_env": [
+    {
+      "name": "AUDIT_TOKEN",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "AUDIT_TOKEN",
+          "name": "aat-runtime"
+        }
+      }
+    },
+    {
+      "name": "DATABASE_URL",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "DATABASE_URL",
+          "name": "aat-runtime"
+        }
+      }
+    },
+    {
+      "name": "AGGREGATOR_TOKEN",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "AGGREGATOR_TOKEN",
+          "name": "aat-runtime"
+        }
+      }
+    },
+    {
+      "name": "BMKG_API_KEY",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "BMKG_API_KEY",
+          "name": "aat-runtime"
+        }
+      }
+    },
+    {
+      "name": "PVMBG_TOKEN",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "PVMBG_TOKEN",
+          "name": "aat-runtime"
+        }
+      }
+    },
+    {
+      "name": "PANTAI_AUTH_TOKEN",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "PANTAI_AUTH_TOKEN",
+          "name": "aat-runtime",
+          "optional": true
+        }
+      }
+    },
+    {
+      "name": "SATELLITE_GROUP_TOKEN",
+      "valueFrom": {
+        "secretKeyRef": {
+          "key": "SATELLITE_GROUP_TOKEN",
+          "name": "aat-runtime",
+          "optional": true
+        }
+      }
+    }
+  ],
+  "container_index": 0,
+  "mock_mode": "original",
+  "argo_skip_reconcile": {
+    "platform": null,
+    "dev-apps": null,
+    "aat-aggregator-dev": null
+  }
+}

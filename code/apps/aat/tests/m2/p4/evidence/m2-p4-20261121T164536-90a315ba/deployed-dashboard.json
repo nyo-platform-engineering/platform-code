@@ -1,0 +1,14 @@
+{
+  "origin": "running_cluster",
+  "feed": {
+    "checked_at": "2026-11-21T16:57:56.135514Z",
+    "lag_events": 0,
+    "latest_offset": 2159197,
+    "offset": 2159219,
+    "rejected_events": 0,
+    "updated_at": "2026-11-21T16:58:00.556886Z",
+    "virtual_now": "2027-05-19T19:20:35Z"
+  },
+  "api": "/satellite/stats",
+  "panel_present": true
+}

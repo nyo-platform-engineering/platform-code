@@ -1,0 +1,38 @@
+{
+  "other_sources_before": [
+    [
+      "BMKG",
+      10148
+    ],
+    [
+      "PVMBG",
+      10155
+    ],
+    [
+      "SATELIT",
+      35491
+    ]
+  ],
+  "pending_outboxes_deleted": 0,
+  "outboxes_deleted": 1426,
+  "hazard_events_deleted": 1426,
+  "inbox_messages_deleted": 1887,
+  "sensor_states_deleted": 1,
+  "poll_states_deleted": 0,
+  "other_sources_after": [
+    [
+      "BMKG",
+      10148
+    ],
+    [
+      "PVMBG",
+      10155
+    ],
+    [
+      "SATELIT",
+      35491
+    ]
+  ],
+  "reset_at": "2026-11-21T17:58:11.532119+00:00",
+  "other_sources_preserved": true
+}

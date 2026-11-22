@@ -1,0 +1,33 @@
+{
+  "backend_pid": 7813,
+  "address": "10.42.0.90",
+  "pods": [
+    {
+      "name": "aggregator-7f66cbdb65-2lpjf",
+      "addresses": [
+        {
+          "ip": "10.42.1.58"
+        }
+      ]
+    },
+    {
+      "name": "aggregator-7f66cbdb65-dkmmp",
+      "addresses": [
+        {
+          "ip": "10.42.0.90"
+        }
+      ]
+    },
+    {
+      "name": "aggregator-7f66cbdb65-s56vw",
+      "addresses": [
+        {
+          "ip": "10.42.2.72"
+        }
+      ]
+    }
+  ],
+  "matched_pods": [
+    "aggregator-7f66cbdb65-dkmmp"
+  ]
+}

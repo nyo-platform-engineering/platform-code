@@ -1,0 +1,96 @@
+{
+  "replicas": {
+    "aggregator": 3,
+    "sensor-pantai": 1
+  },
+  "applications": [
+    {
+      "name": "platform",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "dev-apps",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-dependencies-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-auth-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-client-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-bmkg-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-pvmbg-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-dashboard-updater-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-field-notifier-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-aggregator-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    },
+    {
+      "name": "aat-sensor-pantai-dev",
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "skip": null
+    }
+  ]
+}

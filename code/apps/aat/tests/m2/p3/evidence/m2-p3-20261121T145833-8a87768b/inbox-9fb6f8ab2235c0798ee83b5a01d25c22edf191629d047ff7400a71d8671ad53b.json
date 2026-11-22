@@ -1,0 +1,13 @@
+{
+  "attempts": 1,
+  "batch_key": "volcanic_reports",
+  "correlation_id": "88099fcf029f671aaf150e8021aaccdf",
+  "kind": "record",
+  "message_id": "9fb6f8ab2235c0798ee83b5a01d25c22edf191629d047ff7400a71d8671ad53b",
+  "raw_base64": "eyJyZXBvcnRfaWQiOiJtMi1wMy1kNjM0ZDk4OWZkLW9yZGVyZWQiLCJ2b2xjYW5vX2lkIjoiTUVSQVBJIiwiZXJ1cHRpb25fY291bnRfMjRoIjozLCJhc2hfY29sdW1uX2hlaWdodF9tIjoxMDAsInJlcG9ydGVkX2F0IjoiMjAyNi0wMS0wMVQwMDowMDowMFoiLCJsZXZlbCI6IlNpYWdhIn0=",
+  "reason": "schema_incompatible: missing/null alert_level",
+  "received_at": "2026-11-21T15:01:26.776176Z",
+  "source": "PVMBG",
+  "source_ref_id": "m2-p3-d634d989fd-ordered",
+  "status": "parked"
+}

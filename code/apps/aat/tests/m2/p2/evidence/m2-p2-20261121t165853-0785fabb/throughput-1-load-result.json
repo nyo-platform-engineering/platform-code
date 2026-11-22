@@ -1,0 +1,38 @@
+{
+  "requests": 12000,
+  "successes": 2404,
+  "controlled_rejections": 9596,
+  "failures": 0,
+  "unexpected_error_denominator": 2404,
+  "successes_per_second": 20.033333333333335,
+  "seconds": 120,
+  "vus": 10000,
+  "pdf_load_minimum_met": true,
+  "cache_results": {
+    "p2_cache_results{result:limited}": 9596,
+    "p2_cache_results{result:hit}": 1982,
+    "p2_cache_results{result:uncached}": 125,
+    "p2_cache_results{result:miss}": 297
+  },
+  "http_status_counts": {
+    "p2_http_status{status:429}": 9596,
+    "p2_http_status{status:503}": 0,
+    "p2_http_status{status:504}": 0,
+    "p2_http_status{status:502}": 0,
+    "p2_http_status{status:200}": 2404,
+    "p2_http_status{status:500}": 0,
+    "p2_http_status{status:0}": 0
+  },
+  "latency": {
+    "p(50)": 1.2813255,
+    "p(95)": 4.752484949999988,
+    "p(99)": 26.694073540000034,
+    "avg": 2.4505974380833204,
+    "min": 0.440219,
+    "max": 201.89079
+  },
+  "actions": null,
+  "target_offered_rps": 100,
+  "vus_exercised": 10000,
+  "offered_requests_per_second": 100.0
+}

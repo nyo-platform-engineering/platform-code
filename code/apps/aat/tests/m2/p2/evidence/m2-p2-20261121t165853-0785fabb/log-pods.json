@@ -1,0 +1,293 @@
+{
+  "f61b1d9d-f5a9-4722-9d73-d40771282d18": {
+    "pod": "aggregator-987bc65fb-9dkkr",
+    "attached_at": "2026-11-21T16:59:08.353151+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "0c429419-2079-4905-b47e-2e0b1445112b": {
+    "pod": "aggregator-987bc65fb-g8mn9",
+    "attached_at": "2026-11-21T17:08:40.186490+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "674ab104-6d25-4961-b2df-b988612849d7": {
+    "pod": "aggregator-987bc65fb-rzsbv",
+    "attached_at": "2026-11-21T16:59:08.354282+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "533b58a5-f0e8-4fd6-93ae-1923eadfd692": {
+    "pod": "bmkg-85dcfc448f-flcjw",
+    "attached_at": "2026-11-21T16:59:08.355630+00:00",
+    "containers": [
+      {
+        "name": "bmkg",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "452672b1-f78d-4c38-9d05-29988708f461": {
+    "pod": "pvmbg-57cb7b7b59-qjl7t",
+    "attached_at": "2026-11-21T16:59:08.356043+00:00",
+    "containers": [
+      {
+        "name": "pvmbg",
+        "restart_count": 1,
+        "last_termination": {
+          "exitCode": 255,
+          "finishedAt": "2026-11-21T15:55:56Z",
+          "reason": "Unknown",
+          "startedAt": "2026-11-21T12:43:06Z"
+        }
+      }
+    ]
+  },
+  "f8073526-0174-40cb-bbb4-cf4e589204d9": {
+    "pod": "aggregator-987bc65fb-lmz84",
+    "attached_at": "2026-11-21T17:00:56.261589+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "76684ea1-99b6-4629-8208-76ff2e6412d0": {
+    "pod": "aggregator-987bc65fb-jrr9j",
+    "attached_at": "2026-11-21T17:02:49.068485+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "39c20637-f8f8-4367-8635-384f380aa850": {
+    "pod": "aggregator-987bc65fb-j6xbp",
+    "attached_at": "2026-11-21T17:02:57.355988+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "578a52f8-905d-434d-a703-cee6e6f6f9e0": {
+    "pod": "aggregator-987bc65fb-7br44",
+    "attached_at": "2026-11-21T17:03:03.952525+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "20da292a-6988-4725-b8ff-9fac86ab2f5f": {
+    "pod": "aggregator-987bc65fb-jnbdm",
+    "attached_at": "2026-11-21T17:03:10.158203+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "6904a5ab-52bd-487c-8ad9-509a72e51b1c": {
+    "pod": "aggregator-987bc65fb-mxd2x",
+    "attached_at": "2026-11-21T17:03:20.660267+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "ba6f3d38-7ae2-45e2-8f0a-d87de0bd035f": {
+    "pod": "aggregator-987bc65fb-wgkbh",
+    "attached_at": "2026-11-21T17:03:28.989439+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "5ca72725-83e4-448e-b3e1-91ca3dbc1e25": {
+    "pod": "aggregator-987bc65fb-zczxv",
+    "attached_at": "2026-11-21T17:03:40.052914+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "29efccea-50cf-4533-854d-57c1e4a52268": {
+    "pod": "aggregator-987bc65fb-9qf4s",
+    "attached_at": "2026-11-21T17:03:50.756739+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "ac8c6508-2534-48f3-8786-59a0bd7a295d": {
+    "pod": "aggregator-987bc65fb-vcnmx",
+    "attached_at": "2026-11-21T17:04:01.088053+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "c2a072b1-f7f7-4c69-a712-f20d58f03e66": {
+    "pod": "aggregator-987bc65fb-xftl5",
+    "attached_at": "2026-11-21T17:04:11.450402+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "5dc88ce6-9422-4a05-aa67-9e4b6eac267d": {
+    "pod": "aggregator-987bc65fb-82fct",
+    "attached_at": "2026-11-21T17:11:38.058092+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "b739b043-caee-45d5-accd-ee7f3b073682": {
+    "pod": "aggregator-987bc65fb-bztgl",
+    "attached_at": "2026-11-21T17:11:38.059615+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "d4641c7b-4265-4884-99e7-8df6148027fc": {
+    "pod": "aggregator-987bc65fb-vlwjm",
+    "attached_at": "2026-11-21T17:13:00.863815+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "f0eed4a2-25d0-42aa-9105-371a3b22a802": {
+    "pod": "aggregator-987bc65fb-f27gp",
+    "attached_at": "2026-11-21T17:16:30.236484+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "1e942663-ba1e-4650-a975-2b2301e94743": {
+    "pod": "aggregator-987bc65fb-ps48k",
+    "attached_at": "2026-11-21T17:16:30.238095+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "fbca5fb8-e2c6-4646-99f2-dca535197919": {
+    "pod": "aggregator-5dbbb947dc-rzzzh",
+    "attached_at": "2026-11-21T17:21:05.039067+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "912ec073-8c2f-41a5-a71b-a8cf5c7322a0": {
+    "pod": "aggregator-5dbbb947dc-ln5xr",
+    "attached_at": "2026-11-21T17:21:11.755152+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "6982243f-ea5b-4aa1-af21-71878d992600": {
+    "pod": "aggregator-5dbbb947dc-kd2kx",
+    "attached_at": "2026-11-21T17:21:16.032224+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "dbd0e01b-1290-47f0-8f75-9e0bb8380797": {
+    "pod": "aggregator-987bc65fb-rdmhc",
+    "attached_at": "2026-11-21T17:25:06.774600+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  },
+  "ae26a0e5-8917-4c73-9159-1af5c6274206": {
+    "pod": "aggregator-987bc65fb-w2wrn",
+    "attached_at": "2026-11-21T17:25:13.163753+00:00",
+    "containers": [
+      {
+        "name": "aggregator",
+        "restart_count": 0,
+        "last_termination": {}
+      }
+    ]
+  }
+}

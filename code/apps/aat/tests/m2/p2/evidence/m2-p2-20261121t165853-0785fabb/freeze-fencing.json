@@ -1,0 +1,31 @@
+{
+  "old_epoch": 68,
+  "takeover_epoch": 69,
+  "successor_db_fence_time": "2026-11-21T17:07:53.039570+00:00",
+  "old_session_rejections": [
+    {
+      "time": "2026-11-21T17:07:33.200915259Z",
+      "msg": "poll storage rejected",
+      "source": "BMKG",
+      "operation": "validate_owner",
+      "epoch": 68,
+      "owner": "252b12484aa32604a5b6d5b276718534",
+      "backend_pid": 10656,
+      "correlation_id": "501e3f0b3686265e4adf8b95437330c1",
+      "reason": "session_unavailable"
+    },
+    {
+      "time": "2026-11-21T17:07:33.200962206Z",
+      "msg": "poll storage rejected",
+      "source": "BMKG",
+      "operation": "validate_owner",
+      "epoch": 68,
+      "owner": "252b12484aa32604a5b6d5b276718534",
+      "backend_pid": 10656,
+      "correlation_id": "9966c2d942955d8019041c7a132f2f93",
+      "reason": "session_unavailable"
+    }
+  ],
+  "commits_after_fresh_acquisition": [],
+  "scope": "observed post-commit logs and old-session rejection; retained pre-freeze logs are compared by database time"
+}

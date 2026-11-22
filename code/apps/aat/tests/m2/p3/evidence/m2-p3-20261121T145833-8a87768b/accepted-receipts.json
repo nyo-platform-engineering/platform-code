@@ -1,0 +1,66 @@
+{
+  "receipts": {
+    "m2-p3-d634d989fd-report-0": {
+      "report_id": "fr-d7410b5c6d6b45f728046da5c6af48ffde92d653c5785d608b4f918d9cf888fa",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.585949Z"
+    },
+    "m2-p3-d634d989fd-report-1": {
+      "report_id": "fr-617ef657e9de181c44502771ffff15e6d0ce045c91e80543cfb63c4e6c98755e",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.597619Z"
+    },
+    "m2-p3-d634d989fd-report-2": {
+      "report_id": "fr-5aba54fd38eb7781c290902d90a6fd1428f754d1879400d676c2a7921d31fedc",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.606992Z"
+    },
+    "m2-p3-d634d989fd-report-3": {
+      "report_id": "fr-d6559c709e89b448a7c6d7803a197ad98eda681a104cd0c9a91ee08c444ecb86",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.621637Z"
+    },
+    "m2-p3-d634d989fd-report-4": {
+      "report_id": "fr-66a129c8a60cc4f7b16985ff3f4b32322078acfaad523185cb5eee70201dfd0a",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.634178Z"
+    },
+    "m2-p3-d634d989fd-report-5": {
+      "report_id": "fr-69957c139ab07c26eb206e91696ac2c6a965359f9725c18ce56e7e9d8f43b0ee",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.647454Z"
+    },
+    "m2-p3-d634d989fd-report-6": {
+      "report_id": "fr-600440b8b5f6958d90ef84d3a78104bce6e299488954c490ef52a8cef6ffc4d7",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.658007Z"
+    },
+    "m2-p3-d634d989fd-report-7": {
+      "report_id": "fr-29adc6b1d1abb8d63dc03994c6a9b41cc997c78bc63e9f20b0f811a00518993a",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.666648Z"
+    },
+    "m2-p3-d634d989fd-report-8": {
+      "report_id": "fr-e8837990e02a94f579448a520f8fbc96da11e3bb277b5f92232cf477cf169922",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.675786Z"
+    },
+    "m2-p3-d634d989fd-report-9": {
+      "report_id": "fr-00adb0015134eb897e0a2ae10dbab71832c967d9847974b2d757f0ed20e6aadc",
+      "status": "accepted",
+      "accepted_at": "2026-11-21T15:03:04.689103Z"
+    }
+  },
+  "latencies_ms": [
+    13.298101001055329,
+    9.164433000478311,
+    11.58715800011123,
+    14.692238000861835,
+    10.09865200103377,
+    13.622118000057526,
+    8.328621999680763,
+    7.267979999596719,
+    12.413706999723217,
+    14.793588999964413
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "before": {
+    "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+    "image_ids": [
+      "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+    ],
+    "nodes": [
+      "aat-control"
+    ],
+    "read_admission": {
+      "rps_per_replica": 20,
+      "burst_per_replica": 5
+    },
+    "template_sha256": "9a70ff57650319b26a1c68984fe15d14a7cd3ce8279b012777b763726cb52e97"
+  },
+  "after": {
+    "image": "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7",
+    "image_ids": [
+      "ghcr.io/nyo-platform-engineering/aat-apps/aggregator@sha256:3a11e2cabc409010098369dab976adf185e71768ac7836e86e076e7872ccfee7"
+    ],
+    "nodes": [
+      "aat-control"
+    ],
+    "read_admission": {
+      "rps_per_replica": 20,
+      "burst_per_replica": 5
+    },
+    "template_sha256": "9a70ff57650319b26a1c68984fe15d14a7cd3ce8279b012777b763726cb52e97"
+  }
+}

@@ -1,0 +1,499 @@
+[RUN] preflight
+[INFO] Cluster: vm/native; Traefik: http://192.168.56.10:30088
+
+P2 applies faults for the selected groups: deletes owner pods, changes/restores a worker clock, suspends/resumes a worker, scales replicas and rolls the image. Enter enables the isolated test run.
+Press Enter to continue: 
+[WAIT] preflight | Argo Application platform: active sync finished | 0s / 180s
+[WAIT] preflight | Argo Application dev-apps: active sync finished | 0s / 180s
+[WAIT] preflight | Argo Application aat-aggregator-dev: active sync finished | 0s / 180s
+[WAIT] preflight | Argo Application traefik: active sync finished | 0s / 180s
+[WAIT] preflight | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] preflight | preloading mandatory rolling image on every node | 0s / 180s
+[WAIT] preflight | preloading mandatory rolling image on every node | 0s / 180s | rolling image cached on 0/3 nodes
+[WAIT] preflight | Traefik gateway rollout settled | 0s / 180s
+[WAIT] preflight | Traefik route m2-p2-20261121t165853-0785fabb.localhost via http://192.168.56.10:30088 | 0s / 30s
+[WAIT] preflight | executing; awaiting next checkpoint | 15s
+[PASS] preflight
+
+Group 1 — placement, upstream polling, and active-instance failover.
+Press Enter to continue: 
+[RUN] P2.1-placement-and-routing
+[WAIT] P2.1-placement-and-routing | executing; awaiting next checkpoint | 5s | load-balancer probe 36/60
+[WAIT] P2.1-placement-and-routing | requests observed on three Aggregator backends | 0s / 15s
+[PASS] P2.1-placement-and-routing
+[RUN] P2.2-upstream-and-logical-dedup
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 0s
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 5s | page=17; events read=17000
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 10s | page=31; events read=31000
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 15s | page=46; events read=46000
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 0s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 2s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 7s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 12s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 17s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 22s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | observing upstream polling and ownership | 27s / 30s
+[WAIT] P2.2-upstream-and-logical-dedup | Audit reconciliation: observation-28e4ff | 0s / 180s
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 0s
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 0s | page=1; events read=1000
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 5s | page=18; events read=18000
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 10s | page=33; events read=33000
+[WAIT] P2.2-upstream-and-logical-dedup | exporting Audit events and checking identities | 15s | page=49; events read=49000
+[PASS] P2.2-upstream-and-logical-dedup
+[RUN] P2.3-owner-failover
+
+P2.3: delete active BMKG owner pod aggregator-987bc65fb-9dkkr (epoch 57); no node/data erasure.
+Press Enter to continue: 
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 0s
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 2s | page=6; events read=6000
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 7s | page=22; events read=22000
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 12s | page=35; events read=35000
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 17s | page=55; events read=55000
+[WAIT] P2.3-owner-failover | deleting active owner pod aggregator-987bc65fb-9dkkr | 0s / 30s
+[WAIT] P2.3-owner-failover | BMKG takeover: successful poll with epoch > 57 | 0s / 60s
+[WAIT] P2.3-owner-failover | old owner removed from Ready Service endpoints | 0s / 30s
+[WAIT] P2.3-owner-failover | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] P2.3-owner-failover | Aggregator rollout to 3 Ready replicas | 0s / 180s | target=3; updated=3; Ready=2/3; aggregator-987bc65fb-lmz84:Running
+[WAIT] P2.3-owner-failover | collecting enough mock events after takeover | 0s / 23s
+[WAIT] P2.3-owner-failover | collecting enough mock events after takeover | 2s / 23s
+[WAIT] P2.3-owner-failover | collecting enough mock events after takeover | 7s / 23s
+[WAIT] P2.3-owner-failover | collecting enough mock events after takeover | 12s / 23s
+[WAIT] P2.3-owner-failover | collecting enough mock events after takeover | 17s / 23s
+[WAIT] P2.3-owner-failover | collecting enough mock events after takeover | 22s / 23s
+[WAIT] P2.3-owner-failover | Audit reconciliation: takeover | 0s / 180s
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 0s
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 4s | page=13; events read=13000
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 9s | page=29; events read=29000
+[WAIT] P2.3-owner-failover | exporting Audit events and checking identities | 14s | page=42; events read=42000
+[PASS] P2.3-owner-failover
+[RUN] P2.4-clock-skew
+[WAIT] P2.4-clock-skew | storage commit evidence from both sources; deploy latest Aggregator if missing | 0s / 30s
+
+P2.4: prepare the actual BMKG owner on aat-worker-1 before the clock test. Owner pods may be restarted.
+Press Enter to continue: 
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 178s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 2s / 178s | target=3; updated=3; Ready=2/3; aggregator-987bc65fb-jrr9j:Running
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 171s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 171s | target=3; updated=3; Ready=2/3; aggregator-987bc65fb-j6xbp:Running
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 161s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 161s | target=3; updated=3; Ready=2/3; aggregator-987bc65fb-7br44:Running
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 3s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 8s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 150s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 4s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 9s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 141s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 4s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 131s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 5s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 10s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 119s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 3s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 8s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 110s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 4s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 9s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 98s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 0s / 60s
+[WAIT] P2.4-clock-skew | preparing actual polling owner on safe worker | 1s / 60s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 0s / 94s
+[WAIT] P2.4-clock-skew | Aggregator rollout to 3 Ready replicas | 3s / 94s | target=3; updated=3; Ready=2/3; aggregator-987bc65fb-xftl5:Running
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+
+P2.4: automatically stop time sync on aat-worker-1, apply clock offsets (45, -30), check polling, then restore time sync.
+Press Enter to continue: 
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[RESULT] P2.4 — aat-worker-1
+    Requested skew: +45s; measured change: +43.8s; time sync stopped
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s | page=1; events read=1000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 5s | page=18; events read=18000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 10s | page=32; events read=32000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 15s | page=47; events read=47000
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 0s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 2s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 7s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 12s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 17s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 22s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 27s / 30s
+[WAIT] P2.4-clock-skew | Audit reconciliation: observation-139bc4 | 0s / 180s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s | page=1; events read=1000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 5s | page=18; events read=18000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 10s | page=32; events read=32000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 15s | page=48; events read=48000
+[RESULT] P2.4 — storage commits {'BMKG': 45, 'PVMBG': 35}; single session per epoch; no epoch regression in database time; Audit passed
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 1s / 60s
+[RESULT] P2.4 — aat-worker-1
+    Requested skew: -30s; measured change: -31.3s; time sync stopped
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 4s | page=15; events read=15000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 9s | page=29; events read=29000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 14s | page=43; events read=43000
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 0s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 1s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 6s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 11s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 16s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 21s / 30s
+[WAIT] P2.4-clock-skew | observing upstream polling and ownership | 26s / 30s
+[WAIT] P2.4-clock-skew | executing; awaiting next checkpoint | 290s | preparing owner on aat-worker-1; current=aat-control; epoch=67
+[WAIT] P2.4-clock-skew | Audit reconciliation: observation-51b742 | 0s / 180s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 4s | page=15; events read=15000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 9s | page=30; events read=30000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 14s | page=45; events read=45000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 0s
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 1s | page=3; events read=3000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 6s | page=21; events read=21000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 11s | page=35; events read=35000
+[WAIT] P2.4-clock-skew | exporting Audit events and checking identities | 16s | page=47; events read=47000
+[RESULT] P2.4 — storage commits {'BMKG': 32, 'PVMBG': 25}; single session per epoch; no epoch regression in database time; Audit passed
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 1s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 4s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 9s / 60s
+[WAIT] P2.4-clock-skew | VM clock command: aat-worker-1 | 0s / 60s
+[RESULT] Worker clock restored on aat-worker-1; time services running
+[PASS] P2.4-clock-skew
+[RUN] P2.5-freeze-resume
+
+P2.5: prepare the actual BMKG owner on aat-worker-1, then suspend that worker. Owner pods may be restarted during preparation.
+Press Enter to continue: 
+
+P2.5: suspend aat-worker-1 for 30s, then resume it. This freezes every workload on that worker.
+Press Enter to continue: 
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.5-freeze-resume | suspend-worker: aat-worker-1 | 0s / 90s
+Domain '9a6667c3-a598-4417-853f-99b8992e4401' suspended
+
+[WAIT] P2.5-freeze-resume | holding worker frozen | 0s / 30s
+[WAIT] P2.5-freeze-resume | holding worker frozen | 2s / 30s
+[WAIT] P2.5-freeze-resume | holding worker frozen | 7s / 30s
+[WAIT] P2.5-freeze-resume | holding worker frozen | 12s / 30s
+[WAIT] P2.5-freeze-resume | holding worker frozen | 17s / 30s
+[WAIT] P2.5-freeze-resume | holding worker frozen | 22s / 30s
+[WAIT] P2.5-freeze-resume | holding worker frozen | 27s / 30s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 0s / 60s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 2s / 60s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 7s / 60s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 12s / 60s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 17s / 60s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 22s / 60s
+[WAIT] P2.5-freeze-resume | successful takeover while worker is frozen | 27s / 60s
+[WAIT] P2.5-freeze-resume | resume-worker: aat-worker-1 | 0s / 90s
+Domain '9a6667c3-a598-4417-853f-99b8992e4401' resumed
+
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 1s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 1s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 6s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[WAIT] P2.5-freeze-resume | VM clock command: aat-worker-1 | 0s / 60s
+[RESULT] Worker clock restored on aat-worker-1; time services running
+[WAIT] P2.5-freeze-resume | original pod Ready after worker resume | 0s / 180s
+[WAIT] P2.5-freeze-resume | owner log continuity and fresh records after resume | 0s / 180s
+[WAIT] P2.5-freeze-resume | old session rejected after resume; requires latest Aggregator | 0s / 180s
+[WAIT] P2.5-freeze-resume | Audit reconciliation: freeze-recovered | 0s / 180s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 0s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 4s | page=13; events read=13000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 9s | page=29; events read=29000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 14s | page=43; events read=43000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 0s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 1s | page=4; events read=4000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 6s | page=21; events read=21000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 11s | page=35; events read=35000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 16s | page=54; events read=54000
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 0s / 30s
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 4s / 30s
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 9s / 30s
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 14s / 30s
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 19s / 30s
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 24s / 30s
+[WAIT] P2.5-freeze-resume | observing upstream polling and ownership | 29s / 30s
+[WAIT] P2.5-freeze-resume | Audit reconciliation: observation-d32c83 | 0s / 180s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 0s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 2s | page=5; events read=5000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 7s | page=23; events read=23000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 12s | page=37; events read=37000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 17s | page=66; events read=66000
+[WAIT] P2.5-freeze-resume | Audit reconciliation: freeze | 0s / 180s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 0s
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 5s | page=17; events read=17000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 10s | page=31; events read=31000
+[WAIT] P2.5-freeze-resume | exporting Audit events and checking identities | 15s | page=46; events read=46000
+[PASS] P2.5-freeze-resume
+
+Group 3: 10000 VUs; 100 aggregate offered RPS; scaling 120s; throughput 2 x 120s; warmup 10s per run. Every VU must send a measured request. Mandatory image rollout: 360s at 30 offered RPS, same VU count; all VUs must send a measured request. It changes replicas and may change the image. Continue only on an isolated test cluster.
+Press Enter to continue: 
+[RUN] P2.6-scaling-load
+[WAIT] P2.6-scaling-load | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: starting and warming up (10s warmup) | 0s / 100s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: starting and warming up (10s warmup) | 5s / 100s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: starting and warming up (10s warmup) | 10s / 100s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 0s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 3s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 8s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 13s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 18s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 23s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 28s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 33s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 38s / 120s
+[WAIT] P2.6-scaling-load | Aggregator rollout to 5 Ready replicas | 0s / 75s
+[WAIT] P2.6-scaling-load | Aggregator rollout to 5 Ready replicas | 3s / 75s | target=5; updated=5; Ready=3/5; aggregator-987bc65fb-82fct:Running, aggregator-987bc65fb-bztgl:Running
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 48s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 53s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 58s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 63s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 68s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 73s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 78s / 120s
+[WAIT] P2.6-scaling-load | Aggregator rollout to 2 Ready replicas | 0s / 35s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 83s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 88s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 93s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 98s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 103s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 108s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 113s / 120s
+[WAIT] P2.6-scaling-load | k6 scale-3-5-2: measured traffic (10000 VUs, 120s) | 118s / 120s
+[RESULT] scale-3-5-2 — measured traffic
+    Configured VUs: 10,000; duration: 120s (warmup excluded)
+    Successful RPS: 65.08; total request RPS: 100.00
+    Requests: 12,000; successful: 7,809; controlled 429s: 4,191
+    Unexpected failures: 0/7,809 (0.00%); required: <1%
+    VUs with a measured request: 10,000
+[WAIT] P2.6-scaling-load | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] P2.6-scaling-load | Aggregator rollout to 3 Ready replicas | 0s / 180s | target=3; updated=2; Ready=2/3; aggregator-987bc65fb-vlwjm:Pending
+[WAIT] P2.6-scaling-load | Aggregator rollout to 3 Ready replicas | 5s / 180s | target=3; updated=3; Ready=2/3; aggregator-987bc65fb-vlwjm:Running
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 0s
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 4s | page=13; events read=13000
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 9s | page=28; events read=28000
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 14s | page=42; events read=42000
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 0s / 30s
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 1s / 30s
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 6s / 30s
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 11s / 30s
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 16s / 30s
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 21s / 30s
+[WAIT] P2.6-scaling-load | observing upstream polling and ownership | 26s / 30s
+[WAIT] P2.6-scaling-load | executing; awaiting next checkpoint | 190s
+[WAIT] P2.6-scaling-load | Audit reconciliation: observation-0c9e63 | 0s / 180s
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 0s
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 4s | page=14; events read=14000
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 9s | page=29; events read=29000
+[WAIT] P2.6-scaling-load | exporting Audit events and checking identities | 14s | page=44; events read=44000
+[PASS] P2.6-scaling-load
+[RUN] P2.7-throughput-ratio
+[WAIT] P2.7-throughput-ratio | Aggregator rollout to 1 Ready replicas | 0s / 180s
+[INFO] Read rate limit: 20 RPS and 5 burst per replica in both samples; this measures configured admission capacity, not uncapped throughput.
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: starting and warming up (10s warmup) | 0s / 100s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: starting and warming up (10s warmup) | 3s / 100s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: starting and warming up (10s warmup) | 8s / 100s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 0s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 2s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 7s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 12s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 17s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 22s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 27s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 32s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 37s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 42s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 47s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 52s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 57s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 62s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 67s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 72s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 77s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 82s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 87s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 92s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 97s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 102s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 107s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 112s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-1: measured traffic (10000 VUs, 120s) | 117s / 120s
+[RESULT] throughput-1 — measured traffic
+    Configured VUs: 10,000; duration: 120s (warmup excluded)
+    Successful RPS: 20.03; total request RPS: 100.00
+    Requests: 12,000; successful: 2,404; controlled 429s: 9,596
+    Unexpected failures: 0/2,404 (0.00%); required: <1%
+    VUs with a measured request: 10,000
+[WAIT] P2.7-throughput-ratio | executing; awaiting next checkpoint | 135s
+[WAIT] P2.7-throughput-ratio | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] P2.7-throughput-ratio | Aggregator rollout to 3 Ready replicas | 4s / 180s | target=3; updated=3; Ready=1/3; aggregator-987bc65fb-f27gp:Running, aggregator-987bc65fb-ps48k:Running
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: starting and warming up (10s warmup) | 0s / 100s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: starting and warming up (10s warmup) | 2s / 100s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: starting and warming up (10s warmup) | 7s / 100s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 0s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 1s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 6s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 11s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 16s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 21s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 26s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 31s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 36s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 41s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 47s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 52s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 57s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 62s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 67s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 72s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 77s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 82s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 87s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 92s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 97s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 102s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 107s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 112s / 120s
+[WAIT] P2.7-throughput-ratio | k6 throughput-3: measured traffic (10000 VUs, 120s) | 117s / 120s
+[RESULT] throughput-3 — measured traffic
+    Configured VUs: 10,000; duration: 120s (warmup excluded)
+    Successful RPS: 60.09; total request RPS: 100.00
+    Requests: 12,000; successful: 7,211; controlled 429s: 4,789
+    Unexpected failures: 0/7,211 (0.00%); required: <1%
+    VUs with a measured request: 10,000
+[WAIT] P2.7-throughput-ratio | executing; awaiting next checkpoint | 275s
+[RESULT] P2.7 — throughput comparison
+    1 replica: 20.03 successful RPS
+    3 replicas: 60.09 successful RPS
+    Ratio: 3.00x; required: >=2.00x; PASS
+    Scope: configured admission capacity; not an uncapped capacity measurement
+[PASS] P2.7-throughput-ratio
+[RUN] P2.8-rolling-update
+[WAIT] P2.8-rolling-update | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] P2.8-rolling-update | k6 rolling-update: starting and warming up (10s warmup) | 0s / 100s
+[WAIT] P2.8-rolling-update | k6 rolling-update: starting and warming up (10s warmup) | 5s / 100s
+[WAIT] P2.8-rolling-update | k6 rolling-update: starting and warming up (10s warmup) | 10s / 100s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 0s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 3s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 8s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 13s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 18s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 23s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 28s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 33s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 38s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 43s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 48s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 53s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 58s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 63s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 68s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 73s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 78s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 83s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 88s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 93s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 98s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 103s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 108s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 113s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 118s / 360s
+[WAIT] P2.8-rolling-update | Aggregator rollout to 3 Ready replicas | 0s / 235s
+[WAIT] P2.8-rolling-update | Aggregator rollout to 3 Ready replicas | 3s / 235s | target=3; updated=1; Ready=3/4; aggregator-5dbbb947dc-rzzzh:Pending
+[WAIT] P2.8-rolling-update | Aggregator rollout to 3 Ready replicas | 8s / 235s | target=3; updated=2; Ready=3/4; aggregator-5dbbb947dc-ln5xr:Running
+[WAIT] P2.8-rolling-update | Aggregator rollout to 3 Ready replicas | 13s / 235s | target=3; updated=2; Ready=4/4;
+[WAIT] P2.8-rolling-update | Aggregator rollout to 3 Ready replicas | 18s / 235s | target=3; updated=3; Ready=3/4; aggregator-5dbbb947dc-kd2kx:Running
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 143s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 148s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 153s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 158s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 163s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 168s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 173s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 178s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 183s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 188s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 193s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 198s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 203s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 208s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 213s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 218s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 223s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 228s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 233s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 238s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 243s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 248s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 253s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 258s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 263s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 268s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 273s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 278s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 283s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 288s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 293s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 298s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 303s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 308s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 313s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 318s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 323s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 328s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 333s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 338s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 343s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 348s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 353s / 360s
+[WAIT] P2.8-rolling-update | k6 rolling-update: measured traffic (10000 VUs, 360s) | 358s / 360s
+[RESULT] rolling-update — measured traffic
+    Configured VUs: 10,000; duration: 360s (warmup excluded)
+    Successful RPS: 30.00; total request RPS: 30.00
+    Requests: 10,800; successful: 10,800; controlled 429s: 0
+    Unexpected failures: 0/10,800 (0.00%); required: <1%
+    VUs with a measured request: 10,000
+[RESULT] P2.8 — version rollout
+    Different running image verified; 0 failures, 0 rejections; required: both zero
+[PASS] P2.8-rolling-update
+[WAIT] cleanup | restoring cluster settings 1/6 | 0s
+[WAIT] cleanup | restoring cluster settings 2/6 | 0s
+[WAIT] cleanup | Aggregator rollout to 3 Ready replicas | 0s / 180s
+[WAIT] cleanup | Aggregator rollout to 3 Ready replicas | 5s / 180s | target=3; updated=1; Ready=3/4; aggregator-987bc65fb-rdmhc:Running
+[WAIT] cleanup | Aggregator rollout to 3 Ready replicas | 10s / 180s | target=3; updated=2; Ready=3/4; aggregator-987bc65fb-w2wrn:Running
+[WAIT] cleanup | Aggregator rollout to 3 Ready replicas | 15s / 180s | target=3; updated=3; Ready=3/4; aggregator-987bc65fb-strlw:Pending
+[WAIT] cleanup | restoring cluster settings 3/6 | 0s
+[WAIT] cleanup | restoring cluster settings 4/6 | 0s
+[WAIT] cleanup | restoring cluster settings 5/6 | 0s
+[WAIT] cleanup | restoring cluster settings 6/6 | 0s
+[WAIT] cleanup | closing log collector | 0s
+[PASS] preflight
+[PASS] P2.1-placement-and-routing
+[PASS] P2.2-upstream-and-logical-dedup
+[PASS] P2.3-owner-failover
+[PASS] P2.4-clock-skew
+[PASS] P2.5-freeze-resume
+[PASS] P2.6-scaling-load
+[PASS] P2.7-throughput-ratio
+[PASS] P2.8-rolling-update
+[INFO] Evidence: /home/yonatan/Documents/kuliah/platform-code/code/apps/aat/tests/m2/p2/evidence/m2-p2-20261121t165853-0785fabb
+[MANUAL] Official Tester Agent, clock/fencing proof, generator capacity, and report remain separate evidence.

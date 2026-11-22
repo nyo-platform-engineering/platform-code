@@ -1,0 +1,203 @@
+[INFO] Cluster: 3 nodes (vm)
+  Evidence:
+  /home/yonatan/Documents/kuliah/platform-code/code/apps/aat/tests/m2/p5/evidence/m2-p5-20261121T175752-b84f4dc3
+
+M2 P5: press Enter to continue between test steps.
+Enter → reset SENSOR_PANTAI events, inbox/outbox and cursor for this practice run (briefly stops Aggregator; other sources and notification history are preserved): 
+[WAIT] Practice setup
+  Waiting for application and storage rollouts before resetting sensor data
+[RUN] sensor-practice-reset
+[WAIT] Practice reset
+  Stopping Sensor Pantai and Aggregator before clearing source state
+[WAIT] Practice reset
+  Writers stopped; clearing only SENSOR_PANTAI state in one transaction
+[RESULT] Sensor Pantai reset
+  Deleted 1426 sensor events and reset its inbox/outbox/cursor.
+  Other sources and notification history preserved; new deliveries use new IDs.
+[PASS] sensor-practice-reset
+  pending_outboxes_deleted: 0
+  outboxes_deleted: 1426
+  hazard_events_deleted: 1426
+  inbox_messages_deleted: 1887
+  sensor_states_deleted: 1
+  poll_states_deleted: 0
+  reset_at: 2026-11-21T17:58:11.532119+00:00
+  other_sources_preserved: True
+Enter → verify all 3 new critical readings reach the Field Team (up to 150s for the scenario): 
+[RUN] critical-alerts-delivered
+[WAIT] Critical scenario
+  1/3 new critical deliveries; waiting for all three receipts
+[WAIT] Critical scenario
+  1/3 new critical deliveries; waiting for all three receipts
+[WAIT] Still waiting for all 3 practice critical readings and their durable Field Team receipts
+  15s elapsed (limit 300s)
+  not ready yet
+[WAIT] Critical scenario
+  1/3 new critical deliveries; waiting for all three receipts
+[WAIT] Still waiting for all 3 practice critical readings and their durable Field Team receipts
+  31s elapsed (limit 300s)
+  not ready yet
+[WAIT] Critical scenario
+  1/3 new critical deliveries; waiting for all three receipts
+[WAIT] Critical scenario
+  1/3 new critical deliveries; waiting for all three receipts
+[WAIT] Still waiting for all 3 practice critical readings and their durable Field Team receipts
+  47s elapsed (limit 300s)
+  not ready yet
+[WAIT] Critical scenario
+  2/3 new critical deliveries; waiting for all three receipts
+[WAIT] Still waiting for all 3 practice critical readings and their durable Field Team receipts
+  63s elapsed (limit 300s)
+  not ready yet
+[WAIT] Critical scenario
+  2/3 new critical deliveries; waiting for all three receipts
+[WAIT] Critical scenario
+  2/3 new critical deliveries; waiting for all three receipts
+[WAIT] Still waiting for all 3 practice critical readings and their durable Field Team receipts
+  79s elapsed (limit 300s)
+  not ready yet
+[WAIT] Critical scenario
+  2/3 new critical deliveries; waiting for all three receipts
+[WAIT] Still waiting for all 3 practice critical readings and their durable Field Team receipts
+  95s elapsed (limit 300s)
+  not ready yet
+[WAIT] Critical scenario
+  2/3 new critical deliveries; waiting for all three receipts
+[INFO] Done waiting for all 3 practice critical readings and their durable Field Team receipts
+  after 105s
+[PASS] critical-alerts-delivered
+  critical_readings: 3
+  alerted: 3
+  lost: 0
+  p95_ms: 487.06
+  max_ms: 487.06
+  evidence: durable critical_field_alert effects; original NATS persistence timestamps
+[RESULT] Critical lane
+  3/3 alerted, 0 lost
+  p95 487.06 ms (target 5000 ms)
+Enter → check the sensor poller and the COASTAL mapping rules: 
+[RUN] sensor-poller-live
+[PASS] sensor-poller-live
+  stations: 4
+  breaker: closed
+  requests_so_far: 139
+[RUN] coastal-mapping
+[PASS] coastal-mapping
+  events: 617
+  critical: 3
+  suspect: 6
+[RESULT] Readings
+  Events: 617; critical: 3; suspect: 6
+[RUN] parked-data-visible-to-ops-only
+[PASS] parked-data-visible-to-ops-only
+  parked_or_retrying: 0
+Enter → stop Sensor Pantai for 30s and watch the breaker and recovery: 
+[RUN] sensor-outage-and-recovery
+[INFO] Scaled deployment/sensor-pantai to 0 replicas
+[INFO] Scaled deployment/sensor-pantai back to 1 replica; no further action until recovery
+[PASS] sensor-outage-and-recovery
+  breaker_opened_after_s: 5.0
+  last_error: Get "http://sensor-pantai:8080/v1/observations?limit=500&cursor=eyJvIjo2NzR9": dial
+  tcp 10.43.125.174:8080: connect: connection refused
+  outage_s: 35
+  requests_during_outage: 6
+  requests_per_s: 0.17
+  client_p95_ms_sensor: 54.9
+  client_p95_ms_all_sources: 67.2
+  client_p95_ms_bmkg_only: 52.7
+  client_p95_ms_pvmbg_only: 63.3
+  client_p95_ms_satelit_only: 65.6
+  client_sensor_status: stale
+  recovered_after_s: 12.1
+  recovered_breaker: closed
+[RESULT] Outage
+  Breaker opened after 5.0s
+  Requests to the sensor: 6 in 35s (0.17/s)
+  Client p95: sensor 54.9 ms, all sources 67.2 ms (sensor shown as stale)
+  Other sources only (M1 < 300 ms): BMKG 52.7 ms, PVMBG 63.3 ms, SATELIT 65.6 ms
+  Recovered on its own after 12.1s
+Enter → flood the Client API with 48 Media clients and send Field Team requests: 
+[RUN] media-shed-field-team-served
+[PASS] media-shed-field-team-served
+  media_requests: 13589
+  media_shed_429: 13570
+  field_requests: 20
+  field_served: 20
+[RESULT] Overload
+  Media: 13570/13589 shed with 429
+  Field Team: 20/20 served
+Enter → game day rehearsal (45s of faults: Media spike, PVMBG network outage, Sensor Pantai unreachable (calls hang), notifier cut off from NATS, a worker node loses power; then no intervention for up to 150s): 
+[RUN] gameday-combined
+[INFO] combined
+  Media spike, PVMBG network outage, Sensor Pantai unreachable (calls hang), notifier cut off from
+  NATS, a worker node loses power
+[ACTION] combined
+  +0s media-flood
+[ACTION] combined
+  +5s pvmbg-outage
+[ACTION] combined
+  +10s sensor-unreachable
+[ACTION] combined
+  +15s notifier-partition
+[ACTION] combined
+  +20s node-down-aat-worker-2
+[WAIT] combined: recovering on its own
+  no_stale_sources; critical consumers={"field-notifier-critical": {"error": null,
+  "num_ack_pending": 0, "num_pending": 0}}
+[WAIT] combined: recovering on its own
+  sensor_available, no_stale_sources; critical consumers={"field-notifier-critical": {"error": null,
+  "num_ack_pending": 0, "num_pending": 0}}
+[WAIT] combined: recovering on its own
+  aggregator_ready, client_ready, sensor-pantai_ready, pvmbg_ready, sensor_available,
+  no_stale_sources; critical consumers={"field-notifier-critical": {"error": null,
+  "num_ack_pending": 0, "num_pending": 0}}; deployments={"aggregator": {"desired": 3, "pods":
+  [{"containers": [{"name": "aggregator", "ready": true, "restarts": 0, "state": {"running":
+  {"startedAt": "2026-11-21T17:58:12Z"}}}], "name": "aggregator-987bc65fb-448mp", "node":
+  "aat-worker-1"}, {"containers": [{"name": "aggregator", "ready": true, "restarts": 0, "state":
+  {"running": {"startedAt": "2026-11-21T17:58:12Z"}}}], "name": "aggregator-987bc65fb-dz8nx",
+  "node": "aat-control"}, {"containers": [{"name": "aggregator", "ready": false, "restarts": 1,
+  "state": {"running": {"startedAt": "2026-11-21T18:03:22Z"}}}], "name":
+  "aggregator-987bc65fb-lrpsn", "node": "aat-worker-2"}], "ready": 2}, "client": {"desired": 3,
+  "pods": [{"containers": [{"name": "client", "ready": true, "restarts": 0, "state": {"running":
+  {"startedAt": "2026-11-21T17:46:05Z"}}}], "name": "client-f89cfcd79-k9lz8", "node":
+  "aat-control"}, {"containers": [{"name": "client", "ready": false, "restarts": 3, "state":
+  {"running": {"startedAt": "2026-11-21T18:03:22Z"}}}], "name": "client-f89cfcd79-kb7xm", "node":
+  "aat-worker-2"}, {"containers": [{"name": "client", "ready": true, "restarts": 0, "state":
+  {"running": {"startedAt": "2026-11-21T17:46:05Z"}}}], "name": "client-f89cfcd79-wspn2", "node":
+  "aat-worker-1"}], "ready": 2}, "pvmbg": {"desired": 1, "pods": [{"containers": [{"name": "pvmbg",
+  "ready": false, "restarts": 4, "state": {"running": {"startedAt": "2026-11-21T18:03:22Z"}}}],
+  "name": "pvmbg-57cb7b7b59-qjl7t", "node": "aat-worker-2"}], "ready": 0}, "sensor-pantai":
+  {"desired": 1, "pods": [{"containers": [{"name": "sensor-pantai", "ready": false, "restarts": 1,
+  "state": {"running": {"startedAt": "2026-11-21T18:03:21Z"}}}], "name":
+  "sensor-pantai-6df45fcf77-5l49h", "node": "aat-worker-2"}], "ready": 0}}
+[RESULT] Game day rehearsal
+  Recovered on its own after 19.9s
+  Valid game day measurement
+  Field Team availability 1.0 (target 0.99, error budget used 0.0)
+  Unanswered requests: 0 during, 0 after; partial answers during faults: 0
+  BMKG-only p95 during faults: 381.3 ms
+[PASS] gameday-combined
+  recovered_after_s: 19.9
+  availability: 1.0
+  error_budget_used: 0.0
+  field_p95_ms_during_faults: 480.1
+[RESULT] Stage summary
+  PASS: sensor-practice-reset
+  PASS: critical-alerts-delivered
+  PASS: sensor-poller-live
+  PASS: coastal-mapping
+  PASS: parked-data-visible-to-ops-only
+  PASS: sensor-outage-and-recovery
+  PASS: media-shed-field-team-served
+  PASS: gameday-combined
+[PASS] All automated P5 checks passed
+[INFO] Evidence
+  /home/yonatan/Documents/kuliah/platform-code/code/apps/aat/tests/m2/p5/evidence/m2-p5-20261121T175752-b84f4dc3
+[MANUAL] Pending evidence
+  Criterion 2: contract violations and broken critical readings (unit/integration tests; the image
+  cannot be changed)
+  Criterion 6: the real game day (exam profile + Tester Agent); group 5 is a rehearsal on the
+  practice lab
+  Criterion 7: Grafana P5 panels (breaker, requests to sensor, critical alert p95, shed requests)
+  explained on screen
+  Criterion 8: SLO and error budget used during the game day; post-mortem in the report

@@ -1,0 +1,224 @@
+{
+  "before": {
+    "c5abfa31-a645-4647-8260-a888c92981a0": {
+      "name": "aggregator-7b66fbc948-7fz8b",
+      "containers": {
+        "aggregator": 0
+      }
+    },
+    "01bd7319-1205-4579-892a-8898aa86319e": {
+      "name": "aggregator-7b66fbc948-7qnzb",
+      "containers": {
+        "aggregator": 0
+      }
+    },
+    "ca0c1b00-6e15-4eb8-8118-75288d8a80e5": {
+      "name": "aggregator-7b66fbc948-p4grh",
+      "containers": {
+        "aggregator": 0
+      }
+    },
+    "72237848-1110-4d1f-a98f-678f0e0fc7fb": {
+      "name": "auth-7848df555b-vgt94",
+      "containers": {
+        "auth": 0
+      }
+    },
+    "533b58a5-f0e8-4fd6-93ae-1923eadfd692": {
+      "name": "bmkg-85dcfc448f-flcjw",
+      "containers": {
+        "bmkg": 0
+      }
+    },
+    "8a27fc02-e7ec-4fbd-b6da-a66a66d2d8a9": {
+      "name": "citus-g0-aat-control-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "6742a13e-add7-4b7d-97e8-8e57e1d15ad0": {
+      "name": "citus-g1-aat-control-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "647f8b0d-9001-4a38-9e7e-551621d76d56": {
+      "name": "citus-g1-aat-worker-1-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "a3012409-d1ce-45e4-9dcc-ccad5feb45c2": {
+      "name": "citus-g2-aat-worker-1-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "1507cf9c-d1b6-429c-9859-f2742bf7c2f5": {
+      "name": "citus-g2-aat-worker-2-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "91a69737-c84f-4f33-a590-3f3ec1998152": {
+      "name": "citus-g3-aat-control-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "fb941463-746a-4f11-bc0b-a0369a88e936": {
+      "name": "citus-g3-aat-worker-2-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "c83f4a79-e515-4ac2-b2a3-4040ae1b00aa": {
+      "name": "client-98fd594c7-g469k",
+      "containers": {
+        "client": 0
+      }
+    },
+    "7484cabf-eeb2-415d-832d-514c709b5e99": {
+      "name": "dashboard-updater-66dfd6f874-828gl",
+      "containers": {
+        "dashboard-updater": 0
+      }
+    },
+    "17260313-c09d-456f-a79f-a6094c03ba49": {
+      "name": "field-notifier-dd4b7bf69-srm8d",
+      "containers": {
+        "field-notifier": 0
+      }
+    },
+    "b2d8f19b-4dd7-42bf-9dea-14c6c91976c6": {
+      "name": "nats-0",
+      "containers": {
+        "nats": 0,
+        "prometheus-exporter": 0
+      }
+    },
+    "452672b1-f78d-4c38-9d05-29988708f461": {
+      "name": "pvmbg-57cb7b7b59-qjl7t",
+      "containers": {
+        "pvmbg": 0
+      }
+    },
+    "0c8b9017-236a-4ad4-a37b-eb4a9f8cb992": {
+      "name": "sensor-pantai-6df45fcf77-hxkn8",
+      "containers": {
+        "sensor-pantai": 0
+      }
+    }
+  },
+  "after": {
+    "c5abfa31-a645-4647-8260-a888c92981a0": {
+      "name": "aggregator-7b66fbc948-7fz8b",
+      "containers": {
+        "aggregator": 0
+      }
+    },
+    "01bd7319-1205-4579-892a-8898aa86319e": {
+      "name": "aggregator-7b66fbc948-7qnzb",
+      "containers": {
+        "aggregator": 0
+      }
+    },
+    "ca0c1b00-6e15-4eb8-8118-75288d8a80e5": {
+      "name": "aggregator-7b66fbc948-p4grh",
+      "containers": {
+        "aggregator": 0
+      }
+    },
+    "72237848-1110-4d1f-a98f-678f0e0fc7fb": {
+      "name": "auth-7848df555b-vgt94",
+      "containers": {
+        "auth": 0
+      }
+    },
+    "533b58a5-f0e8-4fd6-93ae-1923eadfd692": {
+      "name": "bmkg-85dcfc448f-flcjw",
+      "containers": {
+        "bmkg": 0
+      }
+    },
+    "8a27fc02-e7ec-4fbd-b6da-a66a66d2d8a9": {
+      "name": "citus-g0-aat-control-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "6742a13e-add7-4b7d-97e8-8e57e1d15ad0": {
+      "name": "citus-g1-aat-control-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "647f8b0d-9001-4a38-9e7e-551621d76d56": {
+      "name": "citus-g1-aat-worker-1-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "a3012409-d1ce-45e4-9dcc-ccad5feb45c2": {
+      "name": "citus-g2-aat-worker-1-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "1507cf9c-d1b6-429c-9859-f2742bf7c2f5": {
+      "name": "citus-g2-aat-worker-2-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "91a69737-c84f-4f33-a590-3f3ec1998152": {
+      "name": "citus-g3-aat-control-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "fb941463-746a-4f11-bc0b-a0369a88e936": {
+      "name": "citus-g3-aat-worker-2-0",
+      "containers": {
+        "postgres": 0
+      }
+    },
+    "c83f4a79-e515-4ac2-b2a3-4040ae1b00aa": {
+      "name": "client-98fd594c7-g469k",
+      "containers": {
+        "client": 0
+      }
+    },
+    "7484cabf-eeb2-415d-832d-514c709b5e99": {
+      "name": "dashboard-updater-66dfd6f874-828gl",
+      "containers": {
+        "dashboard-updater": 0
+      }
+    },
+    "17260313-c09d-456f-a79f-a6094c03ba49": {
+      "name": "field-notifier-dd4b7bf69-srm8d",
+      "containers": {
+        "field-notifier": 0
+      }
+    },
+    "b2d8f19b-4dd7-42bf-9dea-14c6c91976c6": {
+      "name": "nats-0",
+      "containers": {
+        "nats": 0,
+        "prometheus-exporter": 0
+      }
+    },
+    "452672b1-f78d-4c38-9d05-29988708f461": {
+      "name": "pvmbg-57cb7b7b59-qjl7t",
+      "containers": {
+        "pvmbg": 0
+      }
+    },
+    "0c8b9017-236a-4ad4-a37b-eb4a9f8cb992": {
+      "name": "sensor-pantai-6df45fcf77-hxkn8",
+      "containers": {
+        "sensor-pantai": 0
+      }
+    }
+  }
+}

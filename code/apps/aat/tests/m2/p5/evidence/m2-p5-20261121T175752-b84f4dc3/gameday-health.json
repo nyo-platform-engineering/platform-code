@@ -1,0 +1,313 @@
+[
+  {
+    "at": "2026-11-21T18:02:20.722157+00:00",
+    "phase": "combined: waiting for a healthy start",
+    "healthy": true,
+    "checks": {
+      "nodes_ready": true,
+      "aggregator_ready": true,
+      "client_ready": true,
+      "sensor-pantai_ready": true,
+      "field-notifier_ready": true,
+      "dashboard-updater_ready": true,
+      "bmkg_ready": true,
+      "pvmbg_ready": true,
+      "sensor_available": true,
+      "no_stale_sources": true,
+      "complete_answers": true,
+      "critical_outbox_drained": true,
+      "storage_metadata_synced": true,
+      "field_notifier_critical_drained": true
+    },
+    "stale_sources": [],
+    "critical_consumers": {
+      "field-notifier-critical": {
+        "num_pending": 0,
+        "num_ack_pending": 0,
+        "error": null
+      }
+    },
+    "unready_deployments": {}
+  },
+  {
+    "at": "2026-11-21T18:03:13.201535+00:00",
+    "phase": "combined: recovering on its own",
+    "healthy": false,
+    "checks": {
+      "nodes_ready": true,
+      "aggregator_ready": true,
+      "client_ready": true,
+      "sensor-pantai_ready": true,
+      "field-notifier_ready": true,
+      "dashboard-updater_ready": true,
+      "bmkg_ready": true,
+      "pvmbg_ready": true,
+      "sensor_available": true,
+      "no_stale_sources": false,
+      "complete_answers": true,
+      "critical_outbox_drained": true,
+      "storage_metadata_synced": true,
+      "field_notifier_critical_drained": true
+    },
+    "stale_sources": [
+      "PVMBG"
+    ],
+    "critical_consumers": {
+      "field-notifier-critical": {
+        "num_pending": 0,
+        "num_ack_pending": 0,
+        "error": null
+      }
+    },
+    "unready_deployments": {}
+  },
+  {
+    "at": "2026-11-21T18:03:20.131748+00:00",
+    "phase": "combined: recovering on its own",
+    "healthy": false,
+    "checks": {
+      "nodes_ready": true,
+      "aggregator_ready": true,
+      "client_ready": true,
+      "sensor-pantai_ready": true,
+      "field-notifier_ready": true,
+      "dashboard-updater_ready": true,
+      "bmkg_ready": true,
+      "pvmbg_ready": true,
+      "sensor_available": false,
+      "no_stale_sources": false,
+      "complete_answers": true,
+      "critical_outbox_drained": true,
+      "storage_metadata_synced": true,
+      "field_notifier_critical_drained": true
+    },
+    "stale_sources": [
+      "PVMBG",
+      "SENSOR_PANTAI"
+    ],
+    "critical_consumers": {
+      "field-notifier-critical": {
+        "num_pending": 0,
+        "num_ack_pending": 0,
+        "error": null
+      }
+    },
+    "unready_deployments": {}
+  },
+  {
+    "at": "2026-11-21T18:03:26.188566+00:00",
+    "phase": "combined: recovering on its own",
+    "healthy": false,
+    "checks": {
+      "nodes_ready": true,
+      "aggregator_ready": false,
+      "client_ready": false,
+      "sensor-pantai_ready": false,
+      "field-notifier_ready": true,
+      "dashboard-updater_ready": true,
+      "bmkg_ready": true,
+      "pvmbg_ready": false,
+      "sensor_available": false,
+      "no_stale_sources": false,
+      "complete_answers": true,
+      "critical_outbox_drained": true,
+      "storage_metadata_synced": true,
+      "field_notifier_critical_drained": true
+    },
+    "stale_sources": [
+      "PVMBG",
+      "SENSOR_PANTAI"
+    ],
+    "critical_consumers": {
+      "field-notifier-critical": {
+        "num_pending": 0,
+        "num_ack_pending": 0,
+        "error": null
+      }
+    },
+    "unready_deployments": {
+      "aggregator": {
+        "ready": 2,
+        "desired": 3,
+        "pods": [
+          {
+            "name": "aggregator-987bc65fb-448mp",
+            "node": "aat-worker-1",
+            "containers": [
+              {
+                "name": "aggregator",
+                "ready": true,
+                "restarts": 0,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T17:58:12Z"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "aggregator-987bc65fb-dz8nx",
+            "node": "aat-control",
+            "containers": [
+              {
+                "name": "aggregator",
+                "ready": true,
+                "restarts": 0,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T17:58:12Z"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "aggregator-987bc65fb-lrpsn",
+            "node": "aat-worker-2",
+            "containers": [
+              {
+                "name": "aggregator",
+                "ready": false,
+                "restarts": 1,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T18:03:22Z"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "client": {
+        "ready": 2,
+        "desired": 3,
+        "pods": [
+          {
+            "name": "client-f89cfcd79-k9lz8",
+            "node": "aat-control",
+            "containers": [
+              {
+                "name": "client",
+                "ready": true,
+                "restarts": 0,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T17:46:05Z"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "client-f89cfcd79-kb7xm",
+            "node": "aat-worker-2",
+            "containers": [
+              {
+                "name": "client",
+                "ready": false,
+                "restarts": 3,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T18:03:22Z"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "client-f89cfcd79-wspn2",
+            "node": "aat-worker-1",
+            "containers": [
+              {
+                "name": "client",
+                "ready": true,
+                "restarts": 0,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T17:46:05Z"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "sensor-pantai": {
+        "ready": 0,
+        "desired": 1,
+        "pods": [
+          {
+            "name": "sensor-pantai-6df45fcf77-5l49h",
+            "node": "aat-worker-2",
+            "containers": [
+              {
+                "name": "sensor-pantai",
+                "ready": false,
+                "restarts": 1,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T18:03:21Z"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "pvmbg": {
+        "ready": 0,
+        "desired": 1,
+        "pods": [
+          {
+            "name": "pvmbg-57cb7b7b59-qjl7t",
+            "node": "aat-worker-2",
+            "containers": [
+              {
+                "name": "pvmbg",
+                "ready": false,
+                "restarts": 4,
+                "state": {
+                  "running": {
+                    "startedAt": "2026-11-21T18:03:22Z"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "at": "2026-11-21T18:03:32.192759+00:00",
+    "phase": "combined: recovering on its own",
+    "healthy": true,
+    "checks": {
+      "nodes_ready": true,
+      "aggregator_ready": true,
+      "client_ready": true,
+      "sensor-pantai_ready": true,
+      "field-notifier_ready": true,
+      "dashboard-updater_ready": true,
+      "bmkg_ready": true,
+      "pvmbg_ready": true,
+      "sensor_available": true,
+      "no_stale_sources": true,
+      "complete_answers": true,
+      "critical_outbox_drained": true,
+      "storage_metadata_synced": true,
+      "field_notifier_critical_drained": true
+    },
+    "stale_sources": [],
+    "critical_consumers": {
+      "field-notifier-critical": {
+        "num_pending": 0,
+        "num_ack_pending": 0,
+        "error": null
+      }
+    },
+    "unready_deployments": {}
+  }
+]
